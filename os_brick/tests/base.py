@@ -23,7 +23,7 @@ import mock
 from oslo.utils import strutils
 from oslotest import base
 
-from brick.openstack.common import log as oslo_logging
+from os_brick.openstack.common import log as oslo_logging
 
 
 LOG = oslo_logging.getLogger(__name__)

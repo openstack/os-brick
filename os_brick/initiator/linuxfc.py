@@ -18,9 +18,9 @@ import errno
 
 from oslo_concurrency import processutils as putils
 
-from brick.i18n import _LW
-from brick.initiator import linuxscsi
-from brick.openstack.common import log as logging
+from os_brick.i18n import _LW
+from os_brick.initiator import linuxscsi
+from os_brick.openstack.common import log as logging
 
 LOG = logging.getLogger(__name__)
 

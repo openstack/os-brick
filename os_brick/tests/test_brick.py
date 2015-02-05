@@ -13,13 +13,13 @@
 # under the License.
 
 """
-test_brick
+test_os_brick
 ----------------------------------
 
-Tests for `brick` module.
+Tests for `os_brick` module.
 """
 
-from brick.tests import base
+from os_brick.tests import base
 
 
 class TestBrick(base.TestCase):

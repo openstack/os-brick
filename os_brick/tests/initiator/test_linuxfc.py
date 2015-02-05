@@ -17,9 +17,9 @@ import string
 
 import mock
 
-from brick.initiator import linuxfc
-from brick.openstack.common import log as logging
-from brick.tests import base
+from os_brick.initiator import linuxfc
+from os_brick.openstack.common import log as logging
+from os_brick.tests import base
 
 LOG = logging.getLogger(__name__)
 

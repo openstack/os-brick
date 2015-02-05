@@ -22,9 +22,9 @@ import re
 from oslo_concurrency import processutils as putils
 import six
 
-from brick import exception
-from brick.i18n import _, _LI
-from brick.openstack.common import log as logging
+from os_brick import exception
+from os_brick.i18n import _, _LI
+from os_brick.openstack.common import log as logging
 
 LOG = logging.getLogger(__name__)
 

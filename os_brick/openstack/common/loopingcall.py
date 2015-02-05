@@ -21,8 +21,8 @@ import time
 from eventlet import event
 from eventlet import greenthread
 
-from brick.openstack.common._i18n import _LE, _LW
-from brick.openstack.common import log as logging
+from os_brick.openstack.common._i18n import _LE, _LW
+from os_brick.openstack.common import log as logging
 
 LOG = logging.getLogger(__name__)
 

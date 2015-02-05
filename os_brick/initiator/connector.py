@@ -20,15 +20,15 @@ import time
 from oslo_concurrency import lockutils
 from oslo_concurrency import processutils as putils
 
-from brick import exception
-from brick import executor
-from brick.initiator import host_driver
-from brick.initiator import linuxfc
-from brick.initiator import linuxscsi
-from brick.remotefs import remotefs
-from brick.i18n import _, _LE, _LW
-from brick.openstack.common import log as logging
-from brick.openstack.common import loopingcall
+from os_brick import exception
+from os_brick import executor
+from os_brick.initiator import host_driver
+from os_brick.initiator import linuxfc
+from os_brick.initiator import linuxscsi
+from os_brick.remotefs import remotefs
+from os_brick.i18n import _, _LE, _LW
+from os_brick.openstack.common import log as logging
+from os_brick.openstack.common import loopingcall
 
 LOG = logging.getLogger(__name__)
 

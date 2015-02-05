@@ -21,9 +21,9 @@ import re
 
 from oslo_concurrency import processutils as putils
 
-from brick import executor
-from brick.i18n import _, _LW
-from brick.openstack.common import log as logging
+from os_brick import executor
+from os_brick.i18n import _, _LW
+from os_brick.openstack.common import log as logging
 
 LOG = logging.getLogger(__name__)
 

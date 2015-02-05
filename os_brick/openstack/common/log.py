@@ -46,8 +46,8 @@ from six import moves
 
 _PY26 = sys.version_info[0:2] == (2, 6)
 
-from brick.openstack.common._i18n import _
-from brick.openstack.common import local
+from os_brick.openstack.common._i18n import _
+from os_brick.openstack.common import local
 
 
 _DEFAULT_LOG_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"

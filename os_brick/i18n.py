@@ -20,7 +20,7 @@ See http://docs.openstack.org/developer/oslo.i18n/usage.html .
 
 from oslo import i18n
 
-DOMAIN = 'brick'
+DOMAIN = 'os-brick'
 
 _translators = i18n.TranslatorFactory(domain=DOMAIN)
 

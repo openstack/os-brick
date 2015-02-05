@@ -15,8 +15,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from brick import exception
-from brick.tests import base
+from os_brick import exception
+from os_brick.tests import base
 
 
 class BrickExceptionTestCase(base.TestCase):

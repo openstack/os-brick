@@ -20,13 +20,13 @@ import mock
 from oslo_concurrency import processutils as putils
 import testtools
 
-from brick import exception
-from brick.i18n import _
-from brick.initiator import connector
-from brick.initiator import host_driver
-from brick.openstack.common import log as logging
-from brick.openstack.common import loopingcall
-from brick.tests import base
+from os_brick import exception
+from os_brick.i18n import _
+from os_brick.initiator import connector
+from os_brick.initiator import host_driver
+from os_brick.openstack.common import log as logging
+from os_brick.openstack.common import loopingcall
+from os_brick.tests import base
 
 
 LOG = logging.getLogger(__name__)
