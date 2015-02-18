@@ -12,6 +12,13 @@
 #    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #    License for the specific language governing permissions and limitations
 #    under the License.
+""" Brick Connector objects for each supported transport protocol.
+
+.. module: connector
+
+The connectors here are responsible for discovering and removing volumes for
+each of the supported transport protocols.
+"""
 
 import copy
 import os
