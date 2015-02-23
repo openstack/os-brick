@@ -232,6 +232,11 @@ class ISCSIConnector(InitiatorConnector):
             props['target_lun'] = lun
             yield props
 
+    def _alternative_targets(self, connection_properties):
+        return zip(connection_properties.get('target_alternative_portals', []),
+                   connection_properties.get('target_alternative_iqns', []),
+                   connection_properties.get('target_alternative_luns', []))
+
     def _multipath_targets(self, connection_properties):
         return zip(connection_properties.get('target_portals', []),
                    connection_properties.get('target_iqns', []),
@@ -280,8 +285,19 @@ class ISCSIConnector(InitiatorConnector):
             self._rescan_iscsi()
             host_devices = self._get_device_path(connection_properties)
         else:
-            self._connect_to_iscsi_portal(connection_properties)
-            host_devices = self._get_device_path(connection_properties)
+            target_props = connection_properties
+            if not self._connect_to_iscsi_portal(target_props):
+                for props in self._iterate_multiple_targets(
+                        connection_properties,
+                        self._alternative_targets(connection_properties)):
+                    if self._connect_to_iscsi_portal(props):
+                        target_props = props
+                        break
+                else:
+                    LOG.warn(_LW(
+                        'Failed to login to any of the iSCSI targets.'))
+
+            host_devices = self._get_device_path(target_props)
 
         # The /dev/disk/by-path/... node is not always present immediately
         # TODO(justinsb): This retry-with-delay is a pattern, move to utils?
@@ -300,7 +316,7 @@ class ISCSIConnector(InitiatorConnector):
             if self.use_multipath:
                 self._rescan_iscsi()
             else:
-                self._run_iscsiadm(connection_properties, ("--rescan",))
+                self._run_iscsiadm(target_props, ("--rescan",))
 
             tries = tries + 1
             if all(map(lambda x: not os.path.exists(x), host_devices)):
@@ -367,9 +383,10 @@ class ISCSIConnector(InitiatorConnector):
         # unused devices created by logging into other LUNs' session.
         ips_iqns_luns = self._multipath_targets(connection_properties)
         if not ips_iqns_luns:
-            ips_iqns_luns = [[connection_properties['target_portal'],
+            ips_iqns_luns = ([[connection_properties['target_portal'],
                               connection_properties['target_iqn'],
-                              connection_properties.get('target_lun', 0)]]
+                              connection_properties.get('target_lun', 0)]] +
+                             self._alternative_targets(connection_properties))
         for props in self._iterate_multiple_targets(connection_properties,
                                                     ips_iqns_luns):
             self._disconnect_volume_iscsi(props)
@@ -543,17 +560,20 @@ class ISCSIConnector(InitiatorConnector):
                                    ("--login",),
                                    check_exit_code=[0, 255])
             except putils.ProcessExecutionError as err:
-                #as this might be one of many paths,
-                #only set successful logins to startup automatically
-                if err.exit_code in [15]:
-                    self._iscsiadm_update(connection_properties,
-                                          "node.startup",
-                                          "automatic")
-                    return
+                # exit_code=15 means the session already exists, so it should
+                # be regarded as successful login.
+                if err.exit_code not in [15]:
+                    LOG.warn(_LW('Failed to login iSCSI target %(iqn)s '
+                                 'on portal %(portal)s (exit code %(err)s).'),
+                             {'iqn': connection_properties['target_iqn'],
+                              'portal': connection_properties['target_portal'],
+                              'err': err.exit_code})
+                    return False
 
             self._iscsiadm_update(connection_properties,
                                   "node.startup",
                                   "automatic")
+        return True
 
     def _disconnect_from_iscsi_portal(self, connection_properties):
         self._iscsiadm_update(connection_properties, "node.startup", "manual",
