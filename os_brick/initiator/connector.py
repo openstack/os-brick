@@ -224,23 +224,27 @@ class ISCSIConnector(InitiatorConnector):
         super(ISCSIConnector, self).set_execute(execute)
         self._linuxscsi.set_execute(execute)
 
-    def _iterate_multiple_targets(self, connection_properties, ips_iqns_luns):
-        for ip, iqn, lun in ips_iqns_luns:
+    def _iterate_all_targets(self, connection_properties):
+        for ip, iqn, lun in self._get_all_targets(connection_properties):
             props = copy.deepcopy(connection_properties)
             props['target_portal'] = ip
             props['target_iqn'] = iqn
             props['target_lun'] = lun
+            for key in ('target_portals', 'target_iqns', 'target_luns'):
+                props.pop(key, None)
             yield props
 
-    def _alternative_targets(self, connection_properties):
-        return zip(connection_properties.get('target_alternative_portals', []),
-                   connection_properties.get('target_alternative_iqns', []),
-                   connection_properties.get('target_alternative_luns', []))
+    def _get_all_targets(self, connection_properties):
+        if all([key in connection_properties for key in ('target_portals',
+                                                         'target_iqns',
+                                                         'target_luns')]):
+            return zip(connection_properties['target_portals'],
+                       connection_properties['target_iqns'],
+                       connection_properties['target_luns'])
 
-    def _multipath_targets(self, connection_properties):
-        return zip(connection_properties.get('target_portals', []),
-                   connection_properties.get('target_iqns', []),
-                   connection_properties.get('target_luns', []))
+        return [(connection_properties['target_portal'],
+                 connection_properties['target_iqn'],
+                 connection_properties.get('target_lun', 0))]
 
     def _discover_iscsi_portals(self, connection_properties):
         if all([key in connection_properties for key in ('target_portals',
@@ -286,13 +290,10 @@ class ISCSIConnector(InitiatorConnector):
             host_devices = self._get_device_path(connection_properties)
         else:
             target_props = connection_properties
-            if not self._connect_to_iscsi_portal(target_props):
-                for props in self._iterate_multiple_targets(
-                        connection_properties,
-                        self._alternative_targets(connection_properties)):
-                    if self._connect_to_iscsi_portal(props):
-                        target_props = props
-                        break
+            for props in self._iterate_all_targets(connection_properties):
+                if self._connect_to_iscsi_portal(props):
+                    target_props = props
+                    break
                 else:
                     LOG.warn(_LW(
                         'Failed to login to any of the iSCSI targets.'))
@@ -381,14 +382,7 @@ class ISCSIConnector(InitiatorConnector):
 
         # When multiple portals/iqns/luns are specified, we need to remove
         # unused devices created by logging into other LUNs' session.
-        ips_iqns_luns = self._multipath_targets(connection_properties)
-        if not ips_iqns_luns:
-            ips_iqns_luns = ([[connection_properties['target_portal'],
-                              connection_properties['target_iqn'],
-                              connection_properties.get('target_lun', 0)]] +
-                             self._alternative_targets(connection_properties))
-        for props in self._iterate_multiple_targets(connection_properties,
-                                                    ips_iqns_luns):
+        for props in self._iterate_all_targets(connection_properties):
             self._disconnect_volume_iscsi(props)
 
     def _disconnect_volume_iscsi(self, connection_properties):
@@ -412,16 +406,8 @@ class ISCSIConnector(InitiatorConnector):
             self._disconnect_from_iscsi_portal(connection_properties)
 
     def _get_device_path(self, connection_properties):
-        multipath_targets = self._multipath_targets(connection_properties)
-        if multipath_targets:
-            return ["/dev/disk/by-path/ip-%s-iscsi-%s-lun-%s" % x for x in
-                    multipath_targets]
-
-        path = ("/dev/disk/by-path/ip-%(portal)s-iscsi-%(iqn)s-lun-%(lun)s" %
-                {'portal': connection_properties['target_portal'],
-                 'iqn': connection_properties['target_iqn'],
-                 'lun': connection_properties.get('target_lun', 0)})
-        return [path]
+        return ["/dev/disk/by-path/ip-%s-iscsi-%s-lun-%s" % x for x in
+                self._get_all_targets(connection_properties)]
 
     def get_initiator(self):
         """Secure helper to read file as root."""
