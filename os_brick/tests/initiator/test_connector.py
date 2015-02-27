@@ -278,11 +278,13 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
     @testtools.skipUnless(os.path.exists('/dev/disk/by-path'),
                           'Test requires /dev/disk/by-path')
     def test_connect_volume_with_alternative_targets(self):
+        location = '10.0.2.15:3260'
         location2 = '10.0.3.15:3260'
+        iqn = 'iqn.2010-10.org.openstack:volume-00000001'
         iqn2 = 'iqn.2010-10.org.openstack:volume-00000001-2'
-        extra_props = {'target_alternative_portals': [location2],
-                       'target_alternative_iqns': [iqn2],
-                       'target_alternative_luns': [2]}
+        extra_props = {'target_portals': [location, location2],
+                       'target_iqns': [iqn, iqn2],
+                       'target_luns': [1, 2]}
         additional_commands = [('blockdev --flushbufs /dev/sdb'),
                                ('tee -a /sys/block/sdb/device/delete'),
                                ('iscsiadm -m node -T %s -p %s --op update'
@@ -307,9 +309,9 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
         iqn2 = 'iqn.2010-10.org.openstack:%s-2' % name
         vol = {'id': 1, 'name': name}
         connection_info = self.iscsi_connection(vol, location, iqn)
-        connection_info['data']['target_alternative_portals'] = [location2]
-        connection_info['data']['target_alternative_iqns'] = [iqn2]
-        connection_info['data']['target_alternative_luns'] = [2]
+        connection_info['data']['target_portals'] = [location, location2]
+        connection_info['data']['target_iqns'] = [iqn, iqn2]
+        connection_info['data']['target_luns'] = [1, 2]
         dev_str2 = '/dev/disk/by-path/ip-%s-iscsi-%s-lun-2' % (location2, iqn2)
 
         def fake_run_iscsiadm(iscsi_properties, iscsi_command, **kwargs):
@@ -324,6 +326,8 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
         self.assertEqual('block', device['type'])
         self.assertEqual(dev_str2, device['path'])
         props = connection_info['data'].copy()
+        for key in ('target_portals', 'target_iqns', 'target_luns'):
+            props.pop(key, None)
         props['target_portal'] = location2
         props['target_iqn'] = iqn2
         props['target_lun'] = 2
@@ -333,6 +337,8 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
         mock_iscsiadm.reset_mock()
         self.connector.disconnect_volume(connection_info['data'], device)
         props = connection_info['data'].copy()
+        for key in ('target_portals', 'target_iqns', 'target_luns'):
+            props.pop(key, None)
         mock_iscsiadm.assert_any_call(props, ('--logout',),
                                       check_exit_code=[0, 21, 255])
         props['target_portal'] = location2
