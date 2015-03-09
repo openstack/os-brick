@@ -22,11 +22,16 @@ each of the supported transport protocols.
 
 import copy
 import os
+import platform
 import socket
 import time
 
 from oslo_concurrency import lockutils
 from oslo_concurrency import processutils as putils
+import six
+
+S390X = "s390x"
+S390 = "s390"
 
 from os_brick import exception
 from os_brick import executor
@@ -112,9 +117,10 @@ class InitiatorConnector(executor.Executor):
     def factory(protocol, root_helper, driver=None,
                 execute=putils.execute, use_multipath=False,
                 device_scan_attempts=DEVICE_SCAN_ATTEMPTS_DEFAULT,
+                arch=platform.machine(),
                 *args, **kwargs):
-        """Build a Connector object based upon protocol."""
-        LOG.debug("Factory for %s" % protocol)
+        """Build a Connector object based upon protocol and architecture."""
+        LOG.debug("Factory for %s on %s" % (protocol, arch))
         protocol = protocol.upper()
         if protocol == "ISCSI":
             return ISCSIConnector(root_helper=root_helper,
@@ -131,13 +137,22 @@ class InitiatorConnector(executor.Executor):
                                  device_scan_attempts=device_scan_attempts,
                                  *args, **kwargs)
         elif protocol == "FIBRE_CHANNEL":
-            return FibreChannelConnector(root_helper=root_helper,
-                                         driver=driver,
-                                         execute=execute,
-                                         use_multipath=use_multipath,
-                                         device_scan_attempts=
-                                         device_scan_attempts,
-                                         *args, **kwargs)
+            if arch in (S390, S390X):
+                return FibreChannelConnectorS390X(root_helper=root_helper,
+                                                  driver=driver,
+                                                  execute=execute,
+                                                  use_multipath=use_multipath,
+                                                  device_scan_attempts=
+                                                  device_scan_attempts,
+                                                  *args, **kwargs)
+            else:
+                return FibreChannelConnector(root_helper=root_helper,
+                                             driver=driver,
+                                             execute=execute,
+                                             use_multipath=use_multipath,
+                                             device_scan_attempts=
+                                             device_scan_attempts,
+                                             *args, **kwargs)
         elif protocol == "AOE":
             return AoEConnector(root_helper=root_helper,
                                 driver=driver,
@@ -680,31 +695,12 @@ class FibreChannelConnector(InitiatorConnector):
         LOG.debug("execute = %s" % self._execute)
         device_info = {'type': 'block'}
 
-        ports = connection_properties['target_wwn']
-        wwns = []
-        # we support a list of wwns or a single wwn
-        if isinstance(ports, list):
-            for wwn in ports:
-                wwns.append(str(wwn))
-        elif isinstance(ports, basestring):
-            wwns.append(str(ports))
-
-        # We need to look for wwns on every hba
-        # because we don't know ahead of time
-        # where they will show up.
         hbas = self._linuxfc.get_fc_hbas_info()
-        host_devices = []
-        for hba in hbas:
-            pci_num = self._get_pci_num(hba)
-            if pci_num is not None:
-                for wwn in wwns:
-                    target_wwn = "0x%s" % wwn.lower()
-                    host_device = ("/dev/disk/by-path/pci-%s-fc-%s-lun-%s" %
-                                   (pci_num,
-                                    target_wwn,
-                                    connection_properties.get(
-                                        'target_lun', 0)))
-                    host_devices.append(host_device)
+        ports = connection_properties['target_wwn']
+        possible_devs = self._get_possible_devices(hbas, ports)
+
+        lun = connection_properties.get('target_lun', 0)
+        host_devices = self._get_host_devices(possible_devs, lun)
 
         if len(host_devices) == 0:
             # this is empty because we don't have any FC HBAs
@@ -777,6 +773,50 @@ class FibreChannelConnector(InitiatorConnector):
         device_info['devices'] = devices
         return device_info
 
+    def _get_host_devices(self, possible_devs, lun):
+        host_devices = []
+        for pci_num, target_wwn in possible_devs:
+            host_device = "/dev/disk/by-path/pci-%s-fc-%s-lun-%s" % (
+                pci_num,
+                target_wwn,
+                lun)
+            host_devices.append(host_device)
+        return host_devices
+
+    def _get_possible_devices(self, hbas, wwnports):
+        """Compute the possible valid fibre channel device options.
+
+        :param hbas: available hba devices.
+        :param wwnports: possible wwn addresses. Can either be string
+        or list of strings.
+
+        :returns: list of (pci_id, wwn) tuples
+
+        Given one or more wwn (mac addresses for fibre channel) ports
+        do the matrix math to figure out a set of pci device, wwn
+        tuples that are potentially valid (they won't all be). This
+        provides a search space for the device connection.
+
+        """
+        # the wwn (think mac addresses for fiber channel devices) can
+        # either be a single value or a list. Normalize it to a list
+        # for further operations.
+        wwns = []
+        if isinstance(wwnports, list):
+            for wwn in wwnports:
+                wwns.append(str(wwn))
+        elif isinstance(wwnports, six.string_types):
+            wwns.append(str(wwnports))
+
+        raw_devices = []
+        for hba in hbas:
+            pci_num = self._get_pci_num(hba)
+            if pci_num is not None:
+                for wwn in wwns:
+                    target_wwn = "0x%s" % wwn.lower()
+                    raw_devices.append((pci_num, target_wwn))
+        return raw_devices
+
     @synchronized('connect_volume')
     def disconnect_volume(self, connection_properties, device_info):
         """Detach the volume from instance_name.
@@ -797,6 +837,9 @@ class FibreChannelConnector(InitiatorConnector):
             LOG.debug("devices to remove = %s" % devices)
             self._linuxscsi.flush_multipath_device(multipath_id)
 
+        self._remove_devices(connection_properties, devices)
+
+    def _remove_devices(self, connection_properties, devices):
         # There may have been more than 1 device mounted
         # by the kernel for this volume.  We have to remove
         # all of them
@@ -823,6 +866,69 @@ class FibreChannelConnector(InitiatorConnector):
                     pci_num = device_path[index - 1]
 
         return pci_num
+
+
+class FibreChannelConnectorS390X(FibreChannelConnector):
+    """Connector class to attach/detach Fibre Channel volumes on S390X arch."""
+
+    def __init__(self, root_helper, driver=None,
+                 execute=putils.execute, use_multipath=False,
+                 device_scan_attempts=DEVICE_SCAN_ATTEMPTS_DEFAULT,
+                 *args, **kwargs):
+        super(FibreChannelConnectorS390X, self).__init__(root_helper,
+                                                         driver=driver,
+                                                         execute=execute,
+                                                         device_scan_attempts=
+                                                         device_scan_attempts,
+                                                         *args, **kwargs)
+        LOG.debug("Initializing Fibre Channel connector for S390")
+        self._linuxscsi = linuxscsi.LinuxSCSI(root_helper, execute)
+        self._linuxfc = linuxfc.LinuxFibreChannelS390X(root_helper, execute)
+        self.use_multipath = use_multipath
+
+    def set_execute(self, execute):
+        super(FibreChannelConnectorS390X, self).set_execute(execute)
+        self._linuxscsi.set_execute(execute)
+        self._linuxfc.set_execute(execute)
+
+    def _get_host_devices(self, possible_devs, lun):
+        host_devices = []
+        for pci_num, target_wwn in possible_devs:
+            target_lun = self._get_lun_string(lun)
+            host_device = self._get_device_file_path(
+                pci_num,
+                target_wwn,
+                target_lun)
+            self._linuxfc.configure_scsi_device(pci_num, target_wwn,
+                                                target_lun)
+            host_devices.append(host_device)
+        return host_devices
+
+    def _get_lun_string(self, lun):
+        target_lun = 0
+        if lun < 256:
+            target_lun = "0x00%02x000000000000" % lun
+        elif lun <= 0xffffffff:
+            target_lun = "0x%08x00000000" % lun
+        return target_lun
+
+    def _get_device_file_path(self, pci_num, target_wwn, target_lun):
+        host_device = "/dev/disk/by-path/ccw-%s-zfcp-%s:%s" % (
+            pci_num,
+            target_wwn,
+            target_lun)
+        return host_device
+
+    def _remove_devices(self, connection_properties, devices):
+        hbas = self._linuxfc.get_fc_hbas_info()
+        ports = connection_properties['target_wwn']
+        possible_devs = self._get_possible_devices(hbas, ports)
+        lun = connection_properties.get('target_lun', 0)
+        target_lun = self._get_lun_string(lun)
+        for pci_num, target_wwn in possible_devs:
+            self._linuxfc.deconfigure_scsi_device(pci_num,
+                                                  target_wwn,
+                                                  target_lun)
 
 
 class AoEConnector(InitiatorConnector):
