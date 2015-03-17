@@ -27,8 +27,10 @@ from os_brick.i18n import _LE
 from os_brick.initiator import connector
 from os_brick.initiator import host_driver
 from os_brick.initiator import linuxfc
+from os_brick.initiator import linuxscsi
 from os_brick.openstack.common import log as logging
 from os_brick.openstack.common import loopingcall
+from os_brick.remotefs import remotefs
 from os_brick.tests import base
 
 LOG = logging.getLogger(__name__)
@@ -151,22 +153,19 @@ class ConnectorTestCase(base.TestCase):
         def raise_except(*args, **kwargs):
             raise putils.ProcessExecutionError
         self.connector = connector.InitiatorConnector(None)
-        self.connector._execute = mock.Mock()
-        self.connector._execute.side_effect = raise_except
-        self.assertFalse(self.connector.check_valid_device('/dev'))
+        with mock.patch.object(self.connector, '_execute',
+                               side_effect=putils.ProcessExecutionError):
+            self.assertFalse(self.connector.check_valid_device('/dev'))
 
 
 class HostDriverTestCase(base.TestCase):
 
     def setUp(self):
         super(HostDriverTestCase, self).setUp()
-        isdir_mock = mock.Mock()
-        isdir_mock.return_value = True
-        os.path.isdir = isdir_mock
         self.devlist = ['device1', 'device2']
-        listdir_mock = mock.Mock()
-        listdir_mock.return_value = self.devlist
-        os.listdir = listdir_mock
+        mock.patch.object(os.path, 'isdir', return_value=True).start()
+        mock.patch.object(os, 'listdir', return_value=self.devlist).start()
+        self.addCleanup(mock.patch.stopall)
 
     def test_host_driver(self):
         expected = ['/dev/disk/by-path/' + dev for dev in self.devlist]
@@ -184,9 +183,9 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
         self.connector_with_multipath = connector.ISCSIConnector(
             None, execute=self.fake_execute, use_multipath=True)
 
-        get_name_mock = mock.Mock()
-        get_name_mock.return_value = "/dev/sdb"
-        self.connector._linuxscsi.get_name_from_path = get_name_mock
+        mock.patch.object(self.connector._linuxscsi, 'get_name_from_path',
+                          return_value="/dev/sdb").start()
+        self.addCleanup(mock.patch.stopall)
 
     def iscsi_connection(self, volume, location, iqn):
         return {
@@ -234,10 +233,9 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
         initiator = self.connector.get_initiator()
         self.assertEqual(initiator, 'iqn.1234-56.foo.bar:01:23456789abc')
 
-    def _test_connect_volume(self, extra_props, additional_commands):
-        exists_mock = mock.Mock()
-        exists_mock.return_value = True
-        os.path.exists = exists_mock
+    @mock.patch.object(os.path, 'exists', return_value=True)
+    def _test_connect_volume(self, extra_props, additional_commands,
+                             exists_mock):
         location = '10.0.2.15:3260'
         name = 'volume-00000001'
         iqn = 'iqn.2010-10.org.openstack:%s' % name
@@ -351,7 +349,17 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
         mock_iscsiadm.assert_any_call(props, ('--logout',),
                                       check_exit_code=[0, 21, 255])
 
-    def test_connect_volume_with_multipath(self):
+    @mock.patch.object(connector.ISCSIConnector, '_run_iscsiadm_bare')
+    @mock.patch.object(connector.ISCSIConnector,
+                       '_get_target_portals_from_iscsiadm_output')
+    @mock.patch.object(connector.ISCSIConnector, '_connect_to_iscsi_portal')
+    @mock.patch.object(connector.ISCSIConnector, '_rescan_iscsi')
+    @mock.patch.object(connector.ISCSIConnector, '_rescan_multipath')
+    @mock.patch.object(connector.ISCSIConnector, '_get_multipath_device_name')
+    @mock.patch.object(os.path, 'exists', return_value=True)
+    def test_connect_volume_with_multipath(
+            self, exists_mock, get_device_mock, rescan_multipath_mock,
+            rescan_iscsi_mock, connect_to_mock, portals_mock, iscsiadm_mock):
         location = '10.0.2.15:3260'
         name = 'volume-00000001'
         iqn = 'iqn.2010-10.org.openstack:%s' % name
@@ -360,30 +368,9 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
 
         self.connector_with_multipath = \
             connector.ISCSIConnector(None, use_multipath=True)
-        self.connector_with_multipath._run_iscsiadm_bare = \
-            lambda *args, **kwargs: "%s %s" % (location, iqn)
-        portals_mock = mock.Mock()
+        iscsiadm_mock.return_value = "%s %s" % (location, iqn)
         portals_mock.return_value = [[location, iqn]]
-        self.connector_with_multipath.\
-            _get_target_portals_from_iscsiadm_output = portals_mock
-        connect_to_mock = mock.Mock()
-        connect_to_mock.return_value = None
-        self.connector_with_multipath._connect_to_iscsi_portal = \
-            connect_to_mock
-        rescan_iscsi_mock = mock.Mock()
-        rescan_iscsi_mock.return_value = None
-        self.connector_with_multipath._rescan_iscsi = rescan_iscsi_mock
-        rescan_multipath_mock = mock.Mock()
-        rescan_multipath_mock.return_value = None
-        self.connector_with_multipath._rescan_multipath = \
-            rescan_multipath_mock
-        get_device_mock = mock.Mock()
         get_device_mock.return_value = 'iqn.2010-10.org.openstack:%s' % name
-        self.connector_with_multipath._get_multipath_device_name = \
-            get_device_mock
-        exists_mock = mock.Mock()
-        exists_mock.return_value = True
-        os.path.exists = exists_mock
 
         result = self.connector_with_multipath.connect_volume(
             connection_properties['data'])
@@ -501,13 +488,10 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
         mock_iscsiadm.assert_any_call(props, ('--logout',),
                                       check_exit_code=[0, 21, 255])
 
-    def test_connect_volume_with_not_found_device(self):
-        exists_mock = mock.Mock()
-        exists_mock.return_value = False
-        os.path.exists = exists_mock
-        sleep_mock = mock.Mock()
-        sleep_mock.return_value = False
-        time.sleep = sleep_mock
+    @mock.patch.object(time, 'sleep')
+    @mock.patch.object(os.path, 'exists', return_value=False)
+    def test_connect_volume_with_not_found_device(self, exists_mock,
+                                                  sleep_mock):
         location = '10.0.2.15:3260'
         name = 'volume-00000001'
         iqn = 'iqn.2010-10.org.openstack:%s' % name
@@ -527,160 +511,121 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
         expected = [ip_iqn1, ip_iqn2]
         self.assertEqual(expected, res)
 
-    def test_get_multipath_device_name(self):
-        realpath = mock.Mock()
-        realpath.return_value = None
-        os.path.realpath = realpath
-        multipath_return_string = [('mpath2 (20017380006c00036)'
-                                   'dm-7 IBM,2810XIV')]
-        self.connector._run_multipath = \
-            lambda *args, **kwargs: multipath_return_string
+    @mock.patch.object(os.path, 'realpath')
+    @mock.patch.object(connector.ISCSIConnector, '_run_multipath')
+    def test_get_multipath_device_name(self, multipath_mock, realpath_mock):
+        multipath_mock.return_value = ['mpath2 (20017380006c00036) '
+                                       'dm-7 IBM,2810XIV']
         expected = '/dev/mapper/mpath2'
         self.assertEqual(expected,
                          self.connector.
                          _get_multipath_device_name('/dev/md-1'))
 
-    def test_get_iscsi_devices(self):
+    @mock.patch.object(os, 'walk')
+    def test_get_iscsi_devices(self, walk_mock):
         paths = [('ip-10.0.0.1:3260-iscsi-iqn.2013-01.ro.'
                  'com.netapp:node.netapp02-lun-0')]
-        walk_mock = lambda x: [(['.'], ['by-path'], paths)]
-        os.walk = walk_mock
+        walk_mock.return_value = [(['.'], ['by-path'], paths)]
         self.assertEqual(self.connector._get_iscsi_devices(), paths)
 
-    def test_get_iscsi_devices_with_empty_dir(self):
-        walk_mock = mock.Mock()
-        walk_mock.return_value = []
-        os.walk = walk_mock
+    @mock.patch.object(os, 'walk', return_value=[])
+    def test_get_iscsi_devices_with_empty_dir(self, walk_mock):
         self.assertEqual(self.connector._get_iscsi_devices(), [])
 
-    def test_get_multipath_iqn(self):
+    @mock.patch.object(os.path, 'realpath')
+    @mock.patch.object(connector.ISCSIConnector, '_get_iscsi_devices')
+    @mock.patch.object(connector.ISCSIConnector, '_get_multipath_device_name')
+    def test_get_multipath_iqn(self, get_multipath_device_mock,
+                               get_iscsi_mock, realpath_mock):
         paths = [('ip-10.0.0.1:3260-iscsi-iqn.2013-01.ro.'
                  'com.netapp:node.netapp02-lun-0')]
-        realpath = lambda x: '/dev/disk/by-path/%s' % paths[0]
-        os.path.realpath = realpath
-
-        get_iscsi_mock = mock.Mock()
+        realpath_mock.return_value = '/dev/disk/by-path/%s' % paths[0]
         get_iscsi_mock.return_value = paths
-        self.connector._get_iscsi_devices = get_iscsi_mock
-
-        get_multipath_device_mock = mock.Mock()
         get_multipath_device_mock.return_value = paths[0]
-        self.connector._get_multipath_device_name = get_multipath_device_mock
         self.assertEqual(self.connector._get_multipath_iqn(paths[0]),
                          'iqn.2013-01.ro.com.netapp:node.netapp02')
 
-    def test_disconnect_volume_multipath_iscsi(self):
-        result = []
-
-        def fake_disconnect_from_iscsi_portal(properties):
-            result.append(properties)
+    @mock.patch.object(connector.ISCSIConnector,
+                       '_get_target_portals_from_iscsiadm_output')
+    @mock.patch.object(connector.ISCSIConnector, '_rescan_iscsi')
+    @mock.patch.object(connector.ISCSIConnector, '_rescan_multipath')
+    @mock.patch.object(host_driver.HostDriver, 'get_all_block_devices')
+    @mock.patch.object(connector.ISCSIConnector,
+                       '_disconnect_from_iscsi_portal')
+    @mock.patch.object(connector.ISCSIConnector, '_get_multipath_device_name',
+                       return_value='/dev/mapper/md-3')
+    @mock.patch.object(connector.ISCSIConnector, '_get_multipath_iqn')
+    @mock.patch.object(os.path, 'exists', return_value=True)
+    def test_disconnect_volume_multipath_iscsi(
+            self, exists_mock, multipath_iqn_mock, get_multipath_name_mock,
+            disconnect_mock, get_all_devices_mock,
+            rescan_multipath_mock, rescan_iscsi_mock, get_portals_mock):
         iqn1 = 'iqn.2013-01.ro.com.netapp:node.netapp01'
         iqn2 = 'iqn.2013-01.ro.com.netapp:node.netapp02'
         iqns = [iqn1, iqn2]
         portal = '10.0.0.1:3260'
         dev = ('ip-%s-iscsi-%s-lun-0' % (portal, iqn1))
 
-        get_portals_mock = mock.Mock()
         get_portals_mock.return_value = [[portal, iqn1]]
-        rescan_iscsi_mock = mock.Mock()
-        rescan_iscsi_mock.return_value = None
-
-        rescan_multipath = mock.Mock()
-        rescan_multipath.return_value = None
-
-        get_block_devices_mock = mock.Mock()
-        get_block_devices_mock.return_value = [dev, '/dev/mapper/md-1']
-
-        get_multipath_name_mock = mock.Mock()
-        get_multipath_name_mock.return_value = '/dev/mapper/md-3'
-
-        self.connector._get_multipath_iqn = lambda x: iqns.pop()
-
-        disconnect_mock = fake_disconnect_from_iscsi_portal
-        self.connector._disconnect_from_iscsi_portal = disconnect_mock
+        multipath_iqn_mock.side_effect = iqns
+        get_all_devices_mock.return_value = [dev, '/dev/mapper/md-1']
         fake_property = {'target_portal': portal,
                          'target_iqn': iqn1}
         self.connector._disconnect_volume_multipath_iscsi(fake_property,
                                                           'fake/multipath')
         # Target in use by other mp devices, don't disconnect
-        self.assertEqual([], result)
+        self.assertFalse(disconnect_mock.called)
 
-    def test_disconnect_volume_multipath_iscsi_without_other_mp_devices(self):
-        result = []
-
-        def fake_disconnect_from_iscsi_portal(properties):
-            result.append(properties)
+    @mock.patch.object(connector.ISCSIConnector,
+                       '_get_target_portals_from_iscsiadm_output')
+    @mock.patch.object(connector.ISCSIConnector, '_rescan_iscsi')
+    @mock.patch.object(connector.ISCSIConnector, '_rescan_multipath')
+    @mock.patch.object(host_driver.HostDriver, 'get_all_block_devices',
+                       return_value=[])
+    @mock.patch.object(connector.ISCSIConnector,
+                       '_disconnect_from_iscsi_portal')
+    @mock.patch.object(os.path, 'exists', return_value=True)
+    def test_disconnect_volume_multipath_iscsi_without_other_mp_devices(
+            self, exists_mock, disconnect_mock, get_all_devices_mock,
+            rescan_multipath_mock, rescan_iscsi_mock, get_portals_mock):
         portal = '10.0.2.15:3260'
         name = 'volume-00000001'
         iqn = 'iqn.2010-10.org.openstack:%s' % name
 
-        get_portals_mock = mock.Mock()
         get_portals_mock.return_value = [[portal, iqn]]
-        self.connector._get_target_portals_from_iscsiadm_output = \
-            get_portals_mock
-
-        rescan_iscsi_mock = mock.Mock()
-        rescan_iscsi_mock.return_value = None
-        self.connector._rescan_iscsi = rescan_iscsi_mock
-
-        rescan_multipath_mock = mock.Mock()
-        rescan_multipath_mock.return_value = None
-        self.connector._rescan_multipath = rescan_multipath_mock
-
-        get_all_devices_mock = mock.Mock()
-        get_all_devices_mock.return_value = []
-        self.connector.driver.get_all_block_devices = get_all_devices_mock
-
-        self.connector._disconnect_from_iscsi_portal = \
-            fake_disconnect_from_iscsi_portal
         fake_property = {'target_portal': portal,
                          'target_iqn': iqn}
         self.connector._disconnect_volume_multipath_iscsi(fake_property,
                                                           'fake/multipath')
         # Target not in use by other mp devices, disconnect
-        self.assertEqual([fake_property], result)
+        disconnect_mock.assert_called_once_with(fake_property)
 
-    def test_disconnect_volume_multipath_iscsi_with_invalid_symlink(self):
-        result = []
-
-        def fake_disconnect_from_iscsi_portal(properties):
-            result.append(properties)
-
+    @mock.patch.object(connector.ISCSIConnector,
+                       '_get_target_portals_from_iscsiadm_output')
+    @mock.patch.object(connector.ISCSIConnector, '_rescan_iscsi')
+    @mock.patch.object(connector.ISCSIConnector, '_rescan_multipath')
+    @mock.patch.object(host_driver.HostDriver, 'get_all_block_devices')
+    @mock.patch.object(connector.ISCSIConnector,
+                       '_disconnect_from_iscsi_portal')
+    @mock.patch.object(os.path, 'exists', return_value=False)
+    def test_disconnect_volume_multipath_iscsi_with_invalid_symlink(
+            self, exists_mock, disconnect_mock, get_all_devices_mock,
+            rescan_multipath_mock, rescan_iscsi_mock, get_portals_mock):
+        # Simulate a broken symlink by returning False for os.path.exists(dev)
         portal = '10.0.0.1:3260'
         name = 'volume-00000001'
         iqn = 'iqn.2010-10.org.openstack:%s' % name
         dev = ('ip-%s-iscsi-%s-lun-0' % (portal, iqn))
 
-        get_portals_mock = mock.Mock()
         get_portals_mock.return_value = [[portal, iqn]]
-        self.connector._get_target_portals_from_iscsiadm_output = \
-            get_portals_mock
-
-        rescan_iscsi_mock = mock.Mock()
-        rescan_iscsi_mock.return_value = None
-        self.connector._rescan_iscsi = rescan_iscsi_mock
-
-        rescan_multipath_mock = mock.Mock()
-        rescan_multipath_mock.return_value = None
-        self.connector._rescan_multipath = rescan_multipath_mock
-
-        get_all_devices_mock = mock.Mock()
         get_all_devices_mock.return_value = [dev, '/dev/mapper/md-1']
-        self.connector.driver.get_all_block_devices = get_all_devices_mock
 
-        self.connector._disconnect_from_iscsi_portal = \
-            fake_disconnect_from_iscsi_portal
-
-        # Simulate a broken symlink by returning False for os.path.exists(dev)
-        mock_exists = mock.Mock()
-        mock_exists.return_value = False
-        os.path.exists = mock_exists
         fake_property = {'target_portal': portal,
                          'target_iqn': iqn}
         self.connector._disconnect_volume_multipath_iscsi(fake_property,
                                                           'fake/multipath')
         # Target not in use by other mp devices, disconnect
-        self.assertEqual([fake_property], result)
+        disconnect_mock.assert_called_once_with(fake_property)
 
 
 class FibreChannelConnectorTestCase(ConnectorTestCase):
@@ -733,16 +678,18 @@ class FibreChannelConnectorTestCase(ConnectorTestCase):
                     'target_lun': 1,
                 }}
 
-    def test_connect_volume(self):
-        self.connector._linuxfc.get_fc_hbas = self.fake_get_fc_hbas
-        self.connector._linuxfc.get_fc_hbas_info = \
-            self.fake_get_fc_hbas_info
-        exists_mock = mock.Mock()
-        exists_mock.return_value = True
-        os.path.exists = exists_mock
-        realpath_mock = mock.Mock()
-        realpath_mock.return_value = '/dev/sdb'
-        os.path.realpath = realpath_mock
+    @mock.patch.object(os.path, 'exists', return_value=True)
+    @mock.patch.object(os.path, 'realpath', return_value='/dev/sdb')
+    @mock.patch.object(linuxfc.LinuxFibreChannel, 'get_fc_hbas')
+    @mock.patch.object(linuxfc.LinuxFibreChannel, 'get_fc_hbas_info')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'find_multipath_device')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'remove_scsi_device')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_device_info')
+    def test_connect_volume(self, get_device_info_mock, remove_device_mock,
+                            find_device_mock, get_fc_hbas_info_mock,
+                            get_fc_hbas_mock, realpath_mock, exists_mock):
+        get_fc_hbas_mock.side_effect = self.fake_get_fc_hbas
+        get_fc_hbas_info_mock.side_effect = self.fake_get_fc_hbas_info
 
         multipath_devname = '/dev/md-1'
         devices = {"device": multipath_devname,
@@ -751,15 +698,8 @@ class FibreChannelConnectorTestCase(ConnectorTestCase):
                                 'address': '1:0:0:1',
                                 'host': 1, 'channel': 0,
                                 'id': 0, 'lun': 1}]}
-        find_device_mock = mock.Mock()
         find_device_mock.return_value = devices
-        self.connector._linuxscsi.find_multipath_device = find_device_mock
-        remove_device_mock = mock.Mock()
-        remove_device_mock.return_value = None
-        self.connector._linuxscsi.remove_scsi_device = remove_device_mock
-        get_device_info_mock = mock.Mock()
         get_device_info_mock.return_value = devices['devices'][0]
-        self.connector._linuxscsi.get_device_info = get_device_info_mock
 
         location = '10.0.2.15:3260'
         name = 'volume-00000001'
@@ -786,13 +726,8 @@ class FibreChannelConnectorTestCase(ConnectorTestCase):
                           self.connector.connect_volume,
                           connection_info['data'])
 
-        get_fc_hbas_mock = mock.Mock()
-        get_fc_hbas_mock.return_value = []
-        self.connector._linuxfc.get_fc_hbas = get_fc_hbas_mock
-
-        get_fc_hbas_info_mock = mock.Mock()
-        get_fc_hbas_info_mock.return_value = []
-        self.connector._linuxfc.get_fc_hbas_info = get_fc_hbas_info_mock
+        get_fc_hbas_mock.side_effect = [[]]
+        get_fc_hbas_info_mock.side_effect = [[]]
         self.assertRaises(exception.NoFibreChannelHostsFound,
                           self.connector.connect_volume,
                           connection_info['data'])
@@ -868,27 +803,21 @@ class AoEConnectorTestCase(ConnectorTestCase):
         self.connector = connector.AoEConnector('sudo')
         self.connection_properties = {'target_shelf': 'fake_shelf',
                                       'target_lun': 'fake_lun'}
-        loopingcall.FixedIntervalLoopingCall = FakeFixedIntervalLoopingCall
+        mock.patch.object(loopingcall, 'FixedIntervalLoopingCall',
+                          FakeFixedIntervalLoopingCall).start()
+        self.addCleanup(mock.patch.stopall)
 
-    def _mock_path_exists(self, aoe_path, mock_values=None):
-        exists_mock = mock.Mock()
-        exists_mock.return_value = mock_values
-        os.path.exists = exists_mock
-
-    def test_connect_volume(self):
+    @mock.patch.object(os.path, 'exists', side_effect=[True, True])
+    def test_connect_volume(self, exists_mock):
         """Ensure that if path exist aoe-revaliadte was called."""
         aoe_device, aoe_path = self.connector._get_aoe_info(
             self.connection_properties)
+        with mock.patch.object(self.connector, '_execute',
+                               return_value=["", ""]):
+            self.connector.connect_volume(self.connection_properties)
 
-        self._mock_path_exists(aoe_path, [True, True])
-
-        exec_mock = mock.Mock()
-        exec_mock.return_value = ["", ""]
-        self.connector._execute = exec_mock
-
-        self.connector.connect_volume(self.connection_properties)
-
-    def test_connect_volume_without_path(self):
+    @mock.patch.object(os.path, 'exists', side_effect=[False, True])
+    def test_connect_volume_without_path(self, exists_mock):
         """Ensure that if path doesn't exist aoe-discovery was called."""
 
         aoe_device, aoe_path = self.connector._get_aoe_info(
@@ -899,43 +828,33 @@ class AoEConnectorTestCase(ConnectorTestCase):
             'path': aoe_path,
         }
 
-        self._mock_path_exists(aoe_path, [False, True])
-
-        exec_mock = mock.Mock()
-        exec_mock.return_value = ["", ""]
-        self.connector._execute = exec_mock
-
-        volume_info = self.connector.connect_volume(
-            self.connection_properties)
+        with mock.patch.object(self.connector, '_execute',
+                               return_value=["", ""]):
+            volume_info = self.connector.connect_volume(
+                self.connection_properties)
 
         self.assertDictMatch(volume_info, expected_info)
 
-    def test_connect_volume_could_not_discover_path(self):
+    @mock.patch.object(os.path, 'exists', return_value=False)
+    def test_connect_volume_could_not_discover_path(self, exists_mock):
         _aoe_device, aoe_path = self.connector._get_aoe_info(
             self.connection_properties)
 
-        exists_mock = mock.Mock()
-        exists_mock.return_value = False
-        os.path.exists = exists_mock
-        exec_mock = mock.Mock()
-        exec_mock.return_value = ["", ""]
-        self.connector._execute = exec_mock
-        self.assertRaises(exception.VolumeDeviceNotFound,
-                          self.connector.connect_volume,
-                          self.connection_properties)
+        with mock.patch.object(self.connector, '_execute',
+                               return_value=["", ""]):
+            self.assertRaises(exception.VolumeDeviceNotFound,
+                              self.connector.connect_volume,
+                              self.connection_properties)
 
-    def test_disconnect_volume(self):
+    @mock.patch.object(os.path, 'exists', return_value=True)
+    def test_disconnect_volume(self, mock_exists):
         """Ensure that if path exist aoe-revaliadte was called."""
         aoe_device, aoe_path = self.connector._get_aoe_info(
             self.connection_properties)
 
-        self._mock_path_exists(aoe_path, [True])
-
-        exec_mock = mock.Mock()
-        exec_mock.return_value = ["", ""]
-        self.connector._execute = exec_mock
-
-        self.connector.disconnect_volume(self.connection_properties, {})
+        with mock.patch.object(self.connector, '_execute',
+                               return_value=["", ""]):
+            self.connector.disconnect_volume(self.connection_properties, {})
 
 
 class RemoteFsConnectorTestCase(ConnectorTestCase):
@@ -952,13 +871,11 @@ class RemoteFsConnectorTestCase(ConnectorTestCase):
             'nfs', root_helper='sudo', nfs_mount_point_base='/mnt/test',
             nfs_mount_options='vers=3')
 
-    def test_connect_volume(self):
+    @mock.patch.object(remotefs.RemoteFsClient, 'mount')
+    @mock.patch.object(remotefs.RemoteFsClient, 'get_mount_point',
+                       return_value="something")
+    def test_connect_volume(self, mount_point_mock, mount_mock):
         """Test the basic connect volume case."""
-        client = self.connector._remotefsclient
-        client.mount = mock.Mock()
-        client.get_mount_point = mock.Mock()
-        client.get_mount_point.return_value = "something"
-
         self.connector.connect_volume(self.connection_properties)
 
     def test_disconnect_volume(self):
