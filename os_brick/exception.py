@@ -14,7 +14,7 @@
 
 """Exceptions for the Brick library."""
 
-from os_brick.i18n import _
+from os_brick.i18n import _, _LE
 from os_brick.openstack.common import log as logging
 
 
@@ -49,11 +49,11 @@ class BrickException(Exception):
             except Exception:
                 # kwargs doesn't match a variable in the message
                 # log the issue and the kwargs
-                msg = (_("Exception in string format operation.  msg='%s'")
-                       % self.message)
-                LOG.exception(msg)
+                LOG.exception(_LE("Exception in string format operation. "
+                                  "msg='%s'"), self.message)
                 for name, value in kwargs.iteritems():
-                    LOG.error("%s: %s" % (name, value))
+                    LOG.error(_LE("%(name)s: %(value)s"), {'name': name,
+                                                           'value': value})
 
                 # at least get the core message out if something happened
                 message = self.message

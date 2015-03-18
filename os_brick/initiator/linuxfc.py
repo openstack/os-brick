@@ -48,13 +48,13 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
             # and systool is not installed
             # 96 = nova.cmd.rootwrap.RC_NOEXECFOUND:
             if exc.exit_code == 96:
-                LOG.warn(_LW("systool is not installed"))
+                LOG.warning(_LW("systool is not installed"))
             return []
         except OSError as exc:
             # This handles the case where rootwrap is NOT used
             # and systool is not installed
             if exc.errno == errno.ENOENT:
-                LOG.warn(_LW("systool is not installed"))
+                LOG.warning(_LW("systool is not installed"))
             return []
 
         # No FC HBAs were found
@@ -173,8 +173,8 @@ class LinuxFibreChannelS390X(LinuxFibreChannel):
         luns need to be added to the configuration through the
         unit_add interface
         """
-        LOG.debug("Configure lun for s390: device_number=(%(device_num)s) "
-                  "target_wwn=(%(target_wwn)s) target_lun=(%(target_lun)s)",
+        LOG.debug("Configure lun for s390: device_number=%(device_num)s "
+                  "target_wwn=%(target_wwn)s target_lun=%(target_lun)s",
                   {'device_num': device_number,
                    'target_wwn': target_wwn,
                    'target_lun': lun})
@@ -184,9 +184,9 @@ class LinuxFibreChannelS390X(LinuxFibreChannel):
         try:
             self.echo_scsi_command(zfcp_device_command, lun)
         except putils.ProcessExecutionError as exc:
-            msg = _LW("unit_add call for s390 failed exit (%(code)s), "
-                      "stderr (%(stderr)s)")
-            LOG.warn(msg, {'code': exc.exit_code, 'stderr': exc.stderr})
+            LOG.warning(_LW("unit_add call for s390 failed exit %(code)s, "
+                            "stderr %(stderr)s"),
+                        {'code': exc.exit_code, 'stderr': exc.stderr})
 
     def deconfigure_scsi_device(self, device_number, target_wwn, lun):
         """Write the LUN to the port's unit_remove attribute.
@@ -196,8 +196,8 @@ class LinuxFibreChannelS390X(LinuxFibreChannel):
         unit_remove interface
         """
         LOG.debug("Deconfigure lun for s390: "
-                  "device_number=(%(device_num)s) "
-                  "target_wwn=(%(target_wwn)s) target_lun=(%(target_lun)s)",
+                  "device_number=%(device_num)s "
+                  "target_wwn=%(target_wwn)s target_lun=%(target_lun)s",
                   {'device_num': device_number,
                    'target_wwn': target_wwn,
                    'target_lun': lun})
@@ -207,6 +207,6 @@ class LinuxFibreChannelS390X(LinuxFibreChannel):
         try:
             self.echo_scsi_command(zfcp_device_command, lun)
         except putils.ProcessExecutionError as exc:
-            msg = _LW("unit_remove call for s390 failed exit (%(code)s), "
-                      "stderr (%(stderr)s)")
-            LOG.warn(msg, {'code': exc.exit_code, 'stderr': exc.stderr})
+            LOG.warning(_LW("unit_remove call for s390 failed exit %(code)s, "
+                            "stderr %(stderr)s"),
+                        {'code': exc.exit_code, 'stderr': exc.stderr})
