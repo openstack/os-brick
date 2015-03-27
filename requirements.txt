@@ -10,4 +10,5 @@ oslo.log>=1.0.0,<1.1.0
 oslo.serialization>=1.4.0,<1.5.0
 oslo.i18n>=1.5.0,<1.6.0
 oslo.utils>=1.4.0,<1.5.0
+retrying>=1.2.3,!=1.3.0
 six>=1.9.0

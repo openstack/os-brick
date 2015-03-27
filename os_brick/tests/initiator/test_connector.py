@@ -234,9 +234,13 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
         initiator = self.connector.get_initiator()
         self.assertEqual(initiator, 'iqn.1234-56.foo.bar:01:23456789abc')
 
-    @mock.patch.object(os.path, 'exists', return_value=True)
     def _test_connect_volume(self, extra_props, additional_commands,
-                             exists_mock):
+                             disconnect_mock=None):
+        # for making sure the /dev/disk/by-path is gone
+        exists_mock = mock.Mock()
+        exists_mock.return_value = True
+        os.path.exists = exists_mock
+
         location = '10.0.2.15:3260'
         name = 'volume-00000001'
         iqn = 'iqn.2010-10.org.openstack:%s' % name
@@ -249,29 +253,40 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
         self.assertEqual(device['type'], 'block')
         self.assertEqual(device['path'], dev_str)
 
-        self.connector.disconnect_volume(connection_info['data'], device)
-        expected_commands = [('iscsiadm -m node -T %s -p %s' %
-                              (iqn, location)),
-                             ('iscsiadm -m session'),
-                             ('iscsiadm -m node -T %s -p %s --login' %
-                              (iqn, location)),
-                             ('iscsiadm -m node -T %s -p %s --op update'
-                              ' -n node.startup -v automatic'
-                              % (iqn, location)),
-                             ('iscsiadm -m node --rescan'),
-                             ('iscsiadm -m session --rescan'),
-                             ('blockdev --flushbufs /dev/sdb'),
-                             ('tee -a /sys/block/sdb/device/delete'),
-                             ('iscsiadm -m node -T %s -p %s --op update'
-                              ' -n node.startup -v manual' % (iqn, location)),
-                             ('iscsiadm -m node -T %s -p %s --logout' %
-                              (iqn, location)),
-                             ('iscsiadm -m node -T %s -p %s --op delete' %
-                              (iqn, location)), ] + additional_commands
-        LOG.debug("self.cmds = %s" % self.cmds)
-        LOG.debug("expected = %s" % expected_commands)
+        self.count = 0
 
-        self.assertEqual(expected_commands, self.cmds)
+        def mock_exists_effect(*args, **kwargs):
+            self.count = self.count + 1
+            if self.count == 4:
+                return False
+            else:
+                return True
+
+        if disconnect_mock is None:
+            disconnect_mock = mock_exists_effect
+
+        with mock.patch.object(os.path, 'exists',
+                               side_effect=disconnect_mock):
+            self.connector.disconnect_volume(connection_info['data'], device)
+            expected_commands = [
+                ('iscsiadm -m node -T %s -p %s' % (iqn, location)),
+                ('iscsiadm -m session'),
+                ('iscsiadm -m node -T %s -p %s --login' % (iqn, location)),
+                ('iscsiadm -m node -T %s -p %s --op update'
+                 ' -n node.startup -v automatic' % (iqn, location)),
+                ('iscsiadm -m node --rescan'),
+                ('iscsiadm -m session --rescan'),
+                ('blockdev --flushbufs /dev/sdb'),
+                ('tee -a /sys/block/sdb/device/delete'),
+                ('iscsiadm -m node -T %s -p %s --op update'
+                 ' -n node.startup -v manual' % (iqn, location)),
+                ('iscsiadm -m node -T %s -p %s --logout' % (iqn, location)),
+                ('iscsiadm -m node -T %s -p %s --op delete' %
+                 (iqn, location)), ] + additional_commands
+            LOG.debug("self.cmds = %s", self.cmds)
+            LOG.debug("expected = %s", expected_commands)
+
+            self.assertEqual(expected_commands, self.cmds)
 
     @testtools.skipUnless(os.path.exists('/dev/disk/by-path'),
                           'Test requires /dev/disk/by-path')
@@ -297,7 +312,20 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
                                 (iqn2, location2)),
                                ('iscsiadm -m node -T %s -p %s --op delete' %
                                 (iqn2, location2))]
-        self._test_connect_volume(extra_props, additional_commands)
+
+        def mock_exists_effect(*args, **kwargs):
+            self.count = self.count + 1
+            # we have 2 targets in this test, so we need
+            # to make sure we remove and detect removal
+            # for both.
+            if (self.count == 4 or
+               self.count == 8):
+                return False
+            else:
+                return True
+
+        self._test_connect_volume(extra_props, additional_commands,
+                                  disconnect_mock=mock_exists_effect)
 
     @testtools.skipUnless(os.path.exists('/dev/disk/by-path'),
                           'Test requires /dev/disk/by-path')
@@ -338,17 +366,19 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
                                       check_exit_code=[0, 255])
 
         mock_iscsiadm.reset_mock()
-        self.connector.disconnect_volume(connection_info['data'], device)
-        props = connection_info['data'].copy()
-        for key in ('target_portals', 'target_iqns', 'target_luns'):
-            props.pop(key, None)
-        mock_iscsiadm.assert_any_call(props, ('--logout',),
-                                      check_exit_code=[0, 21, 255])
-        props['target_portal'] = location2
-        props['target_iqn'] = iqn2
-        props['target_lun'] = 2
-        mock_iscsiadm.assert_any_call(props, ('--logout',),
-                                      check_exit_code=[0, 21, 255])
+        with mock.patch.object(os.path, 'exists',
+                               return_value=False):
+            self.connector.disconnect_volume(connection_info['data'], device)
+            props = connection_info['data'].copy()
+            for key in ('target_portals', 'target_iqns', 'target_luns'):
+                props.pop(key, None)
+            mock_iscsiadm.assert_any_call(props, ('--logout',),
+                                          check_exit_code=[0, 21, 255])
+            props['target_portal'] = location2
+            props['target_iqn'] = iqn2
+            props['target_lun'] = 2
+            mock_iscsiadm.assert_any_call(props, ('--logout',),
+                                          check_exit_code=[0, 21, 255])
 
     @mock.patch.object(connector.ISCSIConnector, '_run_iscsiadm_bare')
     @mock.patch.object(connector.ISCSIConnector,

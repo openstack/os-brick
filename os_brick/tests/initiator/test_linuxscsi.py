@@ -19,6 +19,7 @@ import string
 import mock
 from oslo_log import log as logging
 
+from os_brick import exception
 from os_brick.initiator import linuxscsi
 from os_brick.tests import base
 
@@ -65,6 +66,22 @@ class LinuxSCSITestCase(base.TestCase):
         expected_commands = [
             ('blockdev --flushbufs /dev/sdc'),
             ('tee -a /sys/block/sdc/device/delete')]
+        self.assertEqual(expected_commands, self.cmds)
+
+    def test_wait_for_volume_removal(self):
+        fake_path = '/dev/disk/by-path/fake-iscsi-iqn-lun-0'
+        exists_mock = mock.Mock()
+        exists_mock.return_value = True
+        os.path.exists = exists_mock
+        self.assertRaises(exception.VolumePathNotRemoved,
+                          self.linuxscsi.wait_for_volume_removal,
+                          fake_path)
+
+        exists_mock = mock.Mock()
+        exists_mock.return_value = False
+        os.path.exists = exists_mock
+        self.linuxscsi.wait_for_volume_removal(fake_path)
+        expected_commands = []
         self.assertEqual(expected_commands, self.cmds)
 
     def test_flush_multipath_device(self):

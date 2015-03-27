@@ -22,8 +22,10 @@ import re
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
 
+from os_brick import exception
 from os_brick import executor
 from os_brick.i18n import _LW
+from os_brick import utils
 
 LOG = logging.getLogger(__name__)
 
@@ -66,6 +68,19 @@ class LinuxSCSI(executor.Executor):
             LOG.debug("Remove SCSI device %(device)s with %(path)s",
                       {'device': device, 'path': path})
             self.echo_scsi_command(path, "1")
+
+    @utils.retry(exceptions=exception.VolumePathNotRemoved, retries=3,
+                 backoff_rate=1)
+    def wait_for_volume_removal(self, volume_path):
+        """This is used to ensure that volumes are gone."""
+        LOG.debug("Checking to see if SCSI volume %s has been removed.",
+                  volume_path)
+        if os.path.exists(volume_path):
+            LOG.debug("%(path)s still exists.", {'path': volume_path})
+            raise exception.VolumePathNotRemoved(
+                volume_path=volume_path)
+        else:
+            LOG.debug("SCSI volume %s has been removed.", volume_path)
 
     def get_device_info(self, device):
         (out, _err) = self._execute('sg_scan', device, run_as_root=True,

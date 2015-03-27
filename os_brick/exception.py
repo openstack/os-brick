@@ -98,5 +98,9 @@ class VolumeDeviceNotFound(BrickException):
     message = _("Volume device not found at %(device)s.")
 
 
+class VolumePathNotRemoved(BrickException):
+    message = _("Volume path %(volume_path)s was not removed in time.")
+
+
 class ProtocolNotSupported(BrickException):
     message = _("Connect to volume via protocol %(protocol)s not supported.")
