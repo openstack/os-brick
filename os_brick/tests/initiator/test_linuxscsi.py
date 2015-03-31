@@ -28,9 +28,8 @@ class LinuxSCSITestCase(base.TestCase):
     def setUp(self):
         super(LinuxSCSITestCase, self).setUp()
         self.cmds = []
-        realpath_mock = mock.Mock()
-        realpath_mock.return_value = '/dev/sdc'
-        os.path.realpath = realpath_mock
+        mock.patch.object(os.path, 'realpath', return_value='/dev/sdc').start()
+        self.addCleanup(mock.patch.stopall)
         self.linuxscsi = linuxscsi.LinuxSCSI(None, execute=self.fake_execute)
 
     def fake_execute(self, *cmd, **kwargs):
@@ -42,31 +41,24 @@ class LinuxSCSITestCase(base.TestCase):
         expected_commands = ['tee -a /some/path']
         self.assertEqual(expected_commands, self.cmds)
 
-    def test_get_name_from_path(self):
+    @mock.patch.object(os.path, 'realpath')
+    def test_get_name_from_path(self, realpath_mock):
         device_name = "/dev/sdc"
-        realpath_mock = mock.Mock()
         realpath_mock.return_value = device_name
-        os.path.realpath = realpath_mock
         disk_path = ("/dev/disk/by-path/ip-10.10.220.253:3260-"
                      "iscsi-iqn.2000-05.com.3pardata:21810002ac00383d-lun-0")
         name = self.linuxscsi.get_name_from_path(disk_path)
         self.assertEqual(name, device_name)
-        realpath_mock = mock.Mock()
         realpath_mock.return_value = "bogus"
-        os.path.realpath = realpath_mock
         name = self.linuxscsi.get_name_from_path(disk_path)
         self.assertIsNone(name)
 
-    def test_remove_scsi_device(self):
-        exists_mock = mock.Mock()
-        exists_mock.return_value = False
-        os.path.exists = exists_mock
+    @mock.patch.object(os.path, 'exists', return_value=False)
+    def test_remove_scsi_device(self, exists_mock):
         self.linuxscsi.remove_scsi_device("/dev/sdc")
         expected_commands = []
         self.assertEqual(expected_commands, self.cmds)
-        exists_mock = mock.Mock()
         exists_mock.return_value = True
-        os.path.exists = exists_mock
         self.linuxscsi.remove_scsi_device("/dev/sdc")
         expected_commands = [
             ('blockdev --flushbufs /dev/sdc'),
@@ -83,7 +75,9 @@ class LinuxSCSITestCase(base.TestCase):
         expected_commands = [('multipath -F')]
         self.assertEqual(expected_commands, self.cmds)
 
-    def test_remove_multipath_device(self):
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'find_multipath_device')
+    @mock.patch.object(os.path, 'exists', return_value=True)
+    def test_remove_multipath_device(self, exists_mock, mock_multipath):
         def fake_find_multipath_device(device):
             devices = [{'device': '/dev/sde', 'host': 0,
                         'channel': 0, 'id': 0, 'lun': 1},
@@ -95,11 +89,7 @@ class LinuxSCSITestCase(base.TestCase):
                     "devices": devices}
             return info
 
-        exists_mock = mock.Mock()
-        exists_mock.return_value = True
-        os.path.exists = exists_mock
-
-        self.linuxscsi.find_multipath_device = fake_find_multipath_device
+        mock_multipath.side_effect = fake_find_multipath_device
 
         self.linuxscsi.remove_multipath_device('/dev/dm-3')
         expected_commands = [
