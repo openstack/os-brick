@@ -15,6 +15,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import six
+
 from os_brick import exception
 from os_brick.tests import base
 
@@ -25,24 +27,26 @@ class BrickExceptionTestCase(base.TestCase):
             message = "default message"
 
         exc = FakeBrickException()
-        self.assertEqual(unicode(exc), 'default message')
+        self.assertEqual(six.text_type(exc), 'default message')
 
     def test_error_msg(self):
-        self.assertEqual(unicode(exception.BrickException('test')), 'test')
+        self.assertEqual(six.text_type(exception.BrickException('test')),
+                         'test')
 
     def test_default_error_msg_with_kwargs(self):
         class FakeBrickException(exception.BrickException):
             message = "default message: %(code)s"
 
         exc = FakeBrickException(code=500)
-        self.assertEqual(unicode(exc), 'default message: 500')
+        self.assertEqual(six.text_type(exc), 'default message: 500')
 
     def test_error_msg_exception_with_kwargs(self):
         class FakeBrickException(exception.BrickException):
             message = "default message: %(mispelled_code)s"
 
         exc = FakeBrickException(code=500)
-        self.assertEqual(unicode(exc), 'default message: %(mispelled_code)s')
+        self.assertEqual(six.text_type(exc),
+                         'default message: %(mispelled_code)s')
 
     def test_default_error_code(self):
         class FakeBrickException(exception.BrickException):

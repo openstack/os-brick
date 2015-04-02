@@ -14,6 +14,8 @@
 
 """Exceptions for the Brick library."""
 
+import six
+
 from os_brick.i18n import _, _LE
 from os_brick.openstack.common import log as logging
 
@@ -64,7 +66,7 @@ class BrickException(Exception):
         super(BrickException, self).__init__(message)
 
     def __unicode__(self):
-        return unicode(self.msg)
+        return six.text_type(self.msg)
 
 
 class NotFound(BrickException):
