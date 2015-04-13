@@ -20,6 +20,7 @@ import time
 
 import mock
 from oslo_concurrency import processutils as putils
+import six
 import testtools
 
 from os_brick import exception
@@ -722,7 +723,7 @@ class FibreChannelConnectorTestCase(ConnectorTestCase):
         name = 'volume-00000001'
         vol = {'id': 1, 'name': name}
         # Should work for string, unicode, and list
-        wwns = ['1234567890123456', unicode('1234567890123456'),
+        wwns = ['1234567890123456', six.text_type('1234567890123456'),
                 ['1234567890123456', '1234567890123457']]
         for wwn in wwns:
             connection_info = self.fibrechan_connection(vol, location, wwn)
