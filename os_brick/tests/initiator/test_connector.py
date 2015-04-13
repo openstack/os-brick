@@ -20,6 +20,7 @@ import time
 
 import mock
 from oslo_concurrency import processutils as putils
+from oslo_log import log as logging
 import six
 import testtools
 
@@ -29,7 +30,6 @@ from os_brick.initiator import connector
 from os_brick.initiator import host_driver
 from os_brick.initiator import linuxfc
 from os_brick.initiator import linuxscsi
-from os_brick.openstack.common import log as logging
 from os_brick.openstack.common import loopingcall
 from os_brick.remotefs import remotefs
 from os_brick.tests import base

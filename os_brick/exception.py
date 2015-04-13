@@ -17,7 +17,7 @@
 import six
 
 from os_brick.i18n import _, _LE
-from os_brick.openstack.common import log as logging
+from oslo_log import log as logging
 
 
 LOG = logging.getLogger(__name__)

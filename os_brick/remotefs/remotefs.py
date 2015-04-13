@@ -20,11 +20,11 @@ import os
 import re
 
 from oslo_concurrency import processutils as putils
+from oslo_log import log as logging
 import six
 
 from os_brick import exception
 from os_brick.i18n import _, _LI
-from os_brick.openstack.common import log as logging
 
 LOG = logging.getLogger(__name__)
 

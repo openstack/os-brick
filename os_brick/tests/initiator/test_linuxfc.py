@@ -16,9 +16,9 @@ import os.path
 import string
 
 import mock
+from oslo_log import log as logging
 
 from os_brick.initiator import linuxfc
-from os_brick.openstack.common import log as logging
 from os_brick.tests import base
 
 LOG = logging.getLogger(__name__)

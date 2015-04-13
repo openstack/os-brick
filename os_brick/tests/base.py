@@ -21,9 +21,8 @@ import os
 import fixtures
 import mock
 from oslo.utils import strutils
+from oslo_log import log as oslo_logging
 from oslotest import base
-
-from os_brick.openstack.common import log as oslo_logging
 
 
 LOG = oslo_logging.getLogger(__name__)
