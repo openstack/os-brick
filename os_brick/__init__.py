@@ -15,5 +15,4 @@
 
 .. autmodule:: os_brick
    :synopsis: OpenStack host based volume management.
-.. moduleauthor:: Walter A. Boring IV <walter.boring@hp.com>
 """
