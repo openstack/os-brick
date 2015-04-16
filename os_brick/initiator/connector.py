@@ -30,6 +30,7 @@ import time
 from oslo_concurrency import lockutils
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
+from oslo_utils import strutils
 import six
 
 S390X = "s390x"
@@ -451,8 +452,11 @@ class ISCSIConnector(InitiatorConnector):
                                    *iscsi_command, run_as_root=True,
                                    root_helper=self._root_helper,
                                    check_exit_code=check_exit_code)
-        LOG.debug("iscsiadm %(iscsi_command)s: stdout=%(out)s stderr=%(err)s",
-                  {'iscsi_command': iscsi_command, 'out': out, 'err': err})
+        msg = ("iscsiadm %(iscsi_command)s: stdout=%(out)s stderr=%(err)s",
+               {'iscsi_command': iscsi_command, 'out': out, 'err': err})
+        # don't let passwords be shown in log output
+        LOG.debug(strutils.mask_password(msg))
+
         return (out, err)
 
     def _iscsiadm_update(self, connection_properties, property_key,
