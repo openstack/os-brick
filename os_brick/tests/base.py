@@ -20,8 +20,8 @@ import os
 
 import fixtures
 import mock
-from oslo.utils import strutils
 from oslo_log import log as oslo_logging
+from oslo_utils import strutils
 from oslotest import base
 
 
