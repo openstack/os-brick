@@ -698,6 +698,29 @@ Setting up iSCSI targets: unused
             _get_target_portals_from_iscsiadm_output(sample_input)
         self.assertEqual(out, targets)
 
+    def test_sanitize_log_run_iscsiadm(self):
+        # Tests that the parameters to the _run_iscsiadm function
+        # are sanitized for when passwords are logged.
+        def fake_debug(*args, **kwargs):
+            self.assertIn('node.session.auth.password', args[0])
+            self.assertNotIn('scrubme', args[0])
+
+        volume = {'id': 'fake_uuid'}
+        connection_info = self.iscsi_connection(volume,
+                                                "10.0.2.15:3260",
+                                                "fake_iqn")
+
+        iscsi_properties = connection_info['data']
+        with mock.patch.object(connector.LOG, 'debug',
+                               side_effect=fake_debug) as debug_mock:
+            self.connector._iscsiadm_update(iscsi_properties,
+                                            'node.session.auth.password',
+                                            'scrubme')
+
+            # we don't care what the log message is, we just want to make sure
+            # our stub method is called which asserts the password is scrubbed
+            self.assertTrue(debug_mock.called)
+
 
 class FibreChannelConnectorTestCase(ConnectorTestCase):
     def setUp(self):
