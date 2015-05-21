@@ -13,7 +13,6 @@
 #    under the License.
 
 import os.path
-import socket
 import string
 import tempfile
 import time
@@ -41,7 +40,6 @@ MY_IP = '10.0.0.1'
 
 class ConnectorUtilsTestCase(base.TestCase):
 
-    @mock.patch.object(socket, 'gethostname', return_value='fakehost')
     @mock.patch.object(connector.ISCSIConnector, 'get_initiator',
                        return_value='fakeinitiator')
     @mock.patch.object(linuxfc.LinuxFibreChannel, 'get_fc_wwpns',
@@ -52,13 +50,15 @@ class ConnectorUtilsTestCase(base.TestCase):
                                              enforce_multipath,
                                              multipath_result,
                                              mock_wwnns, mock_wwpns,
-                                             mock_initiator, mock_gethostname):
+                                             mock_initiator,
+                                             host='fakehost'):
         props_actual = connector.get_connector_properties('sudo',
                                                           MY_IP,
                                                           multipath,
-                                                          enforce_multipath)
+                                                          enforce_multipath,
+                                                          host=host)
         props = {'initiator': 'fakeinitiator',
-                 'host': 'fakehost',
+                 'host': host,
                  'ip': MY_IP,
                  'multipath': multipath_result}
         self.assertEqual(props, props_actual)
@@ -87,6 +87,11 @@ class ConnectorUtilsTestCase(base.TestCase):
         self.assertRaises(putils.ProcessExecutionError,
                           self._test_brick_get_connector_properties,
                           True, True, None)
+
+    def test_brick_connector_properties_override_hostname(self):
+        override_host = 'myhostname'
+        self._test_brick_get_connector_properties(False, False, False,
+                                                  host=override_host)
 
 
 class ConnectorTestCase(base.TestCase):

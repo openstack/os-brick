@@ -66,7 +66,8 @@ def _check_multipathd_running(root_helper, enforce_multipath):
     return True
 
 
-def get_connector_properties(root_helper, my_ip, multipath, enforce_multipath):
+def get_connector_properties(root_helper, my_ip, multipath, enforce_multipath,
+                             host=None):
     """Get the connection properties for all protocols.
 
     When the connector wants to use multipath, multipath=True should be
@@ -83,7 +84,7 @@ def get_connector_properties(root_helper, my_ip, multipath, enforce_multipath):
 
     props = {}
     props['ip'] = my_ip
-    props['host'] = socket.gethostname()
+    props['host'] = host if host else socket.gethostname()
     initiator = iscsi.get_initiator()
     if initiator:
         props['initiator'] = initiator
