@@ -41,6 +41,7 @@ from os_brick import exception
 from os_brick import executor
 from os_brick.initiator import host_driver
 from os_brick.initiator import linuxfc
+from os_brick.initiator import linuxrbd
 from os_brick.initiator import linuxscsi
 from os_brick.remotefs import remotefs
 from os_brick.i18n import _, _LE, _LW
@@ -201,6 +202,12 @@ class InitiatorConnector(executor.Executor):
                                  execute=execute,
                                  device_scan_attempts=device_scan_attempts,
                                  *args, **kwargs)
+        elif protocol == "RBD":
+            return RBDConnector(root_helper=root_helper,
+                                driver=driver,
+                                execute=execute,
+                                device_scan_attempts=device_scan_attempts,
+                                *args, **kwargs)
         else:
             msg = (_("Invalid InitiatorConnector protocol "
                      "specified %(protocol)s") %
@@ -1202,6 +1209,62 @@ class RemoteFsConnector(InitiatorConnector):
 
     def disconnect_volume(self, connection_properties, device_info):
         """No need to do anything to disconnect a volume in a filesystem."""
+
+
+class RBDConnector(InitiatorConnector):
+    """"Connector class to attach/detach RBD volumes."""
+
+    def __init__(self, root_helper, driver=None,
+                 execute=putils.execute, use_multipath=False,
+                 device_scan_attempts=DEVICE_SCAN_ATTEMPTS_DEFAULT,
+                 *args, **kwargs):
+
+        super(RBDConnector, self).__init__(root_helper, driver=driver,
+                                           execute=execute,
+                                           device_scan_attempts=
+                                           device_scan_attempts,
+                                           *args, **kwargs)
+
+    def connect_volume(self, connection_properties):
+        """Connect to a volume."""
+        try:
+            user = connection_properties['auth_username']
+            pool, volume = connection_properties['name'].split('/')
+        except IndexError:
+            msg = _("Connect volume failed, malformed connection properties")
+            raise exception.BrickException(msg=msg)
+
+        rbd_client = linuxrbd.RBDClient(user, pool)
+        rbd_volume = linuxrbd.RBDVolume(rbd_client, volume)
+        rbd_handle = linuxrbd.RBDVolumeIOWrapper(rbd_volume)
+
+        return {'path': rbd_handle}
+
+    def disconnect_volume(self, connection_properties, device_info):
+        """Disconnect a volume."""
+        rbd_handle = device_info.get('path', None)
+        if rbd_handle is not None:
+            rbd_handle.close()
+
+    def check_valid_device(self, path, run_as_root=True):
+        """Verify an existing RBD handle is connected and valid."""
+        rbd_handle = path
+
+        if rbd_handle is None:
+            return False
+
+        original_offset = rbd_handle.tell()
+
+        try:
+            rbd_handle.read(4096)
+        except Exception as e:
+            LOG.error(_LE("Failed to access RBD device handle: %(error)s"),
+                      {"error": e})
+            return False
+        finally:
+            rbd_handle.seek(original_offset, 0)
+
+        return True
 
 
 class LocalConnector(InitiatorConnector):

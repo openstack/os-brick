@@ -29,6 +29,7 @@ from os_brick.i18n import _LE
 from os_brick.initiator import connector
 from os_brick.initiator import host_driver
 from os_brick.initiator import linuxfc
+from os_brick.initiator import linuxrbd
 from os_brick.initiator import linuxscsi
 from os_brick.openstack.common import loopingcall
 from os_brick.remotefs import remotefs
@@ -1496,3 +1497,55 @@ Request Succeeded
         self.assertRaises(exception.BrickException,
                           self.connector.disconnect_volume,
                           cprops, None)
+
+
+class RBDConnectorTestCase(ConnectorTestCase):
+
+    def setUp(self):
+        super(RBDConnectorTestCase, self).setUp()
+
+        self.user = 'fake_user'
+        self.pool = 'fake_pool'
+        self.volume = 'fake_volume'
+
+        self.connection_properties = {
+            'auth_username': self.user,
+            'name': '%s/%s' % (self.pool, self.volume),
+        }
+
+    @mock.patch('os_brick.initiator.linuxrbd.rbd')
+    @mock.patch('os_brick.initiator.linuxrbd.rados')
+    def test_connect_volume(self, mock_rados, mock_rbd):
+        """Test the connect volume case."""
+        rbd = connector.RBDConnector(None)
+        device_info = rbd.connect_volume(self.connection_properties)
+
+        # Ensure rados is instantiated correctly
+        mock_rados.Rados.assert_called_once_with(
+            rados_id=self.user,
+            conffile='/etc/ceph/ceph.conf')
+
+        # Ensure correct calls to connect to cluster
+        mock_rados.Rados.return_value.connect.assert_called_once()
+        mock_rados.Rados.return_value.open_ioctx.assert_called_once_with(
+            self.pool)
+
+        # Ensure rbd image is instantiated correctly
+        mock_rbd.Image.assert_called_once_with(
+            mock_rados.Rados.return_value.open_ioctx.return_value,
+            self.volume, read_only=False, snapshot=None)
+
+        # Ensure expected object is returned correctly
+        self.assertTrue(isinstance(device_info['path'],
+                                   linuxrbd.RBDVolumeIOWrapper))
+
+    @mock.patch('os_brick.initiator.linuxrbd.rbd')
+    @mock.patch('os_brick.initiator.linuxrbd.rados')
+    @mock.patch.object(linuxrbd.RBDVolumeIOWrapper, 'close')
+    def test_disconnect_volume(self, volume_close, mock_rados, mock_rbd):
+        """Test the disconnect volume case."""
+        rbd = connector.RBDConnector(None)
+        device_info = rbd.connect_volume(self.connection_properties)
+        rbd.disconnect_volume(self.connection_properties, device_info)
+
+        volume_close.assert_called_once()
