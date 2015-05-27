@@ -17,11 +17,13 @@ import platform
 import tempfile
 import time
 
+import json
 import mock
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
 from oslo_service import loopingcall
 from oslo_utils import encodeutils
+import requests
 import six
 import testtools
 
@@ -152,6 +154,9 @@ class ConnectorTestCase(base.TestCase):
 
         obj = connector.InitiatorConnector.factory('huaweisdshypervisor', None)
         self.assertEqual(obj.__class__.__name__, "HuaweiStorHyperConnector")
+
+        obj = connector.InitiatorConnector.factory("scaleio", None)
+        self.assertEqual("ScaleIOConnector", obj.__class__.__name__)
 
         self.assertRaises(ValueError,
                           connector.InitiatorConnector.factory,
@@ -1551,3 +1556,211 @@ class RBDConnectorTestCase(ConnectorTestCase):
         rbd.disconnect_volume(self.connection_properties, device_info)
 
         volume_close.assert_called_once()
+
+
+class ScaleIOConnectorTestCase(ConnectorTestCase):
+    """Test cases for ScaleIO connector"""
+    # Fake volume information
+    vol = {
+        'id': 'vol1',
+        'name': 'test_volume'
+    }
+
+    # Fake SDC GUID
+    fake_guid = 'FAKE_GUID'
+
+    def setUp(self):
+        super(ScaleIOConnectorTestCase, self).setUp()
+
+        self.fake_connection_properties = {
+            'hostIP': MY_IP,
+            'serverIP': MY_IP,
+            'scaleIO_volname': self.vol['name'],
+            'serverPort': 443,
+            'serverUsername': 'test',
+            'serverPassword': 'fake',
+            'serverToken': 'fake_token',
+            'iopsLimit': None,
+            'bandwidthLimit': None
+        }
+
+        # Formatting string for REST API calls
+        self.action_format = "instances/Volume::{}/action/{{}}".format(
+            self.vol['id'])
+        self.get_volume_api = 'types/Volume/instances/getByName::{}'.format(
+            self.vol['name'])
+
+        # Map of REST API calls to responses
+        self.mock_calls = {
+            self.get_volume_api:
+                self.MockHTTPSResponse(json.dumps(self.vol['id'])),
+            self.action_format.format('addMappedSdc'):
+                self.MockHTTPSResponse(''),
+            self.action_format.format('setMappedSdcLimits'):
+                self.MockHTTPSResponse(''),
+            self.action_format.format('removeMappedSdc'):
+                self.MockHTTPSResponse(''),
+        }
+
+        # Default error REST response
+        self.error_404 = self.MockHTTPSResponse(content=dict(
+            errorCode=0,
+            message='HTTP 404',
+        ), status_code=404)
+
+        # Patch the request and os calls to fake versions
+        mock.patch.object(
+            requests, 'get', self.handle_scaleio_request).start()
+        mock.patch.object(
+            requests, 'post', self.handle_scaleio_request).start()
+        mock.patch.object(os.path, 'isdir', return_value=True).start()
+        mock.patch.object(
+            os, 'listdir', return_value=["emc-vol-{}".format(self.vol['id'])]
+        ).start()
+        self.addCleanup(mock.patch.stopall)
+
+        # The actual ScaleIO connector
+        self.connector = connector.ScaleIOConnector(
+            'sudo', execute=self.fake_execute)
+
+    class MockHTTPSResponse(requests.Response):
+        """Mock HTTP Response
+
+        Defines the https replies from the mocked calls to do_request()
+        """
+        def __init__(self, content, status_code=200):
+            super(ScaleIOConnectorTestCase.MockHTTPSResponse,
+                  self).__init__()
+
+            self._content = content
+            self.encoding = 'UTF-8'
+            self.status_code = status_code
+
+        def json(self, **kwargs):
+            if isinstance(self._content, six.string_types):
+                return super(ScaleIOConnectorTestCase.MockHTTPSResponse,
+                             self).json(**kwargs)
+
+            return self._content
+
+        @property
+        def text(self):
+            if not isinstance(self._content, six.string_types):
+                return json.dumps(self._content)
+
+            self._content = self._content.encode('utf-8')
+            return super(ScaleIOConnectorTestCase.MockHTTPSResponse,
+                         self).text
+
+    def fake_execute(self, *cmd, **kwargs):
+        """Fakes the rootwrap call"""
+        return self.fake_guid, None
+
+    def fake_missing_execute(self, *cmd, **kwargs):
+        """Error when trying to call rootwrap drv_cfg"""
+        raise putils.ProcessExecutionError("Test missing drv_cfg.")
+
+    def handle_scaleio_request(self, url, *args, **kwargs):
+        """Fake REST server"""
+        api_call = url.split(':', 2)[2].split('/', 1)[1].replace('api/', '')
+
+        try:
+            return self.mock_calls[api_call]
+        except KeyError:
+            return self.error_404
+
+    def test_connect_volume(self):
+        """Successful connect to volume"""
+        self.connector.connect_volume(self.fake_connection_properties)
+
+    def test_connect_with_bandwidth_limit(self):
+        """Successful connect to volume with bandwidth limit"""
+        self.fake_connection_properties['bandwidthLimit'] = '500'
+        self.test_connect_volume()
+
+    def test_connect_with_iops_limit(self):
+        """Successful connect to volume with iops limit"""
+        self.fake_connection_properties['iopsLimit'] = '80'
+        self.test_connect_volume()
+
+    def test_connect_with_iops_and_bandwidth_limits(self):
+        """Successful connect with iops and bandwidth limits"""
+        self.fake_connection_properties['bandwidthLimit'] = '500'
+        self.fake_connection_properties['iopsLimit'] = '80'
+        self.test_connect_volume()
+
+    def test_disconnect_volume(self):
+        """Successful disconnect from volume"""
+        self.connector.disconnect_volume(self.fake_connection_properties, None)
+
+    def test_error_id(self):
+        """Fail to connect with bad volume name"""
+        self.mock_calls[self.get_volume_api] = self.MockHTTPSResponse(
+            dict(errorCode='404', message='Test volume not found'), 404)
+
+        self.assertRaises(exception.BrickException, self.test_connect_volume)
+
+    def test_error_no_volume_id(self):
+        """Faile to connect with no volume id"""
+        self.mock_calls[self.get_volume_api] = self.MockHTTPSResponse(
+            'null', 200)
+
+        self.assertRaises(exception.BrickException, self.test_connect_volume)
+
+    def test_error_bad_login(self):
+        """Fail to connect with bad authentication"""
+        self.mock_calls[self.get_volume_api] = self.MockHTTPSResponse(
+            'null', 401)
+
+        self.mock_calls['login'] = self.MockHTTPSResponse('null', 401)
+
+        self.assertRaises(exception.BrickException, self.test_connect_volume)
+
+    def test_error_bad_drv_cfg(self):
+        """Fail to connect with missing rootwrap executable"""
+        self.connector.set_execute(self.fake_missing_execute)
+        self.assertRaises(exception.BrickException, self.test_connect_volume)
+
+    def test_error_map_volume(self):
+        """Fail to connect with REST API failure"""
+        self.mock_calls[self.action_format.format(
+            'addMappedSdc')] = self.MockHTTPSResponse(
+            dict(errorCode=self.connector.VOLUME_NOT_MAPPED_ERROR,
+                 message='Test error map volume'), 500)
+
+        self.assertRaises(exception.BrickException, self.test_connect_volume)
+
+    def test_error_path_not_found(self):
+        """Timeout waiting for volume to map to local file system"""
+        mock.patch.object(
+            os, 'listdir', return_value=["emc-vol-no-volume"]
+        ).start()
+        self.assertRaises(exception.BrickException, self.test_connect_volume)
+
+    def test_map_volume_already_mapped(self):
+        """Ignore REST API failure for volume already mapped"""
+        self.mock_calls[self.action_format.format(
+            'addMappedSdc')] = self.MockHTTPSResponse(
+            dict(errorCode=self.connector.VOLUME_ALREADY_MAPPED_ERROR,
+                 message='Test error map volume'), 500)
+
+        self.test_connect_volume()
+
+    def test_error_disconnect_volume(self):
+        """Fail to disconnect with REST API failure"""
+        self.mock_calls[self.action_format.format(
+            'removeMappedSdc')] = self.MockHTTPSResponse(
+            dict(errorCode=self.connector.VOLUME_ALREADY_MAPPED_ERROR,
+                 message='Test error map volume'), 500)
+
+        self.assertRaises(exception.BrickException,
+                          self.test_disconnect_volume)
+
+    def test_disconnect_volume_not_mapped(self):
+        """Ignore REST API failure for volume not mapped"""
+        self.mock_calls[self.action_format.format(
+            'removeMappedSdc')] = self.MockHTTPSResponse(
+            dict(errorCode=self.connector.VOLUME_NOT_MAPPED_ERROR,
+                 message='Test error map volume'), 500)
+
+        self.test_disconnect_volume()
