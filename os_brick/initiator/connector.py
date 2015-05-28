@@ -192,6 +192,12 @@ class InitiatorConnector(executor.Executor):
                 execute=execute,
                 device_scan_attempts=device_scan_attempts,
                 *args, **kwargs)
+        elif protocol == "HGST":
+            return HGSTConnector(root_helper=root_helper,
+                                 driver=driver,
+                                 execute=execute,
+                                 device_scan_attempts=device_scan_attempts,
+                                 *args, **kwargs)
         else:
             msg = (_("Invalid InitiatorConnector protocol "
                      "specified %(protocol)s") %
@@ -1333,3 +1339,127 @@ class HuaweiStorHyperConnector(InitiatorConnector):
             return analyse_result
         else:
             return None
+
+
+class HGSTConnector(InitiatorConnector):
+    """Connector class to attach/detach HGST volumes."""
+    VGCCLUSTER = 'vgc-cluster'
+
+    def __init__(self, root_helper, driver=None,
+                 execute=putils.execute,
+                 device_scan_attempts=DEVICE_SCAN_ATTEMPTS_DEFAULT,
+                 *args, **kwargs):
+        super(HGSTConnector, self).__init__(root_helper, driver=driver,
+                                            execute=execute,
+                                            device_scan_attempts=
+                                            device_scan_attempts,
+                                            *args, **kwargs)
+        self._vgc_host = None
+
+    def _log_cli_err(self, err):
+        """Dumps the full command output to a logfile in error cases."""
+        LOG.error(_LE("CLI fail: '%(cmd)s' = %(code)s\nout: %(stdout)s\n"
+                      "err: %(stderr)s"),
+                  {'cmd': err.cmd, 'code': err.exit_code,
+                   'stdout': err.stdout, 'stderr': err.stderr})
+
+    def _find_vgc_host(self):
+        """Finds vgc-cluster hostname for this box."""
+        params = [self.VGCCLUSTER, "domain-list", "-1"]
+        try:
+            out, unused = self._execute(*params, run_as_root=True,
+                                        root_helper=self._root_helper)
+        except putils.ProcessExecutionError as err:
+            self._log_cli_err(err)
+            msg = _("Unable to get list of domain members, check that "
+                    "the cluster is running.")
+            raise exception.BrickException(message=msg)
+        domain = out.splitlines()
+        params = ["ip", "addr", "list"]
+        try:
+            out, unused = self._execute(*params, run_as_root=False)
+        except putils.ProcessExecutionError as err:
+            self._log_cli_err(err)
+            msg = _("Unable to get list of IP addresses on this host, "
+                    "check permissions and networking.")
+            raise exception.BrickException(message=msg)
+        nets = out.splitlines()
+        for host in domain:
+            try:
+                ip = socket.gethostbyname(host)
+                for l in nets:
+                    x = l.strip()
+                    if x.startswith("inet %s/" % ip):
+                        return host
+            except socket.error:
+                pass
+        msg = _("Current host isn't part of HGST domain.")
+        raise exception.BrickException(message=msg)
+
+    def _hostname(self):
+        """Returns hostname to use for cluster operations on this box."""
+        if self._vgc_host is None:
+            self._vgc_host = self._find_vgc_host()
+        return self._vgc_host
+
+    def connect_volume(self, connection_properties):
+        """Attach a Space volume to running host.
+
+        connection_properties for HGST must include:
+        name - Name of space to attach
+        """
+        if connection_properties is None:
+            msg = _("Connection properties passed in as None.")
+            raise exception.BrickException(message=msg)
+        if 'name' not in connection_properties:
+            msg = _("Connection properties missing 'name' field.")
+            raise exception.BrickException(message=msg)
+        device_info = {
+            'type': 'block',
+            'device': connection_properties['name'],
+            'path': '/dev/' + connection_properties['name']
+        }
+        volname = device_info['device']
+        params = [self.VGCCLUSTER, 'space-set-apphosts']
+        params += ['-n', volname]
+        params += ['-A', self._hostname()]
+        params += ['--action', 'ADD']
+        try:
+            self._execute(*params, run_as_root=True,
+                          root_helper=self._root_helper)
+        except putils.ProcessExecutionError as err:
+            self._log_cli_err(err)
+            msg = (_("Unable to set apphost for space %s") % volname)
+            raise exception.BrickException(message=msg)
+
+        return device_info
+
+    def disconnect_volume(self, connection_properties, device_info):
+        """Detach and flush the volume.
+
+        connection_properties for HGST must include:
+        name - Name of space to detach
+        noremovehost - Host which should never be removed
+        """
+        if connection_properties is None:
+            msg = _("Connection properties passed in as None.")
+            raise exception.BrickException(message=msg)
+        if 'name' not in connection_properties:
+            msg = _("Connection properties missing 'name' field.")
+            raise exception.BrickException(message=msg)
+        if 'noremovehost' not in connection_properties:
+            msg = _("Connection properties missing 'noremovehost' field.")
+            raise exception.BrickException(message=msg)
+        if connection_properties['noremovehost'] != self._hostname():
+            params = [self.VGCCLUSTER, 'space-set-apphosts']
+            params += ['-n', connection_properties['name']]
+            params += ['-A', self._hostname()]
+            params += ['--action', 'DELETE']
+            try:
+                self._execute(*params, run_as_root=True,
+                              root_helper=self._root_helper)
+            except putils.ProcessExecutionError as err:
+                self._log_cli_err(err)
+                msg = (_("Unable to set apphost for space %s") %
+                       connection_properties['name'])
+                raise exception.BrickException(message=msg)
