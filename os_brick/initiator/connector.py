@@ -121,9 +121,15 @@ class InitiatorConnector(executor.Executor):
     def factory(protocol, root_helper, driver=None,
                 execute=putils.execute, use_multipath=False,
                 device_scan_attempts=DEVICE_SCAN_ATTEMPTS_DEFAULT,
-                arch=platform.machine(),
+                arch=None,
                 *args, **kwargs):
         """Build a Connector object based upon protocol and architecture."""
+
+        # We do this instead of assigning it in the definition
+        # to help mocking for unit tests
+        if arch is None:
+            arch = platform.machine()
+
         LOG.debug("Factory for %(protocol)s on %(arch)s",
                   {'protocol': protocol, 'arch': arch})
         protocol = protocol.upper()
