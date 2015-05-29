@@ -118,6 +118,9 @@ class ConnectorTestCase(base.TestCase):
         obj = connector.InitiatorConnector.factory('iscsi', None)
         self.assertEqual(obj.__class__.__name__, "ISCSIConnector")
 
+        obj = connector.InitiatorConnector.factory('iser', None)
+        self.assertEqual(obj.__class__.__name__, "ISERConnector")
+
         obj = connector.InitiatorConnector.factory('fibre_channel', None)
         self.assertEqual(obj.__class__.__name__, "FibreChannelConnector")
 
@@ -138,6 +141,9 @@ class ConnectorTestCase(base.TestCase):
 
         obj = connector.InitiatorConnector.factory('local', None)
         self.assertEqual(obj.__class__.__name__, "LocalConnector")
+
+        obj = connector.InitiatorConnector.factory('huaweisdshypervisor', None)
+        self.assertEqual(obj.__class__.__name__, "HuaweiStorHyperConnector")
 
         self.assertRaises(ValueError,
                           connector.InitiatorConnector.factory,
