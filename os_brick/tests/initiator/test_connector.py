@@ -982,7 +982,7 @@ class RemoteFsConnectorTestCase(ConnectorTestCase):
         self.connector.disconnect_volume(self.connection_properties, {})
 
 
-class LocalConnectorTestCase(base.TestCase):
+class LocalConnectorTestCase(ConnectorTestCase):
 
     def setUp(self):
         super(LocalConnectorTestCase, self).setUp()
