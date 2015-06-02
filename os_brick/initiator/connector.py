@@ -149,21 +149,21 @@ class InitiatorConnector(executor.Executor):
                                  *args, **kwargs)
         elif protocol == "FIBRE_CHANNEL":
             if arch in (S390, S390X):
-                return FibreChannelConnectorS390X(root_helper=root_helper,
-                                                  driver=driver,
-                                                  execute=execute,
-                                                  use_multipath=use_multipath,
-                                                  device_scan_attempts=
-                                                  device_scan_attempts,
-                                                  *args, **kwargs)
+                return FibreChannelConnectorS390X(
+                    root_helper=root_helper,
+                    driver=driver,
+                    execute=execute,
+                    use_multipath=use_multipath,
+                    device_scan_attempts=device_scan_attempts,
+                    *args, **kwargs)
             else:
-                return FibreChannelConnector(root_helper=root_helper,
-                                             driver=driver,
-                                             execute=execute,
-                                             use_multipath=use_multipath,
-                                             device_scan_attempts=
-                                             device_scan_attempts,
-                                             *args, **kwargs)
+                return FibreChannelConnector(
+                    root_helper=root_helper,
+                    driver=driver,
+                    execute=execute,
+                    use_multipath=use_multipath,
+                    device_scan_attempts=device_scan_attempts,
+                    *args, **kwargs)
         elif protocol == "AOE":
             return AoEConnector(root_helper=root_helper,
                                 driver=driver,
@@ -184,12 +184,12 @@ class InitiatorConnector(executor.Executor):
                                   device_scan_attempts=device_scan_attempts,
                                   *args, **kwargs)
         elif protocol == "HUAWEISDSHYPERVISOR":
-            return HuaweiStorHyperConnector(root_helper=root_helper,
-                                            driver=driver,
-                                            execute=execute,
-                                            device_scan_attempts=
-                                            device_scan_attempts,
-                                            *args, **kwargs)
+            return HuaweiStorHyperConnector(
+                root_helper=root_helper,
+                driver=driver,
+                execute=execute,
+                device_scan_attempts=device_scan_attempts,
+                *args, **kwargs)
         else:
             msg = (_("Invalid InitiatorConnector protocol "
                      "specified %(protocol)s") %
@@ -239,11 +239,11 @@ class ISCSIConnector(InitiatorConnector):
                  device_scan_attempts=DEVICE_SCAN_ATTEMPTS_DEFAULT,
                  *args, **kwargs):
         self._linuxscsi = linuxscsi.LinuxSCSI(root_helper, execute)
-        super(ISCSIConnector, self).__init__(root_helper, driver=driver,
-                                             execute=execute,
-                                             device_scan_attempts=
-                                             device_scan_attempts,
-                                             *args, **kwargs)
+        super(ISCSIConnector, self).__init__(
+            root_helper, driver=driver,
+            execute=execute,
+            device_scan_attempts=device_scan_attempts,
+            *args, **kwargs)
         self.use_multipath = use_multipath
 
     def set_execute(self, execute):
@@ -459,13 +459,17 @@ class ISCSIConnector(InitiatorConnector):
 
     def _run_iscsiadm(self, connection_properties, iscsi_command, **kwargs):
         check_exit_code = kwargs.pop('check_exit_code', 0)
+        attempts = kwargs.pop('attempts', 1)
+        delay_on_retry = kwargs.pop('delay_on_retry', True)
         (out, err) = self._execute('iscsiadm', '-m', 'node', '-T',
                                    connection_properties['target_iqn'],
                                    '-p',
                                    connection_properties['target_portal'],
                                    *iscsi_command, run_as_root=True,
                                    root_helper=self._root_helper,
-                                   check_exit_code=check_exit_code)
+                                   check_exit_code=check_exit_code,
+                                   attempts=attempts,
+                                   delay_on_retry=delay_on_retry)
         msg = ("iscsiadm %(iscsi_command)s: stdout=%(out)s stderr=%(err)s",
                {'iscsi_command': iscsi_command, 'out': out, 'err': err})
         # don't let passwords be shown in log output
@@ -612,7 +616,9 @@ class ISCSIConnector(InitiatorConnector):
         self._run_iscsiadm(connection_properties, ("--logout",),
                            check_exit_code=[0, 21, 255])
         self._run_iscsiadm(connection_properties, ('--op', 'delete'),
-                           check_exit_code=[0, 21, 255])
+                           check_exit_code=[0, 21, 255],
+                           attempts=5,
+                           delay_on_retry=True)
 
     def _get_multipath_device_name(self, single_path_device):
         device = os.path.realpath(single_path_device)
@@ -703,11 +709,11 @@ class FibreChannelConnector(InitiatorConnector):
                  *args, **kwargs):
         self._linuxscsi = linuxscsi.LinuxSCSI(root_helper, execute)
         self._linuxfc = linuxfc.LinuxFibreChannel(root_helper, execute)
-        super(FibreChannelConnector, self).__init__(root_helper, driver=driver,
-                                                    execute=execute,
-                                                    device_scan_attempts=
-                                                    device_scan_attempts,
-                                                    *args, **kwargs)
+        super(FibreChannelConnector, self).__init__(
+            root_helper, driver=driver,
+            execute=execute,
+            device_scan_attempts=device_scan_attempts,
+            *args, **kwargs)
         self.use_multipath = use_multipath
 
     def set_execute(self, execute):
@@ -906,12 +912,12 @@ class FibreChannelConnectorS390X(FibreChannelConnector):
                  execute=putils.execute, use_multipath=False,
                  device_scan_attempts=DEVICE_SCAN_ATTEMPTS_DEFAULT,
                  *args, **kwargs):
-        super(FibreChannelConnectorS390X, self).__init__(root_helper,
-                                                         driver=driver,
-                                                         execute=execute,
-                                                         device_scan_attempts=
-                                                         device_scan_attempts,
-                                                         *args, **kwargs)
+        super(FibreChannelConnectorS390X, self).__init__(
+            root_helper,
+            driver=driver,
+            execute=execute,
+            device_scan_attempts=device_scan_attempts,
+            *args, **kwargs)
         LOG.debug("Initializing Fibre Channel connector for S390")
         self._linuxscsi = linuxscsi.LinuxSCSI(root_helper, execute)
         self._linuxfc = linuxfc.LinuxFibreChannelS390X(root_helper, execute)
@@ -968,11 +974,12 @@ class AoEConnector(InitiatorConnector):
                  execute=putils.execute,
                  device_scan_attempts=DEVICE_SCAN_ATTEMPTS_DEFAULT,
                  *args, **kwargs):
-        super(AoEConnector, self).__init__(root_helper, driver=driver,
-                                           execute=execute,
-                                           device_scan_attempts=
-                                           device_scan_attempts,
-                                           *args, **kwargs)
+        super(AoEConnector, self).__init__(
+            root_helper,
+            driver=driver,
+            execute=execute,
+            device_scan_attempts=device_scan_attempts,
+            *args, **kwargs)
 
     def _get_aoe_info(self, connection_properties):
         shelf = connection_properties['target_shelf']
@@ -1100,11 +1107,11 @@ class RemoteFsConnector(InitiatorConnector):
         self._remotefsclient = remotefs.RemoteFsClient(mount_type, root_helper,
                                                        execute=execute,
                                                        *args, **kwargs)
-        super(RemoteFsConnector, self).__init__(root_helper, driver=driver,
-                                                execute=execute,
-                                                device_scan_attempts=
-                                                device_scan_attempts,
-                                                *args, **kwargs)
+        super(RemoteFsConnector, self).__init__(
+            root_helper, driver=driver,
+            execute=execute,
+            device_scan_attempts=device_scan_attempts,
+            *args, **kwargs)
 
     def set_execute(self, execute):
         super(RemoteFsConnector, self).set_execute(execute)
