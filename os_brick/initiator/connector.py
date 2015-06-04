@@ -1208,12 +1208,12 @@ class HuaweiStorHyperConnector(InitiatorConnector):
                                                    self.attach_mnid_done_code):
             msg = (_("Attach volume failed, "
                    "error code is %s") % out['ret_code'])
-            raise exception.BrickException(msg=msg)
+            raise exception.BrickException(message=msg)
         out = self._query_attached_volume(
             connection_properties['volume_id'])
         if not out or int(out['ret_code']) != 0:
             msg = _("query attached volume failed or volume not attached.")
-            raise exception.BrickException(msg=msg)
+            raise exception.BrickException(message=msg)
 
         device_info = {'type': 'block',
                        'path': out['dev_addr']}
@@ -1229,7 +1229,7 @@ class HuaweiStorHyperConnector(InitiatorConnector):
                                                    self.not_mount_node_code):
             msg = (_("Disconnect_volume failed, "
                    "error code is %s") % out['ret_code'])
-            raise exception.BrickException(msg=msg)
+            raise exception.BrickException(message=msg)
 
     def is_volume_connected(self, volume_name):
         """Check if volume already connected to host"""
@@ -1254,7 +1254,7 @@ class HuaweiStorHyperConnector(InitiatorConnector):
         if not self.iscliexist:
             msg = _("SDS command line doesn't exist, "
                     "can't execute SDS command.")
-            raise exception.BrickException(msg=msg)
+            raise exception.BrickException(message=msg)
         if not method or volume_name is None:
             return
         cmd = [self.cli_path, '-c', method, '-v', volume_name]
