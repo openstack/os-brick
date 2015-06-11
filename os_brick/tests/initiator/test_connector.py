@@ -422,15 +422,17 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
 
     @mock.patch.object(os.path, 'exists', return_value=True)
     @mock.patch.object(host_driver.HostDriver, 'get_all_block_devices')
+    @mock.patch.object(connector.ISCSIConnector, '_get_multipath_device_map',
+                       return_value={})
     @mock.patch.object(connector.ISCSIConnector, '_get_iscsi_devices')
     @mock.patch.object(connector.ISCSIConnector, '_rescan_multipath')
     @mock.patch.object(connector.ISCSIConnector, '_run_multipath')
     @mock.patch.object(connector.ISCSIConnector, '_get_multipath_device_name')
-    @mock.patch.object(connector.ISCSIConnector, '_get_multipath_iqn')
+    @mock.patch.object(connector.ISCSIConnector, '_get_multipath_iqns')
     def test_connect_volume_with_multiple_portals(
             self, mock_get_iqn, mock_device_name, mock_run_multipath,
-            mock_rescan_multipath, mock_iscsi_devices, mock_devices,
-            mock_exists):
+            mock_rescan_multipath, mock_iscsi_devices,
+            mock_get_device_map, mock_devices, mock_exists):
         location1 = '10.0.2.15:3260'
         location2 = '10.0.3.15:3260'
         name1 = 'volume-00000001-1'
@@ -469,16 +471,18 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
 
     @mock.patch.object(os.path, 'exists')
     @mock.patch.object(host_driver.HostDriver, 'get_all_block_devices')
+    @mock.patch.object(connector.ISCSIConnector, '_get_multipath_device_map',
+                       return_value={})
     @mock.patch.object(connector.ISCSIConnector, '_get_iscsi_devices')
     @mock.patch.object(connector.ISCSIConnector, '_rescan_multipath')
     @mock.patch.object(connector.ISCSIConnector, '_run_multipath')
     @mock.patch.object(connector.ISCSIConnector, '_get_multipath_device_name')
-    @mock.patch.object(connector.ISCSIConnector, '_get_multipath_iqn')
+    @mock.patch.object(connector.ISCSIConnector, '_get_multipath_iqns')
     @mock.patch.object(connector.ISCSIConnector, '_run_iscsiadm')
     def test_connect_volume_with_multiple_portals_primary_error(
             self, mock_iscsiadm, mock_get_iqn, mock_device_name,
             mock_run_multipath, mock_rescan_multipath, mock_iscsi_devices,
-            mock_devices, mock_exists):
+            mock_get_multipath_device_map, mock_devices, mock_exists):
         location1 = '10.0.2.15:3260'
         location2 = '10.0.3.15:3260'
         name1 = 'volume-00000001-1'
@@ -640,17 +644,32 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
 
     @mock.patch.object(os.path, 'realpath')
     @mock.patch.object(connector.ISCSIConnector, '_get_iscsi_devices')
-    @mock.patch.object(connector.ISCSIConnector, '_get_multipath_device_name')
-    def test_get_multipath_iqn(self, get_multipath_device_mock,
-                               get_iscsi_mock, realpath_mock):
+    def test_get_multipath_iqns(self, get_iscsi_mock, realpath_mock):
         paths = [('ip-10.0.0.1:3260-iscsi-iqn.2013-01.ro.'
-                 'com.netapp:node.netapp02-lun-0')]
-        realpath_mock.return_value = '/dev/disk/by-path/%s' % paths[0]
+                  'com.netapp:node.netapp02-lun-0')]
+        devpath = '/dev/disk/by-path/%s' % paths[0]
+        realpath_mock.return_value = devpath
         get_iscsi_mock.return_value = paths
-        get_multipath_device_mock.return_value = paths[0]
-        self.assertEqual(self.connector._get_multipath_iqn(paths[0]),
-                         'iqn.2013-01.ro.com.netapp:node.netapp02')
+        mpath_map = {devpath: paths[0]}
+        self.assertEqual(self.connector._get_multipath_iqns([paths[0]],
+                                                            mpath_map),
+                         ['iqn.2013-01.ro.com.netapp:node.netapp02'])
 
+    @mock.patch.object(connector.ISCSIConnector, '_run_multipath')
+    def test_get_multipath_device_map(self, multipath_mock):
+        multipath_mock.return_value = [
+            "Mar 17 14:32:37 | sda: No fc_host device for 'host-1'\n"
+            "mpathb (36e00000000010001) dm-4 IET ,VIRTUAL-DISK\n"
+            "size=1.0G features='0' hwhandler='0' wp=rw\n"
+            "|-+- policy='service-time 0' prio=0 status=active\n"
+            "| `- 2:0:0:1 sda 8:0 active undef running\n"
+            "`-+- policy='service-time 0' prio=0 status=enabled\n"
+            "  `- 3:0:0:1 sdb 8:16 active undef running\n"]
+        expected = {'/dev/sda': '/dev/mapper/mpathb',
+                    '/dev/sdb': '/dev/mapper/mpathb'}
+        self.assertEqual(expected, self.connector._get_multipath_device_map())
+
+    @mock.patch.object(connector.ISCSIConnector, '_get_multipath_device_map')
     @mock.patch.object(connector.ISCSIConnector,
                        '_get_target_portals_from_iscsiadm_output')
     @mock.patch.object(connector.ISCSIConnector, '_rescan_iscsi')
@@ -661,12 +680,13 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
                        '_disconnect_from_iscsi_portal')
     @mock.patch.object(connector.ISCSIConnector, '_get_multipath_device_name',
                        return_value='/dev/mapper/md-3')
-    @mock.patch.object(connector.ISCSIConnector, '_get_multipath_iqn')
+    @mock.patch.object(connector.ISCSIConnector, '_get_multipath_iqns')
     @mock.patch.object(os.path, 'exists', return_value=True)
     def test_disconnect_volume_multipath_iscsi(
             self, exists_mock, multipath_iqn_mock, get_multipath_name_mock,
             disconnect_mock, get_all_devices_mock, get_iscsi_devices_mock,
-            rescan_multipath_mock, rescan_iscsi_mock, get_portals_mock):
+            rescan_multipath_mock, rescan_iscsi_mock, get_portals_mock,
+            get_multipath_device_map_mock):
         iqn1 = 'iqn.2013-01.ro.com.netapp:node.netapp01'
         iqn2 = 'iqn.2013-01.ro.com.netapp:node.netapp02'
         iqns = [iqn1, iqn2]
@@ -674,8 +694,9 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
         dev = ('ip-%s-iscsi-%s-lun-0' % (portal, iqn1))
 
         get_portals_mock.return_value = [[portal, iqn1]]
-        multipath_iqn_mock.side_effect = iqns
+        multipath_iqn_mock.return_value = iqns
         get_all_devices_mock.return_value = [dev, '/dev/mapper/md-1']
+        get_multipath_device_map_mock.return_value = {dev: '/dev/mapper/md-3'}
         get_iscsi_devices_mock.return_value = []
         fake_property = {'target_portal': portal,
                          'target_iqn': iqn1}
@@ -692,12 +713,11 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
     @mock.patch.object(host_driver.HostDriver, 'get_all_block_devices')
     @mock.patch.object(connector.ISCSIConnector,
                        '_disconnect_from_iscsi_portal')
-    @mock.patch.object(connector.ISCSIConnector, '_get_multipath_device_name',
-                       return_value='/dev/mapper/md-3')
-    @mock.patch.object(connector.ISCSIConnector, '_get_multipath_iqn')
+    @mock.patch.object(connector.ISCSIConnector, '_get_multipath_device_map')
+    @mock.patch.object(connector.ISCSIConnector, '_get_multipath_iqns')
     @mock.patch.object(os.path, 'exists', return_value=True)
     def test_disconnect_volume_multipath_iscsi_other_targets(
-            self, exists_mock, multipath_iqn_mock, get_multipath_name_mock,
+            self, exists_mock, multipath_iqn_mock, get_multipath_map_mock,
             disconnect_mock, get_all_devices_mock, get_iscsi_devices_mock,
             rescan_multipath_mock, rescan_iscsi_mock, get_portals_mock):
         iqn1 = 'iqn.2010-10.org.openstack:target-1'
@@ -708,8 +728,9 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
         # Multiple targets are discovered, but only block devices for target-1
         # is deleted and target-2 is in use.
         get_portals_mock.return_value = [[portal, iqn1], [portal, iqn2]]
-        multipath_iqn_mock.side_effect = [iqn2, iqn2]
+        multipath_iqn_mock.return_value = [iqn2, iqn2]
         get_all_devices_mock.return_value = [dev2, '/dev/mapper/md-1']
+        get_multipath_map_mock.return_value = {dev2: '/dev/mapper/md-3'}
         get_iscsi_devices_mock.return_value = [dev2]
         fake_property = {'target_portal': portal,
                          'target_iqn': iqn1}
@@ -718,6 +739,8 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
         # Only target-1 should be disconneced.
         disconnect_mock.assert_called_once_with(fake_property)
 
+    @mock.patch.object(connector.ISCSIConnector, '_get_multipath_device_map',
+                       return_value={})
     @mock.patch.object(connector.ISCSIConnector,
                        '_get_target_portals_from_iscsiadm_output')
     @mock.patch.object(connector.ISCSIConnector, '_rescan_iscsi')
@@ -732,7 +755,7 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
     def test_disconnect_volume_multipath_iscsi_without_other_mp_devices(
             self, exists_mock, disconnect_mock, get_all_devices_mock,
             get_iscsi_devices_mock, rescan_multipath_mock, rescan_iscsi_mock,
-            get_portals_mock):
+            get_portals_mock, get_multipath_device_map_mock):
         portal = '10.0.2.15:3260'
         name = 'volume-00000001'
         iqn = 'iqn.2010-10.org.openstack:%s' % name
@@ -745,6 +768,8 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
         # Target not in use by other mp devices, disconnect
         disconnect_mock.assert_called_once_with(fake_property)
 
+    @mock.patch.object(connector.ISCSIConnector, '_get_multipath_device_map',
+                       return_value={})
     @mock.patch.object(connector.ISCSIConnector,
                        '_get_target_portals_from_iscsiadm_output')
     @mock.patch.object(connector.ISCSIConnector, '_rescan_iscsi')
@@ -757,7 +782,7 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
     def test_disconnect_volume_multipath_iscsi_with_invalid_symlink(
             self, exists_mock, disconnect_mock, get_all_devices_mock,
             get_iscsi_devices_mock, rescan_multipath_mock, rescan_iscsi_mock,
-            get_portals_mock):
+            get_portals_mock, get_multipath_device_map_mock):
         # Simulate a broken symlink by returning False for os.path.exists(dev)
         portal = '10.0.0.1:3260'
         name = 'volume-00000001'
