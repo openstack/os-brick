@@ -306,7 +306,25 @@ class ISCSIConnector(InitiatorConnector):
 
         if self.use_multipath:
             # Multipath installed, discovering other targets if available
-            for ip, iqn in self._discover_iscsi_portals(connection_properties):
+            ips_iqns = self._discover_iscsi_portals(connection_properties)
+
+            if not connection_properties.get('target_iqns'):
+                # There are two types of iSCSI multipath devices. One which
+                # shares the same iqn between multiple portals, and the other
+                # which use different iqns on different portals.
+                # Try to identify the type by checking the iscsiadm output
+                # if the iqn is used by multiple portals. If it is, it's
+                # the former, so use the supplied iqn. Otherwise, it's the
+                # latter, so try the ip,iqn combinations to find the targets
+                # which constitutes the multipath device.
+                main_iqn = connection_properties['target_iqn']
+                all_portals = set([ip for ip, iqn in ips_iqns])
+                match_portals = set([ip for ip, iqn in ips_iqns
+                                     if iqn == main_iqn])
+                if len(all_portals) == len(match_portals):
+                    ips_iqns = zip(all_portals, [main_iqn] * len(all_portals))
+
+            for ip, iqn in ips_iqns:
                 props = copy.deepcopy(connection_properties)
                 props['target_portal'] = ip
                 props['target_iqn'] = iqn
