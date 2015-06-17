@@ -13,6 +13,7 @@
 #    under the License.
 
 import os.path
+import platform
 import string
 import tempfile
 import time
@@ -46,6 +47,8 @@ class ConnectorUtilsTestCase(base.TestCase):
                        return_value=None)
     @mock.patch.object(linuxfc.LinuxFibreChannel, 'get_fc_wwnns',
                        return_value=None)
+    @mock.patch.object(platform, 'machine', mock.Mock(return_value='s390x'))
+    @mock.patch('sys.platform', 'linux2')
     def _test_brick_get_connector_properties(self, multipath,
                                              enforce_multipath,
                                              multipath_result,
@@ -57,10 +60,14 @@ class ConnectorUtilsTestCase(base.TestCase):
                                                           multipath,
                                                           enforce_multipath,
                                                           host=host)
+        os_type = 'linux2'
+        platform = 's390x'
         props = {'initiator': 'fakeinitiator',
                  'host': host,
                  'ip': MY_IP,
-                 'multipath': multipath_result}
+                 'multipath': multipath_result,
+                 'os_type': os_type,
+                 'platform': platform}
         self.assertEqual(props, props_actual)
 
     def test_brick_get_connector_properties(self):

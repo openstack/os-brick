@@ -25,6 +25,7 @@ import os
 import platform
 import re
 import socket
+import sys
 import time
 
 from oslo_concurrency import lockutils
@@ -99,6 +100,8 @@ def get_connector_properties(root_helper, my_ip, multipath, enforce_multipath,
     props['multipath'] = (multipath and
                           _check_multipathd_running(root_helper,
                                                     enforce_multipath))
+    props['platform'] = platform.machine()
+    props['os_type'] = sys.platform
     return props
 
 
