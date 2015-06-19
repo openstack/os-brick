@@ -17,6 +17,7 @@ import platform
 import tempfile
 import time
 
+import glob
 import json
 import mock
 from oslo_concurrency import processutils as putils
@@ -138,9 +139,6 @@ class ConnectorTestCase(base.TestCase):
         obj = connector.InitiatorConnector.factory('iscsi', None)
         self.assertEqual(obj.__class__.__name__, "ISCSIConnector")
 
-        obj = connector.InitiatorConnector.factory('iser', None)
-        self.assertEqual(obj.__class__.__name__, "ISERConnector")
-
         obj = connector.InitiatorConnector.factory('fibre_channel', None)
         self.assertEqual(obj.__class__.__name__, "FibreChannelConnector")
 
@@ -210,6 +208,13 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
                           return_value="/dev/sdb").start()
         self.addCleanup(mock.patch.stopall)
 
+    def generate_device(self, location, iqn, transport=None, lun=1):
+        dev_format = "ip-%s-iscsi-%s-lun-%s" % (location, iqn, lun)
+        if transport:
+            dev_format = "pci-0000:00:00.0-" + dev_format
+        fake_dev_path = "/dev/disk/by-path/" + dev_format
+        return fake_dev_path
+
     def iscsi_connection(self, volume, location, iqn):
         return {
             'driver_volume_type': 'iscsi',
@@ -256,8 +261,30 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
         initiator = self.connector.get_initiator()
         self.assertEqual(initiator, 'iqn.1234-56.foo.bar:01:23456789abc')
 
+    @mock.patch.object(connector.ISCSIConnector, '_run_iscsiadm_bare')
+    def test_brick_iscsi_validate_transport(self, mock_iscsiadm):
+        sample_output = ('# BEGIN RECORD 2.0-872\n'
+                         'iface.iscsi_ifacename = %s.fake_suffix\n'
+                         'iface.net_ifacename = <empty>\n'
+                         'iface.ipaddress = <empty>\n'
+                         'iface.hwaddress = 00:53:00:00:53:00\n'
+                         'iface.transport_name = %s\n'
+                         'iface.initiatorname = <empty>\n'
+                         '# END RECORD')
+        for tport in self.connector.supported_transports:
+            mock_iscsiadm.return_value = (sample_output % (tport, tport), '')
+            self.assertEqual(tport + '.fake_suffix',
+                             self.connector._validate_iface_transport(
+                                 tport + '.fake_suffix'))
+
+        mock_iscsiadm.return_value = ("", 'iscsiadm: Could not '
+                                      'read iface fake_transport (6)')
+        self.assertEqual('default',
+                         self.connector._validate_iface_transport(
+                             'fake_transport'))
+
     def _test_connect_volume(self, extra_props, additional_commands,
-                             disconnect_mock=None):
+                             transport=None, disconnect_mock=None):
         # for making sure the /dev/disk/by-path is gone
         exists_mock = mock.Mock()
         exists_mock.return_value = True
@@ -270,8 +297,14 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
         connection_info = self.iscsi_connection(vol, location, iqn)
         for key, value in extra_props.items():
             connection_info['data'][key] = value
-        device = self.connector.connect_volume(connection_info['data'])
-        dev_str = '/dev/disk/by-path/ip-%s-iscsi-%s-lun-1' % (location, iqn)
+        if transport is not None:
+            dev_list = self.generate_device(location, iqn, transport)
+            with mock.patch.object(glob, 'glob', return_value=[dev_list]):
+                device = self.connector.connect_volume(connection_info['data'])
+        else:
+            device = self.connector.connect_volume(connection_info['data'])
+
+        dev_str = self.generate_device(location, iqn, transport)
         self.assertEqual(device['type'], 'block')
         self.assertEqual(device['path'], dev_str)
 
@@ -289,7 +322,15 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
 
         with mock.patch.object(os.path, 'exists',
                                side_effect=disconnect_mock):
-            self.connector.disconnect_volume(connection_info['data'], device)
+            if transport is not None:
+                dev_list = self.generate_device(location, iqn, transport)
+                with mock.patch.object(glob, 'glob', return_value=[dev_list]):
+                    self.connector.disconnect_volume(connection_info['data'],
+                                                     device)
+            else:
+                self.connector.disconnect_volume(connection_info['data'],
+                                                 device)
+
             expected_commands = [
                 ('iscsiadm -m node -T %s -p %s' % (iqn, location)),
                 ('iscsiadm -m session'),
@@ -314,6 +355,13 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
                           'Test requires /dev/disk/by-path')
     def test_connect_volume(self):
         self._test_connect_volume({}, [])
+
+    @testtools.skipUnless(os.path.exists('/dev/disk/by-path'),
+                          'Test requires /dev/disk/by-path')
+    @mock.patch.object(connector.ISCSIConnector, '_get_transport')
+    def test_connect_volume_with_transport(self, mock_transport):
+        mock_transport.return_value = 'fake_transport'
+        self._test_connect_volume({}, [], 'fake_transport')
 
     @testtools.skipUnless(os.path.exists('/dev/disk/by-path'),
                           'Test requires /dev/disk/by-path')

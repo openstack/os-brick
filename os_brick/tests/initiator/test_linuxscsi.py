@@ -50,7 +50,11 @@ class LinuxSCSITestCase(base.TestCase):
         disk_path = ("/dev/disk/by-path/ip-10.10.220.253:3260-"
                      "iscsi-iqn.2000-05.com.3pardata:21810002ac00383d-lun-0")
         name = self.linuxscsi.get_name_from_path(disk_path)
-        self.assertEqual(name, device_name)
+        self.assertEqual(device_name, name)
+        disk_path = ("/dev/disk/by-path/pci-0000:00:00.0-ip-10.9.8.7:3260-"
+                     "iscsi-iqn.2000-05.com.openstack:2180002ac00383d-lun-0")
+        name = self.linuxscsi.get_name_from_path(disk_path)
+        self.assertEqual(device_name, name)
         realpath_mock.return_value = "bogus"
         name = self.linuxscsi.get_name_from_path(disk_path)
         self.assertIsNone(name)
