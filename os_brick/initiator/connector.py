@@ -31,6 +31,7 @@ import time
 from oslo_concurrency import lockutils
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
+from oslo_service import loopingcall
 from oslo_utils import strutils
 import six
 
@@ -44,7 +45,6 @@ from os_brick.initiator import linuxfc
 from os_brick.initiator import linuxscsi
 from os_brick.remotefs import remotefs
 from os_brick.i18n import _, _LE, _LW
-from os_brick.openstack.common import loopingcall
 
 LOG = logging.getLogger(__name__)
 
