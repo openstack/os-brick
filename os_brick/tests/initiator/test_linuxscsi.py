@@ -14,7 +14,6 @@
 
 import os
 import os.path
-import string
 
 import mock
 from oslo_log import log as logging
@@ -36,7 +35,7 @@ class LinuxSCSITestCase(base.TestCase):
         self.linuxscsi = linuxscsi.LinuxSCSI(None, execute=self.fake_execute)
 
     def fake_execute(self, *cmd, **kwargs):
-        self.cmds.append(string.join(cmd))
+        self.cmds.append(" ".join(cmd))
         return "", None
 
     def test_echo_scsi_command(self):
@@ -132,7 +131,6 @@ class LinuxSCSITestCase(base.TestCase):
         self.linuxscsi._execute = fake_execute
 
         info = self.linuxscsi.find_multipath_device('/dev/sde')
-        LOG.error("info = %s" % info)
 
         self.assertEqual("350002ac20398383d", info["id"])
         self.assertEqual("mpath6", info["name"])
@@ -167,7 +165,6 @@ class LinuxSCSITestCase(base.TestCase):
         self.linuxscsi._execute = fake_execute
 
         info = self.linuxscsi.find_multipath_device('/dev/sde')
-        LOG.error("info = %s" % info)
 
         self.assertEqual("36005076da00638089c000000000004d5", info["id"])
         self.assertEqual("36005076da00638089c000000000004d5", info["name"])
@@ -200,7 +197,6 @@ class LinuxSCSITestCase(base.TestCase):
         self.linuxscsi._execute = fake_execute
 
         info = self.linuxscsi.find_multipath_device('/dev/sdd')
-        LOG.error("info = %s" % info)
 
         self.assertEqual("36005076303ffc48e0000000000000101", info["id"])
         self.assertEqual("36005076303ffc48e0000000000000101", info["name"])
@@ -234,7 +230,6 @@ class LinuxSCSITestCase(base.TestCase):
         self.linuxscsi._execute = fake_execute
 
         info = self.linuxscsi.find_multipath_device('/dev/sdd')
-        LOG.error("info = %s" % info)
 
         self.assertEqual("36005076303ffc48e0000000000000101", info["id"])
         self.assertEqual("36005076303ffc48e0000000000000101", info["name"])

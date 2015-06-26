@@ -93,12 +93,13 @@ class TestRetryDecorator(base.TestCase):
 
             expected_sleep_arg = []
 
-            for i in xrange(retries):
+            for i in range(retries):
                 if i > 0:
                     interval *= backoff_rate
                     expected_sleep_arg.append(float(interval))
 
-            mock_sleep.assert_has_calls(map(mock.call, expected_sleep_arg))
+            mock_sleep.assert_has_calls(
+                list(map(mock.call, expected_sleep_arg)))
 
     def test_wrong_exception_no_retry(self):
 

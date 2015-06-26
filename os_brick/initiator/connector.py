@@ -556,8 +556,8 @@ class ISCSIConnector(InitiatorConnector):
         # As discovery result may contain other targets' iqns, extract targets
         # to be disconnected whose block devices are already deleted here.
         ips_iqns = []
-        entries = map(lambda x: x.lstrip('ip-').split('-lun-')[0],
-                      self._get_iscsi_devices())
+        entries = [device.lstrip('ip-').split('-lun-')[0]
+                   for device in self._get_iscsi_devices()]
         for ip, iqn in all_ips_iqns:
             ip_iqn = "%s-iscsi-%s" % (ip.split(",")[0], iqn)
             if ip_iqn not in entries:
