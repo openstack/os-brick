@@ -174,7 +174,26 @@ class RemoteFsClientTestCase(base.TestCase):
     def test_no_mount_point_vzstorage(self):
         self._test_no_mount_point('vzstorage')
 
+    def test_no_mount_point_scality(self):
+        self._test_no_mount_point('scality')
+
     def test_invalid_fs(self):
         self.assertRaises(exception.ProtocolNotSupported,
                           remotefs.RemoteFsClient,
                           'my_fs', root_helper='true', execute=putils.execute)
+
+    def test_init_sets_mount_base(self):
+        client = remotefs.RemoteFsClient("cifs", root_helper='true',
+                                         smbfs_mount_point_base='/fake',
+                                         cifs_mount_point_base='/fake2')
+        # Tests that although the FS type is "cifs", the config option
+        # starts with "smbfs_"
+        self.assertEqual('/fake', client._mount_base)
+
+    def test_init_nfs_calls_check_nfs_options(self):
+        to_patch = remotefs.RemoteFsClient._check_nfs_options
+        with mock.patch.object(to_patch) as mock_check_nfs_options:
+            remotefs.RemoteFsClient("nfs", root_helper='true',
+                                    nfs_mount_point_base='/fake')
+
+        mock_check_nfs_options.assert_called_once_with()

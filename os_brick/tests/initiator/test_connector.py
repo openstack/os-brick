@@ -159,6 +159,10 @@ class ConnectorTestCase(base.TestCase):
             'glusterfs', None, glusterfs_mount_point_base='/mnt/test')
         self.assertEqual(obj.__class__.__name__, "RemoteFsConnector")
 
+        obj = connector.InitiatorConnector.factory(
+            'scality', None, scality_sofs_mount_point_base='/mnt/test')
+        self.assertEqual(obj.__class__.__name__, "RemoteFsConnector")
+
         obj = connector.InitiatorConnector.factory('local', None)
         self.assertEqual(obj.__class__.__name__, "LocalConnector")
 
