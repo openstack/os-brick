@@ -942,6 +942,7 @@ class FibreChannelConnectorTestCase(ConnectorTestCase):
                        exp_wwn)
             self.assertEqual(dev_info['type'], 'block')
             self.assertEqual(dev_info['path'], dev_str)
+            self.assertTrue('devices' not in dev_info)
 
             self.connector.disconnect_volume(connection_info['data'], dev_info)
             expected_commands = []

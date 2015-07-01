@@ -860,21 +860,15 @@ class FibreChannelConnector(InitiatorConnector):
                 LOG.debug("Multipath device discovered %(device)s",
                           {'device': mdev_info['device']})
                 device_path = mdev_info['device']
-                devices = mdev_info['devices']
                 device_info['multipath_id'] = mdev_info['id']
             else:
                 # we didn't find a multipath device.
                 # so we assume the kernel only sees 1 device
                 device_path = self.host_device
-                dev_info = self._linuxscsi.get_device_info(self.device_name)
-                devices = [dev_info]
         else:
             device_path = self.host_device
-            dev_info = self._linuxscsi.get_device_info(self.device_name)
-            devices = [dev_info]
 
         device_info['path'] = device_path
-        device_info['devices'] = devices
         return device_info
 
     def _get_host_devices(self, possible_devs, lun):
@@ -929,7 +923,6 @@ class FibreChannelConnector(InitiatorConnector):
         target_wwn - iSCSI Qualified Name
         target_lun - LUN id of the volume
         """
-        devices = device_info['devices']
 
         # If this is a multipath device, we need to search again
         # and make sure we remove all the devices. Some of them
@@ -940,6 +933,15 @@ class FibreChannelConnector(InitiatorConnector):
             devices = mdev_info['devices']
             LOG.debug("devices to remove = %s", devices)
             self._linuxscsi.flush_multipath_device(multipath_id)
+        else:
+            device = device_info['path']
+            # now resolve this to a /dev/sdX path
+            if os.path.exists(device):
+                # get the /dev/sdX device from the
+                # /dev/disk/by-path entry
+                dev_name = os.path.realpath(device)
+                dev_info = self._linuxscsi.get_device_info(dev_name)
+                devices = [dev_info]
 
         self._remove_devices(connection_properties, devices)
 
