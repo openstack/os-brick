@@ -37,6 +37,7 @@ class BrickException(Exception):
 
     def __init__(self, message=None, **kwargs):
         self.kwargs = kwargs
+        self.kwargs['message'] = message
 
         if 'code' not in self.kwargs:
             try:
@@ -44,7 +45,11 @@ class BrickException(Exception):
             except AttributeError:
                 pass
 
-        if not message:
+        for k, v in self.kwargs.items():
+            if isinstance(v, Exception):
+                self.kwargs[k] = six.text_type(v)
+
+        if self._should_format():
             try:
                 message = self.message % kwargs
 
@@ -53,7 +58,7 @@ class BrickException(Exception):
                 # log the issue and the kwargs
                 LOG.exception(_LE("Exception in string format operation. "
                                   "msg='%s'"), self.message)
-                for name, value in kwargs.iteritems():
+                for name, value in kwargs.items():
                     LOG.error(_LE("%(name)s: %(value)s"), {'name': name,
                                                            'value': value})
 
@@ -67,6 +72,9 @@ class BrickException(Exception):
 
     def __unicode__(self):
         return six.text_type(self.msg)
+
+    def _should_format(self):
+        return self.kwargs['message'] is None or '%(message)' in self.message
 
 
 class NotFound(BrickException):

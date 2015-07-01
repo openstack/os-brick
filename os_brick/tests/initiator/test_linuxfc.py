@@ -13,7 +13,6 @@
 #    under the License.
 
 import os.path
-import string
 
 import mock
 from oslo_log import log as logging
@@ -35,7 +34,7 @@ class LinuxFCTestCase(base.TestCase):
         self.lfc = linuxfc.LinuxFibreChannel(None, execute=self.fake_execute)
 
     def fake_execute(self, *cmd, **kwargs):
-        self.cmds.append(string.join(cmd))
+        self.cmds.append(" ".join(cmd))
         return "", None
 
     def test_rescan_hosts(self):

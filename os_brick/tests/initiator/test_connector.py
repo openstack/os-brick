@@ -14,7 +14,6 @@
 
 import os.path
 import platform
-import string
 import tempfile
 import time
 
@@ -22,6 +21,7 @@ import mock
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
 from oslo_service import loopingcall
+from oslo_utils import encodeutils
 import six
 import testtools
 
@@ -109,7 +109,7 @@ class ConnectorTestCase(base.TestCase):
         self.cmds = []
 
     def fake_execute(self, *cmd, **kwargs):
-        self.cmds.append(string.join(cmd))
+        self.cmds.append(" ".join(cmd))
         return "", None
 
     def test_connect_volume(self):
@@ -265,7 +265,7 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
         iqn = 'iqn.2010-10.org.openstack:%s' % name
         vol = {'id': 1, 'name': name}
         connection_info = self.iscsi_connection(vol, location, iqn)
-        for key, value in extra_props.iteritems():
+        for key, value in extra_props.items():
             connection_info['data'][key] = value
         device = self.connector.connect_volume(connection_info['data'])
         dev_str = '/dev/disk/by-path/ip-%s-iscsi-%s-lun-1' % (location, iqn)
@@ -1172,7 +1172,7 @@ class HuaweiStorHyperConnectorTestCase(ConnectorTestCase):
 
     def fake_execute(self, *cmd, **kwargs):
         method = cmd[2]
-        self.cmds.append(string.join(cmd))
+        self.cmds.append(" ".join(cmd))
         if 'attach' == method:
             HuaweiStorHyperConnectorTestCase.attached = True
             return 'ret_code=0', None
@@ -1187,7 +1187,7 @@ class HuaweiStorHyperConnectorTestCase(ConnectorTestCase):
 
     def fake_execute_fail(self, *cmd, **kwargs):
         method = cmd[2]
-        self.cmds.append(string.join(cmd))
+        self.cmds.append(" ".join(cmd))
         if 'attach' == method:
             HuaweiStorHyperConnectorTestCase.attached = False
             return 'ret_code=330151401', None
@@ -1523,18 +1523,19 @@ class RBDConnectorTestCase(ConnectorTestCase):
 
         # Ensure rados is instantiated correctly
         mock_rados.Rados.assert_called_once_with(
-            rados_id=self.user,
+            rados_id=encodeutils.safe_encode(self.user),
             conffile='/etc/ceph/ceph.conf')
 
         # Ensure correct calls to connect to cluster
         mock_rados.Rados.return_value.connect.assert_called_once()
         mock_rados.Rados.return_value.open_ioctx.assert_called_once_with(
-            self.pool)
+            encodeutils.safe_encode(self.pool))
 
         # Ensure rbd image is instantiated correctly
         mock_rbd.Image.assert_called_once_with(
             mock_rados.Rados.return_value.open_ioctx.return_value,
-            self.volume, read_only=False, snapshot=None)
+            encodeutils.safe_encode(self.volume), read_only=False,
+            snapshot=None)
 
         # Ensure expected object is returned correctly
         self.assertTrue(isinstance(device_info['path'],
