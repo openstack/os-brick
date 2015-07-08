@@ -17,18 +17,18 @@
 
 import logging
 import os
+import testtools
 
 import fixtures
 import mock
 from oslo_log import log as oslo_logging
 from oslo_utils import strutils
-from oslotest import base
 
 
 LOG = oslo_logging.getLogger(__name__)
 
 
-class TestCase(base.BaseTestCase):
+class TestCase(testtools.TestCase):
 
     """Test case base class for all unit tests."""
 

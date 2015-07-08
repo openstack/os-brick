@@ -112,15 +112,25 @@ class ConnectorTestCase(base.TestCase):
         self.cmds.append(" ".join(cmd))
         return "", None
 
+    def fake_connection(self):
+        return {
+            'driver_volume_type': 'fake',
+            'data': {
+                'volume_id': 'fake_volume_id',
+                'target_portal': 'fake_location',
+                'target_iqn': 'fake_iqn',
+                'target_lun': 1,
+            }
+        }
+
     def test_connect_volume(self):
-        self.connector = connector.InitiatorConnector(None)
-        self.assertRaises(NotImplementedError,
-                          self.connector.connect_volume, None)
+        self.connector = connector.FakeConnector(None)
+        device_info = self.connector.connect_volume(self.fake_connection())
+        self.assertIn('type', device_info)
+        self.assertIn('path', device_info)
 
     def test_disconnect_volume(self):
-        self.connector = connector.InitiatorConnector(None)
-        self.assertRaises(NotImplementedError,
-                          self.connector.disconnect_volume, None, None)
+        self.connector = connector.FakeConnector(None)
 
     def test_factory(self):
         obj = connector.InitiatorConnector.factory('iscsi', None)
@@ -158,13 +168,13 @@ class ConnectorTestCase(base.TestCase):
                           "bogus", None)
 
     def test_check_valid_device_with_wrong_path(self):
-        self.connector = connector.InitiatorConnector(None)
+        self.connector = connector.FakeConnector(None)
         self.connector._execute = \
             lambda *args, **kwargs: ("", None)
         self.assertFalse(self.connector.check_valid_device('/d0v'))
 
     def test_check_valid_device(self):
-        self.connector = connector.InitiatorConnector(None)
+        self.connector = connector.FakeConnector(None)
         self.connector._execute = \
             lambda *args, **kwargs: ("", "")
         self.assertTrue(self.connector.check_valid_device('/dev'))
@@ -172,7 +182,7 @@ class ConnectorTestCase(base.TestCase):
     def test_check_valid_device_with_cmd_error(self):
         def raise_except(*args, **kwargs):
             raise putils.ProcessExecutionError
-        self.connector = connector.InitiatorConnector(None)
+        self.connector = connector.FakeConnector(None)
         with mock.patch.object(self.connector, '_execute',
                                side_effect=putils.ProcessExecutionError):
             self.assertFalse(self.connector.check_valid_device('/dev'))
