@@ -20,6 +20,7 @@ The connectors here are responsible for discovering and removing volumes for
 each of the supported transport protocols.
 """
 
+import abc
 import copy
 import os
 import platform
@@ -106,6 +107,7 @@ def get_connector_properties(root_helper, my_ip, multipath, enforce_multipath,
     return props
 
 
+@six.add_metaclass(abc.ABCMeta)
 class InitiatorConnector(executor.Executor):
     def __init__(self, root_helper, driver=None,
                  execute=putils.execute,
@@ -232,21 +234,36 @@ class InitiatorConnector(executor.Executor):
             return False
         return True
 
+    @abc.abstractmethod
     def connect_volume(self, connection_properties):
         """Connect to a volume.
 
         The connection_properties describes the information needed by
         the specific protocol to use to make the connection.
         """
-        raise NotImplementedError()
+        pass
 
+    @abc.abstractmethod
     def disconnect_volume(self, connection_properties, device_info):
         """Disconnect a volume from the local host.
 
         The connection_properties are the same as from connect_volume.
         The device_info is returned from connect_volume.
         """
-        raise NotImplementedError()
+        pass
+
+
+class FakeConnector(InitiatorConnector):
+
+    fake_path = '/dev/vdFAKE'
+
+    def connect_volume(self, connection_properties):
+        fake_device_info = {'type': 'fake',
+                            'path': self.fake_path}
+        return fake_device_info
+
+    def disconnect_volume(self, connection_properties, device_info):
+        pass
 
 
 class ISCSIConnector(InitiatorConnector):
