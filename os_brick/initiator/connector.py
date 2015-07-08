@@ -276,6 +276,50 @@ class InitiatorConnector(executor.Executor):
         """
         pass
 
+    @abc.abstractmethod
+    def get_volume_paths(self, connection_properties):
+        """Return the list of existing paths for a volume.
+
+        The job of this method is to find out what paths in
+        the system are associated with a volume as described
+        by the connection_properties.
+        """
+        pass
+
+    @abc.abstractmethod
+    def get_search_path(self):
+        """Return the directory where a Connector looks for volumes.
+
+        Some Connectors need the information in the
+        connection_properties to determine the search path.
+        """
+        pass
+
+    def get_all_available_volumes(self, connection_properties=None):
+        """Return all volumes that exist in the search directory.
+
+        At connect_volume time, a Connector looks in a specific
+        directory to discover a volume's paths showing up.
+        This method's job is to return all paths in the directory
+        that connect_volume uses to find a volume.
+
+        This method is used in coordination with get_volume_paths()
+        to verify that volumes have gone away after disconnect_volume
+        has been called.
+        """
+        path = self.get_search_path()
+        if path:
+            # now find all entries in the search path
+            file_list = []
+            if os.path.isdir(path):
+                files = os.listdir(path)
+                for entry in files:
+                    file_list.append(path + entry)
+
+            return file_list
+        else:
+            return []
+
 
 class FakeConnector(InitiatorConnector):
 
@@ -288,6 +332,16 @@ class FakeConnector(InitiatorConnector):
 
     def disconnect_volume(self, connection_properties, device_info):
         pass
+
+    def get_volume_paths(self, connection_properties):
+        return [self.fake_path]
+
+    def get_search_path(self):
+        return '/dev/disk/by-path'
+
+    def get_all_available_volumes(self, connection_properties=None):
+        return ['/dev/disk/by-path/fake-volume-1',
+                '/dev/disk/by-path/fake-volume-X']
 
 
 class ISCSIConnector(InitiatorConnector):
@@ -307,6 +361,155 @@ class ISCSIConnector(InitiatorConnector):
             transport=transport, *args, **kwargs)
         self.use_multipath = use_multipath
         self.transport = self._validate_iface_transport(transport)
+
+    def get_search_path(self):
+        """Where do we look for iSCSI based volumes."""
+        return '/dev/disk/by-path'
+
+    def get_volume_paths(self, connection_properties):
+        """Get the list of existing paths for a volume.
+
+        This method's job is to simply report what might/should
+        already exist for a volume.  We aren't trying to attach/discover
+        a new volume, but find any existing paths for a volume we
+        think is already attached.
+        """
+        volume_paths = []
+
+        # if there are no sessions, then target_portal won't exist
+        if (('target_portal' not in connection_properties) and
+           ('target_portals' not in connection_properties)):
+            return volume_paths
+
+        # Don't try and connect to the portals in the list as
+        # this can create empty iSCSI sessions to hosts if they
+        # didn't exist previously.
+        # We are simply trying to find any existing volumes with
+        # already connected sessions.
+        host_devices, target_props = self._get_potential_volume_paths(
+            connection_properties,
+            connect_to_portal=False,
+            use_rescan=False)
+
+        for path in host_devices:
+            if os.path.exists(path):
+                volume_paths.append(path)
+
+        return volume_paths
+
+    def _get_iscsi_sessions(self):
+        out, err = self._run_iscsi_session()
+
+        iscsi_sessions = []
+
+        if err:
+            LOG.warning(_LW("Couldn't find iscsi sessions because "
+                        "iscsiadm err: %s"),
+                        err)
+        else:
+            # parse the output from iscsiadm
+            # lines are in the format of
+            # tcp: [1] 192.168.121.250:3260,1 iqn.2010-10.org.openstack:volume-
+            lines = out.split('\n')
+            for line in lines:
+                if line:
+                    entries = line.split()
+                    portal = entries[2].split(',')
+                    iscsi_sessions.append(portal[0])
+
+        return iscsi_sessions
+
+    def _get_potential_volume_paths(self, connection_properties,
+                                    connect_to_portal=True,
+                                    use_rescan=True):
+        """Build a list of potential volume paths that exist.
+
+        Given a list of target_portals in the connection_properties,
+        a list of paths might exist on the system during discovery.
+        This method's job is to build that list of potential paths
+        for a volume that might show up.
+
+        This is used during connect_volume time, in which case we want
+        to connect to the iSCSI target portal.
+
+        During get_volume_paths time, we are looking to
+        find a list of existing volume paths for the connection_properties.
+        In this case, we don't want to connect to the portal.  If we
+        blindly try and connect to a portal, it could create a new iSCSI
+        session that didn't exist previously, and then leave it stale.
+        """
+
+        target_props = None
+        connected_to_portal = False
+        if self.use_multipath:
+            LOG.info(_LI("Multipath discovery for iSCSI enabled"))
+            # Multipath installed, discovering other targets if available
+            try:
+                ips_iqns = self._discover_iscsi_portals(connection_properties)
+            except Exception:
+                raise exception.TargetPortalNotFound(
+                    target_portal=connection_properties['target_portal'])
+
+            if not connection_properties.get('target_iqns'):
+                # There are two types of iSCSI multipath devices. One which
+                # shares the same iqn between multiple portals, and the other
+                # which use different iqns on different portals.
+                # Try to identify the type by checking the iscsiadm output
+                # if the iqn is used by multiple portals. If it is, it's
+                # the former, so use the supplied iqn. Otherwise, it's the
+                # latter, so try the ip,iqn combinations to find the targets
+                # which constitutes the multipath device.
+                main_iqn = connection_properties['target_iqn']
+                all_portals = set([ip for ip, iqn in ips_iqns])
+                match_portals = set([ip for ip, iqn in ips_iqns
+                                     if iqn == main_iqn])
+                if len(all_portals) == len(match_portals):
+                    ips_iqns = zip(all_portals, [main_iqn] * len(all_portals))
+
+            for ip, iqn in ips_iqns:
+                props = copy.deepcopy(connection_properties)
+                props['target_portal'] = ip
+                props['target_iqn'] = iqn
+                if connect_to_portal:
+                    if self._connect_to_iscsi_portal(props):
+                        connected_to_portal = True
+
+            if use_rescan:
+                self._rescan_iscsi()
+            host_devices = self._get_device_path(connection_properties)
+        else:
+            LOG.info(_LI("Multipath discovery for iSCSI not enabled."))
+            iscsi_sessions = []
+            if not connect_to_portal:
+                iscsi_sessions = self._get_iscsi_sessions()
+
+            host_devices = []
+            target_props = connection_properties
+            for props in self._iterate_all_targets(connection_properties):
+                if connect_to_portal:
+                    if self._connect_to_iscsi_portal(props):
+                        target_props = props
+                        connected_to_portal = True
+                        host_devices = self._get_device_path(props)
+                        break
+                    else:
+                        LOG.warning(_LW(
+                            'Failed to connect to iSCSI portal %(portal)s.'),
+                            {'portal': props['target_portal']})
+                else:
+                    # If we aren't trying to connect to the portal, we
+                    # want to find ALL possible paths from all of the
+                    # alternate portals
+                    if props['target_portal'] in iscsi_sessions:
+                        paths = self._get_device_path(props)
+                        host_devices = list(set(paths + host_devices))
+
+        if connect_to_portal and not connected_to_portal:
+            msg = _("Could not login to any iSCSI portal.")
+            LOG.error(msg)
+            raise exception.FailedISCSITargetPortalLogin(message=msg)
+
+        return host_devices, target_props
 
     def set_execute(self, execute):
         super(ISCSIConnector, self).set_execute(execute)
@@ -446,58 +649,8 @@ class ISCSIConnector(InitiatorConnector):
 
         device_info = {'type': 'block'}
 
-        connected_to_portal = False
-        if self.use_multipath:
-            # Multipath installed, discovering other targets if available
-            try:
-                ips_iqns = self._discover_iscsi_portals(connection_properties)
-            except Exception:
-                raise exception.TargetPortalNotFound(
-                    target_portal=connection_properties['target_portal'])
-
-            if not connection_properties.get('target_iqns'):
-                # There are two types of iSCSI multipath devices. One which
-                # shares the same iqn between multiple portals, and the other
-                # which use different iqns on different portals.
-                # Try to identify the type by checking the iscsiadm output
-                # if the iqn is used by multiple portals. If it is, it's
-                # the former, so use the supplied iqn. Otherwise, it's the
-                # latter, so try the ip,iqn combinations to find the targets
-                # which constitutes the multipath device.
-                main_iqn = connection_properties['target_iqn']
-                all_portals = set([ip for ip, iqn in ips_iqns])
-                match_portals = set([ip for ip, iqn in ips_iqns
-                                     if iqn == main_iqn])
-                if len(all_portals) == len(match_portals):
-                    ips_iqns = zip(all_portals, [main_iqn] * len(all_portals))
-
-            for ip, iqn in ips_iqns:
-                props = copy.deepcopy(connection_properties)
-                props['target_portal'] = ip
-                props['target_iqn'] = iqn
-                if self._connect_to_iscsi_portal(props):
-                    connected_to_portal = True
-
-            self._rescan_iscsi()
-            host_devices = self._get_device_path(connection_properties)
-        else:
-            target_props = connection_properties
-            for props in self._iterate_all_targets(connection_properties):
-                if self._connect_to_iscsi_portal(props):
-                    target_props = props
-                    connected_to_portal = True
-                    host_devices = self._get_device_path(target_props)
-                    break
-                else:
-                    LOG.warning(_LW(
-                        'Failed to connect to iSCSI portal %(portal)s.'),
-                        {'portal': props['target_portal']})
-
-        # make sure we've logged into an iSCSI portal
-        if not connected_to_portal:
-            msg = _("Could not login to any iSCSI portal.")
-            LOG.error(msg)
-            raise exception.FailedISCSITargetPortalLogin(message=msg)
+        host_devices, target_props = self._get_potential_volume_paths(
+            connection_properties)
 
         # The /dev/disk/by-path/... node is not always present immediately
         # TODO(justinsb): This retry-with-delay is a pattern, move to utils?
@@ -758,6 +911,8 @@ class ISCSIConnector(InitiatorConnector):
         #             target exists, and if we get 255 (Not Found), then
         #             we run --op new. This will also happen if another
         #             volume is using the same target.
+        LOG.info(_LI("Trying to connect to iSCSI portal %(portal)s"),
+                 {"portal": connection_properties['target_portal']})
         try:
             self._run_iscsiadm(connection_properties, ())
         except putils.ProcessExecutionError as exc:
@@ -891,6 +1046,13 @@ class ISCSIConnector(InitiatorConnector):
             LOG.warning(_LW("Failed to parse the output of multipath -ll."))
         return mpath_map
 
+    def _run_iscsi_session(self):
+        (out, err) = self._run_iscsiadm_bare(('-m', 'session'),
+                                             check_exit_code=[0, 1, 21, 255])
+        LOG.debug("iscsi session list stdout=%(out)s stderr=%(err)s",
+                  {'out': out, 'err': err})
+        return (out, err)
+
     def _run_iscsiadm_bare(self, iscsi_command, **kwargs):
         check_exit_code = kwargs.pop('check_exit_code', 0)
         (out, err) = self._execute('iscsiadm',
@@ -946,6 +1108,10 @@ class FibreChannelConnector(InitiatorConnector):
         self._linuxscsi.set_execute(execute)
         self._linuxfc.set_execute(execute)
 
+    def get_search_path(self):
+        """Where do we look for FC based volumes."""
+        return '/dev/disk/by-path'
+
     def _get_possible_volume_paths(self, connection_properties, hbas):
         ports = connection_properties['target_wwn']
         possible_devs = self._get_possible_devices(hbas, ports)
@@ -954,15 +1120,15 @@ class FibreChannelConnector(InitiatorConnector):
         host_paths = self._get_host_devices(possible_devs, lun)
         return host_paths
 
-    def _get_volume_paths(self, connection_properties):
-        """Get a list of existing paths for a volume on the system."""
+    def get_volume_paths(self, connection_properties):
         volume_paths = []
         # first fetch all of the potential paths that might exist
-        # and then filter those by what's actually on the system.
+        # how the FC fabric is zoned may alter the actual list
+        # that shows up on the system.  So, we verify each path.
         hbas = self._linuxfc.get_fc_hbas_info()
-        host_paths = self._get_possible_volume_paths(connection_properties,
-                                                     hbas)
-        for path in host_paths:
+        device_paths = self._get_possible_volume_paths(
+            connection_properties, hbas)
+        for path in device_paths:
             if os.path.exists(path):
                 volume_paths.append(path)
 
@@ -980,8 +1146,8 @@ class FibreChannelConnector(InitiatorConnector):
         device_info = {'type': 'block'}
 
         hbas = self._linuxfc.get_fc_hbas_info()
-        host_devices = self._get_possible_volume_paths(connection_properties,
-                                                       hbas)
+        host_devices = self._get_possible_volume_paths(
+            connection_properties, hbas)
 
         if len(host_devices) == 0:
             # this is empty because we don't have any FC HBAs
@@ -1129,7 +1295,7 @@ class FibreChannelConnector(InitiatorConnector):
         """
 
         devices = []
-        volume_paths = self._get_volume_paths(connection_properties)
+        volume_paths = self.get_volume_paths(connection_properties)
         wwn = None
         for path in volume_paths:
             real_path = self._linuxscsi.get_name_from_path(path)
@@ -1252,12 +1418,25 @@ class AoEConnector(InitiatorConnector):
             device_scan_attempts=device_scan_attempts,
             *args, **kwargs)
 
+    def get_search_path(self):
+        return '/dev/etherd'
+
+    def get_volume_paths(self, connection_properties):
+        aoe_device, aoe_path = self._get_aoe_info(connection_properties)
+        volume_paths = []
+        if os.path.exists(aoe_path):
+            volume_paths.append(aoe_path)
+
+        return volume_paths
+
     def _get_aoe_info(self, connection_properties):
         shelf = connection_properties['target_shelf']
         lun = connection_properties['target_lun']
         aoe_device = 'e%(shelf)s.%(lun)s' % {'shelf': shelf,
                                              'lun': lun}
-        aoe_path = '/dev/etherd/%s' % (aoe_device)
+        path = self.get_search_path()
+        aoe_path = '%(path)s/%(device)s' % {'path': path,
+                                            'device': aoe_device}
         return aoe_device, aoe_path
 
     @lockutils.synchronized('aoe_control', 'aoe-')
@@ -1385,6 +1564,24 @@ class RemoteFsConnector(InitiatorConnector):
         super(RemoteFsConnector, self).set_execute(execute)
         self._remotefsclient.set_execute(execute)
 
+    def get_search_path(self):
+        return self._remotefsclient.get_mount_base()
+
+    def _get_volume_path(self, connection_properties):
+        mnt_flags = []
+        if connection_properties.get('options'):
+            mnt_flags = connection_properties['options'].split()
+
+        nfs_share = connection_properties['export']
+        self._remotefsclient.mount(nfs_share, mnt_flags)
+        mount_point = self._remotefsclient.get_mount_point(nfs_share)
+        path = mount_point + '/' + connection_properties['name']
+        return path
+
+    def get_volume_paths(self, connection_properties):
+        path = self._get_volume_path(connection_properties)
+        return [path]
+
     def connect_volume(self, connection_properties):
         """Ensure that the filesystem containing the volume is mounted.
 
@@ -1395,17 +1592,7 @@ class RemoteFsConnector(InitiatorConnector):
         connection_properties may optionally include:
         options - options to pass to mount
         """
-
-        mnt_flags = []
-        if connection_properties.get('options'):
-            mnt_flags = connection_properties['options'].split()
-
-        nfs_share = connection_properties['export']
-        self._remotefsclient.mount(nfs_share, mnt_flags)
-        mount_point = self._remotefsclient.get_mount_point(nfs_share)
-
-        path = mount_point + '/' + connection_properties['name']
-
+        path = self._get_volume_path(connection_properties)
         return {'path': path}
 
     def disconnect_volume(self, connection_properties, device_info):
@@ -1426,8 +1613,21 @@ class RBDConnector(InitiatorConnector):
                                            device_scan_attempts,
                                            *args, **kwargs)
 
-    def connect_volume(self, connection_properties):
-        """Connect to a volume."""
+    def get_volume_paths(self, connection_properties):
+        # TODO(walter-boring): don't know where the connector
+        # looks for RBD volumes.
+        return []
+
+    def get_search_path(self):
+        # TODO(walter-boring): don't know where the connector
+        # looks for RBD volumes.
+        return None
+
+    def get_all_available_volumes(self, connection_properties=None):
+        # TODO(walter-boring): not sure what to return here for RBD
+        return []
+
+    def _get_rbd_handle(self, connection_properties):
         try:
             user = connection_properties['auth_username']
             pool, volume = connection_properties['name'].split('/')
@@ -1438,7 +1638,12 @@ class RBDConnector(InitiatorConnector):
         rbd_client = linuxrbd.RBDClient(user, pool)
         rbd_volume = linuxrbd.RBDVolume(rbd_client, volume)
         rbd_handle = linuxrbd.RBDVolumeIOWrapper(rbd_volume)
+        return rbd_handle
 
+    def connect_volume(self, connection_properties):
+        """Connect to a volume."""
+
+        rbd_handle = self._get_rbd_handle(connection_properties)
         return {'path': rbd_handle}
 
     def disconnect_volume(self, connection_properties, device_info):
@@ -1476,6 +1681,17 @@ class LocalConnector(InitiatorConnector):
                  *args, **kwargs):
         super(LocalConnector, self).__init__(root_helper, driver=driver,
                                              execute=execute, *args, **kwargs)
+
+    def get_volume_paths(self, connection_properties):
+        path = connection_properties['device_path']
+        return [path]
+
+    def get_search_path(self):
+        return None
+
+    def get_all_available_volumes(self, connection_properties=None):
+        # TODO(walter-boring): not sure what to return here.
+        return []
 
     def connect_volume(self, connection_properties):
         """Connect to a volume.
@@ -1522,6 +1738,34 @@ class HuaweiStorHyperConnector(InitiatorConnector):
                                                        execute=execute,
                                                        *args, **kwargs)
 
+    def get_search_path(self):
+        # TODO(walter-boring): Where is the location on the filesystem to
+        # look for Huawei volumes to show up?
+        return None
+
+    def get_all_available_volumes(self, connection_properties=None):
+        # TODO(walter-boring): what to return here for all Huawei volumes ?
+        return []
+
+    def get_volume_paths(self, connection_properties):
+        volume_path = None
+        try:
+            volume_path = self._get_volume_path(connection_properties)
+        except Exception:
+            msg = _("Couldn't find a volume.")
+            LOG.warning(msg)
+            raise exception.BrickException(message=msg)
+        return [volume_path]
+
+    def _get_volume_path(self, connection_properties):
+        out = self._query_attached_volume(
+            connection_properties['volume_id'])
+        if not out or int(out['ret_code']) != 0:
+            msg = _("Couldn't find attached volume.")
+            LOG.error(msg)
+            raise exception.BrickException(message=msg)
+        return out['dev_addr']
+
     @synchronized('connect_volume')
     def connect_volume(self, connection_properties):
         """Connect to a volume."""
@@ -1534,14 +1778,16 @@ class HuaweiStorHyperConnector(InitiatorConnector):
             msg = (_("Attach volume failed, "
                    "error code is %s") % out['ret_code'])
             raise exception.BrickException(message=msg)
-        out = self._query_attached_volume(
-            connection_properties['volume_id'])
-        if not out or int(out['ret_code']) != 0:
+
+        try:
+            volume_path = self._get_volume_path(connection_properties)
+        except Exception:
             msg = _("query attached volume failed or volume not attached.")
+            LOG.error(msg)
             raise exception.BrickException(message=msg)
 
         device_info = {'type': 'block',
-                       'path': out['dev_addr']}
+                       'path': volume_path}
         return device_info
 
     @synchronized('connect_volume')
@@ -1670,6 +1916,18 @@ class HGSTConnector(InitiatorConnector):
             self._vgc_host = self._find_vgc_host()
         return self._vgc_host
 
+    def get_search_path(self):
+        return "/dev"
+
+    def get_volume_paths(self, connection_properties):
+        path = ("%(path)s/%(name)s" %
+                {'path': self.get_search_path(),
+                 'name': connection_properties['name']})
+        volume_path = None
+        if os.path.exists(path):
+            volume_path = path
+        return [volume_path]
+
     def connect_volume(self, connection_properties):
         """Attach a Space volume to running host.
 
@@ -1763,6 +2021,18 @@ class ScaleIOConnector(InitiatorConnector):
         self.iops_limit = None
         self.bandwidth_limit = None
 
+    def get_search_path(self):
+        return "/dev/disk/by-id"
+
+    def get_volume_paths(self, connection_properties):
+        self.get_config(connection_properties)
+        volume_paths = []
+        device_paths = [self._find_volume_path()]
+        for path in device_paths:
+            if os.path.exists(path):
+                volume_paths.append(path)
+        return volume_paths
+
     def _find_volume_path(self):
         LOG.info(_LI(
             "Looking for volume %(volume_id)s, maximum tries: %(tries)s"),
@@ -1770,7 +2040,7 @@ class ScaleIOConnector(InitiatorConnector):
         )
 
         # look for the volume in /dev/disk/by-id directory
-        by_id_path = "/dev/disk/by-id"
+        by_id_path = self.get_search_path()
 
         disk_filename = self._wait_for_volume_path(by_id_path)
         full_disk_name = ("%(path)s/%(filename)s" %
