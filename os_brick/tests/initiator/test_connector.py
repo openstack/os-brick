@@ -1542,7 +1542,7 @@ class RBDConnectorTestCase(ConnectorTestCase):
             conffile='/etc/ceph/ceph.conf')
 
         # Ensure correct calls to connect to cluster
-        mock_rados.Rados.return_value.connect.assert_called_once()
+        self.assertEqual(1, mock_rados.Rados.return_value.connect.call_count)
         mock_rados.Rados.return_value.open_ioctx.assert_called_once_with(
             encodeutils.safe_encode(self.pool))
 
@@ -1565,7 +1565,7 @@ class RBDConnectorTestCase(ConnectorTestCase):
         device_info = rbd.connect_volume(self.connection_properties)
         rbd.disconnect_volume(self.connection_properties, device_info)
 
-        volume_close.assert_called_once()
+        self.assertEqual(1, volume_close.call_count)
 
 
 class ScaleIOConnectorTestCase(ConnectorTestCase):

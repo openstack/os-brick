@@ -104,13 +104,13 @@ class RBDVolumeIOWrapperTestCase(base.TestCase):
         with mock.patch.object(linuxrbd, 'LOG') as mock_logger:
             self.mock_volume.image.flush = mock.Mock()
             self.mock_volume_wrapper.flush()
-            self.mock_volume.image.flush.assert_called_once()
+            self.assertEqual(1, self.mock_volume.image.flush.call_count)
             self.mock_volume.image.flush.reset_mock()
             # this should be caught and logged silently.
             self.mock_volume.image.flush.side_effect = AttributeError
             self.mock_volume_wrapper.flush()
-            self.mock_volume.image.flush.assert_called_once()
-            mock_logger.warning.assert_called_once()
+            self.assertEqual(1, self.mock_volume.image.flush.call_count)
+            self.assertEqual(1, mock_logger.warning.call_count)
 
     def test_fileno(self):
         self.assertRaises(IOError, self.mock_volume_wrapper.fileno)
