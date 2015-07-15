@@ -1,11 +1,12 @@
 os-brick Changelog history
 ==========================
 
-0.2.1
+0.3.0
 -----
 
 * Added HGST Solutions connector.
 * Added RBD connector.
+* Added ScaleIO connector.
 * Added Python 3.4 support.
 
 .. _1324670 http://bugs.launchpad.net/cinder/+bug/1324670
@@ -13,6 +14,7 @@ os-brick Changelog history
 .. _1382440 http://bugs.launchpad.net/cinder/+bug/1382440
 .. _1456480 http://bugs.launchpad.net/cinder/+bug/1456480
 .. _1466851 http://bugs.launchpad.net/cinder/+bug/1466851
+.. _1469338 http://bugs.launchpad.net/cinder/+bug/1469338
 
 0.2.0
 -----
