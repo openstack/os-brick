@@ -818,6 +818,28 @@ class FibreChannelConnector(InitiatorConnector):
         self._linuxscsi.set_execute(execute)
         self._linuxfc.set_execute(execute)
 
+    def _get_possible_volume_paths(self, connection_properties, hbas):
+        ports = connection_properties['target_wwn']
+        possible_devs = self._get_possible_devices(hbas, ports)
+
+        lun = connection_properties.get('target_lun', 0)
+        host_paths = self._get_host_devices(possible_devs, lun)
+        return host_paths
+
+    def _get_volume_paths(self, connection_properties):
+        """Get a list of existing paths for a volume on the system."""
+        volume_paths = []
+        # first fetch all of the potential paths that might exist
+        # and then filter those by what's actually on the system.
+        hbas = self._linuxfc.get_fc_hbas_info()
+        host_paths = self._get_possible_volume_paths(connection_properties,
+                                                     hbas)
+        for path in host_paths:
+            if os.path.exists(path):
+                volume_paths.append(path)
+
+        return volume_paths
+
     @synchronized('connect_volume')
     def connect_volume(self, connection_properties):
         """Attach the volume to instance_name.
@@ -831,11 +853,8 @@ class FibreChannelConnector(InitiatorConnector):
         device_info = {'type': 'block'}
 
         hbas = self._linuxfc.get_fc_hbas_info()
-        ports = connection_properties['target_wwn']
-        possible_devs = self._get_possible_devices(hbas, ports)
-
-        lun = connection_properties.get('target_lun', 0)
-        host_devices = self._get_host_devices(possible_devs, lun)
+        host_devices = self._get_possible_volume_paths(connection_properties,
+                                                       hbas)
 
         if len(host_devices) == 0:
             # this is empty because we don't have any FC HBAs
@@ -961,18 +980,16 @@ class FibreChannelConnector(InitiatorConnector):
             multipath_id = device_info['multipath_id']
             mdev_info = self._linuxscsi.find_multipath_device(multipath_id)
             devices = mdev_info['devices']
-            LOG.debug("devices to remove = %s", devices)
             self._linuxscsi.flush_multipath_device(multipath_id)
         else:
-            device = device_info['path']
-            # now resolve this to a /dev/sdX path
-            if os.path.exists(device):
-                # get the /dev/sdX device from the
-                # /dev/disk/by-path entry
-                dev_name = os.path.realpath(device)
-                dev_info = self._linuxscsi.get_device_info(dev_name)
-                devices = [dev_info]
+            devices = []
+            volume_paths = self._get_volume_paths(connection_properties)
+            for path in volume_paths:
+                real_path = self._linuxscsi.get_name_from_path(path)
+                device_info = self._linuxscsi.get_device_info(real_path)
+                devices.append(device_info)
 
+        LOG.debug("devices to remove = %s", devices)
         self._remove_devices(connection_properties, devices)
 
     def _remove_devices(self, connection_properties, devices):
