@@ -193,22 +193,6 @@ class ConnectorTestCase(base.TestCase):
             self.assertFalse(self.connector.check_valid_device('/dev'))
 
 
-class HostDriverTestCase(base.TestCase):
-
-    def setUp(self):
-        super(HostDriverTestCase, self).setUp()
-        self.devlist = ['device1', 'device2']
-        mock.patch.object(os.path, 'isdir', return_value=True).start()
-        mock.patch.object(os, 'listdir', return_value=self.devlist).start()
-        self.addCleanup(mock.patch.stopall)
-
-    def test_host_driver(self):
-        expected = ['/dev/disk/by-path/' + dev for dev in self.devlist]
-        driver = host_driver.HostDriver()
-        actual = driver.get_all_block_devices()
-        self.assertEqual(expected, actual)
-
-
 class ISCSIConnectorTestCase(ConnectorTestCase):
 
     def setUp(self):
