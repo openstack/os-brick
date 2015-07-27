@@ -18,6 +18,7 @@
 import hashlib
 import os
 import re
+import tempfile
 
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
@@ -53,6 +54,12 @@ class RemoteFsClient(object):
             if not self._mount_base:
                 raise exception.InvalidParameterValue(
                     err=_('glusterfs_mount_point_base required'))
+            self._mount_options = None
+        elif mount_type == "vzstorage":
+            self._mount_base = kwargs.get('vzstorage_mount_point_base', None)
+            if not self._mount_base:
+                raise exception.InvalidParameterValue(
+                    err=_('vzstorage_mount_point_base required'))
             self._mount_options = None
         else:
             raise exception.ProtocolNotSupported(protocol=mount_type)
@@ -101,6 +108,8 @@ class RemoteFsClient(object):
         self._execute('mkdir', '-p', mount_path, check_exit_code=0)
         if self._mount_type == 'nfs':
             self._mount_nfs(share, mount_path, flags)
+        elif self._mount_type == 'vzstorage':
+            self._mount_vzstorage(share, mount_path, flags)
         else:
             self._do_mount(self._mount_type, share, mount_path,
                            self._mount_options, flags)
@@ -139,6 +148,53 @@ class RemoteFsClient(object):
                                          "Error - %(error)s")
                                        % {'sh': nfs_share,
                                           'error': mnt_errors})
+
+    def _vzstorage_write_mds_list(self, cluster_name, mdss):
+        tmp_dir = tempfile.mkdtemp(prefix='vzstorage-')
+        tmp_bs_path = os.path.join(tmp_dir, 'bs_list')
+        with open(tmp_bs_path, 'w') as f:
+            for mds in mdss:
+                f.write(mds + "\n")
+
+        conf_dir = os.path.join('/etc/pstorage/clusters', cluster_name)
+        if os.path.exists(conf_dir):
+            bs_path = os.path.join(conf_dir, 'bs_list')
+            self._execute('cp', '-f', tmp_bs_path, bs_path,
+                          root_helper=self.root_helper, run_as_root=True)
+        else:
+            self._execute('cp', '-rf', tmp_dir, conf_dir,
+                          root_helper=self.root_helper, run_as_root=True)
+        self._execute('chown', '-R', 'root:root', conf_dir,
+                      root_helper=self.root_helper, run_as_root=True)
+
+    def _mount_vzstorage(self, vz_share, mount_path, flags=None):
+        m = re.search("(?:(\S+):\/)?([a-zA-Z0-9_-]+)(?::(\S+))?", vz_share)
+        if not m:
+            msg = (_("Invalid Virtuozzo Storage share specification: %r."
+                     "Must be: [MDS1[,MDS2],...:/]<CLUSTER NAME>[:PASSWORD].")
+                   % vz_share)
+            raise exception.BrickException(msg)
+
+        mdss = m.group(1)
+        cluster_name = m.group(2)
+        passwd = m.group(3)
+
+        if mdss:
+            mdss = mdss.split(',')
+            self._vzstorage_write_mds_list(cluster_name, mdss)
+
+        if passwd:
+            self._execute('pstorage', '-c', cluster_name, 'auth-node', '-P',
+                          process_input=passwd,
+                          root_helper=self.root_helper, run_as_root=True)
+
+        mnt_cmd = ['pstorage-mount', '-c', cluster_name]
+        if flags:
+            mnt_cmd.extend(flags)
+        mnt_cmd.extend([mount_path])
+
+        self._execute(*mnt_cmd, root_helper=self.root_helper,
+                      run_as_root=True, check_exit_code=0)
 
     def _check_nfs_options(self):
         """Checks and prepares nfs mount type options."""
