@@ -61,6 +61,18 @@ MULTIPATH_ERROR_REGEX = re.compile("\w{3} \d+ \d\d:\d\d:\d\d \|.*$")
 MULTIPATH_DEV_CHECK_REGEX = re.compile("\s+dm-\d+\s+")
 MULTIPATH_PATH_CHECK_REGEX = re.compile("\s+\d+:\d+:\d+:\d+\s+")
 
+ISCSI = "ISCSI"
+ISER = "ISER"
+FIBRE_CHANNEL = "FIBRE_CHANNEL"
+AOE = "AOE"
+NFS = "NFS"
+GLUSTERFS = "GLUSTERFS"
+LOCAL = "LOCAL"
+HUAWEISDSHYPERVISOR = "HUAWEISDSHYPERVISOR"
+HGST = "HGST"
+RBD = "RBD"
+SCALEIO = "SCALEIO"
+
 
 def _check_multipathd_running(root_helper, enforce_multipath):
     try:
@@ -146,21 +158,21 @@ class InitiatorConnector(executor.Executor):
         LOG.debug("Factory for %(protocol)s on %(arch)s",
                   {'protocol': protocol, 'arch': arch})
         protocol = protocol.upper()
-        if protocol == "ISCSI":
+        if protocol == ISCSI:
             return ISCSIConnector(root_helper=root_helper,
                                   driver=driver,
                                   execute=execute,
                                   use_multipath=use_multipath,
                                   device_scan_attempts=device_scan_attempts,
                                   *args, **kwargs)
-        elif protocol == "ISER":
+        elif protocol == ISER:
             return ISERConnector(root_helper=root_helper,
                                  driver=driver,
                                  execute=execute,
                                  use_multipath=use_multipath,
                                  device_scan_attempts=device_scan_attempts,
                                  *args, **kwargs)
-        elif protocol == "FIBRE_CHANNEL":
+        elif protocol == FIBRE_CHANNEL:
             if arch in (S390, S390X):
                 return FibreChannelConnectorS390X(
                     root_helper=root_helper,
@@ -177,45 +189,45 @@ class InitiatorConnector(executor.Executor):
                     use_multipath=use_multipath,
                     device_scan_attempts=device_scan_attempts,
                     *args, **kwargs)
-        elif protocol == "AOE":
+        elif protocol == AOE:
             return AoEConnector(root_helper=root_helper,
                                 driver=driver,
                                 execute=execute,
                                 device_scan_attempts=device_scan_attempts,
                                 *args, **kwargs)
-        elif protocol == "NFS" or protocol == "GLUSTERFS":
+        elif protocol == NFS or protocol == GLUSTERFS:
             return RemoteFsConnector(mount_type=protocol.lower(),
                                      root_helper=root_helper,
                                      driver=driver,
                                      execute=execute,
                                      device_scan_attempts=device_scan_attempts,
                                      *args, **kwargs)
-        elif protocol == "LOCAL":
+        elif protocol == LOCAL:
             return LocalConnector(root_helper=root_helper,
                                   driver=driver,
                                   execute=execute,
                                   device_scan_attempts=device_scan_attempts,
                                   *args, **kwargs)
-        elif protocol == "HUAWEISDSHYPERVISOR":
+        elif protocol == HUAWEISDSHYPERVISOR:
             return HuaweiStorHyperConnector(
                 root_helper=root_helper,
                 driver=driver,
                 execute=execute,
                 device_scan_attempts=device_scan_attempts,
                 *args, **kwargs)
-        elif protocol == "HGST":
+        elif protocol == HGST:
             return HGSTConnector(root_helper=root_helper,
                                  driver=driver,
                                  execute=execute,
                                  device_scan_attempts=device_scan_attempts,
                                  *args, **kwargs)
-        elif protocol == "RBD":
+        elif protocol == RBD:
             return RBDConnector(root_helper=root_helper,
                                 driver=driver,
                                 execute=execute,
                                 device_scan_attempts=device_scan_attempts,
                                 *args, **kwargs)
-        elif protocol == "SCALEIO":
+        elif protocol == SCALEIO:
             return ScaleIOConnector(
                 root_helper=root_helper,
                 driver=driver,
