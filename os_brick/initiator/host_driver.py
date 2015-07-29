@@ -13,6 +13,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import errno
 import os
 
 
@@ -20,10 +21,15 @@ class HostDriver(object):
 
     def get_all_block_devices(self):
         """Get the list of all block devices seen in /dev/disk/by-path/."""
-        files = []
         dir = "/dev/disk/by-path/"
-        if os.path.isdir(dir):
+        try:
             files = os.listdir(dir)
+        except OSError as e:
+            if e.errno == errno.ENOENT:
+                files = []
+            else:
+                raise
+
         devices = []
         for file in files:
             devices.append(dir + file)
