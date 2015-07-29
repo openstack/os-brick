@@ -194,13 +194,16 @@ class LinuxFCS390XTestCase(LinuxFCTestCase):
                      'port_name': 'c05076ffe680a960'}]
         self.assertEqual(expected, hbas_info)
 
-    def test_configure_scsi_device(self):
+    @mock.patch.object(os.path, 'exists', return_value=False)
+    def test_configure_scsi_device(self, mock_execute):
         device_number = "0.0.2319"
         target_wwn = "0x50014380242b9751"
         lun = 1
         self.lfc.configure_scsi_device(device_number, target_wwn, lun)
-        expected_commands = [('tee -a /sys/bus/ccw/drivers/zfcp/'
-                              '0.0.2319/0x50014380242b9751/unit_add')]
+        expected_commands = [('tee -a /sys/bus/ccw/drivers/zfcp/0.0.2319/'
+                             'port_rescan'),
+                             ('tee -a /sys/bus/ccw/drivers/zfcp/0.0.2319/'
+                                 '0x50014380242b9751/unit_add')]
         self.assertEqual(expected_commands, self.cmds)
 
     def test_deconfigure_scsi_device(self):

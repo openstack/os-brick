@@ -15,6 +15,7 @@
 """Generic linux Fibre Channel utilities."""
 
 import errno
+import os
 
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
@@ -169,6 +170,9 @@ class LinuxFibreChannelS390X(LinuxFibreChannel):
     def configure_scsi_device(self, device_number, target_wwn, lun):
         """Write the LUN to the port's unit_add attribute.
 
+        If auto-discovery of Fibre-Channel target ports is
+        disabled on s390 platforms, ports need to be added to
+        the configuration.
         If auto-discovery of LUNs is disabled on s390 platforms
         luns need to be added to the configuration through the
         unit_add interface
@@ -178,6 +182,19 @@ class LinuxFibreChannelS390X(LinuxFibreChannel):
                   {'device_num': device_number,
                    'target_wwn': target_wwn,
                    'target_lun': lun})
+        filepath = ("/sys/bus/ccw/drivers/zfcp/%s/%s" %
+                    (device_number, target_wwn))
+        if not (os.path.exists(filepath)):
+            zfcp_device_command = ("/sys/bus/ccw/drivers/zfcp/%s/port_rescan" %
+                                   (device_number))
+            LOG.debug("port_rescan call for s390: %s", zfcp_device_command)
+            try:
+                self.echo_scsi_command(zfcp_device_command, "1")
+            except putils.ProcessExecutionError as exc:
+                LOG.warning(_LW("port_rescan call for s390 failed exit"
+                                " %(code)s, stderr %(stderr)s"),
+                            {'code': exc.exit_code, 'stderr': exc.stderr})
+
         zfcp_device_command = ("/sys/bus/ccw/drivers/zfcp/%s/%s/unit_add" %
                                (device_number, target_wwn))
         LOG.debug("unit_add call for s390 execute: %s", zfcp_device_command)
