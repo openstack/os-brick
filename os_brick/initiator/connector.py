@@ -413,7 +413,7 @@ class ISCSIConnector(InitiatorConnector):
                 raise exception.VolumeDeviceNotFound(device=host_devices)
 
             LOG.warning(_LW("ISCSI volume not yet found at: %(host_devices)s. "
-                            "Will rescan & retry.  Try number: %(tries)s"),
+                            "Will rescan & retry.  Try number: %(tries)s."),
                         {'host_devices': host_devices,
                          'tries': tries})
 
@@ -857,8 +857,7 @@ class FibreChannelConnector(InitiatorConnector):
         """Attach the volume to instance_name.
 
         connection_properties for Fibre Channel must include:
-        target_portal - ip and optional port
-        target_iqn - iSCSI Qualified Name
+        target_wwn - World Wide Name
         target_lun - LUN id of the volume
         """
         LOG.debug("execute = %s", self._execute)
@@ -893,8 +892,8 @@ class FibreChannelConnector(InitiatorConnector):
                 LOG.error(_LE("Fibre Channel volume device not found."))
                 raise exception.NoFibreChannelVolumeDeviceFound()
 
-            LOG.warning(_LW("Fibre volume not yet found. "
-                            "Will rescan & retry.  Try number: %(tries)s"),
+            LOG.warning(_LW("Fibre Channel volume device not yet found. "
+                            "Will rescan & retry.  Try number: %(tries)s."),
                         {'tries': tries})
 
             self._linuxfc.rescan_hosts(hbas)
@@ -981,7 +980,7 @@ class FibreChannelConnector(InitiatorConnector):
         """Detach the volume from instance_name.
 
         connection_properties for Fibre Channel must include:
-        target_wwn - iSCSI Qualified Name
+        target_wwn - World Wide Name
         target_lun - LUN id of the volume
         """
 
