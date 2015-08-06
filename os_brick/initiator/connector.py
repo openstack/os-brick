@@ -339,17 +339,59 @@ class ISCSIConnector(InitiatorConnector):
             return zip(connection_properties['target_portals'],
                        connection_properties['target_iqns'])
 
-        # Discover and return every available target
-        out = self._run_iscsiadm_bare(['-m',
-                                       'discovery',
-                                       '-t',
-                                       'sendtargets',
-                                       '-p',
-                                       connection_properties['target_portal']],
-                                      check_exit_code=[0, 255])[0] \
-            or ""
+        out = None
+        if connection_properties.get('discovery_auth_method'):
+            try:
+                self._run_iscsiadm_update_discoverydb(connection_properties)
+            except putils.ProcessExecutionError as exception:
+                # iscsiadm returns 6 for "db record not found"
+                if exception.exit_code == 6:
+                    # Create a new record for this target and update the db
+                    self._run_iscsiadm_bare(
+                        ['-m', 'discoverydb',
+                         '-t', 'sendtargets',
+                         '-p', connection_properties['target_portal'],
+                         '--op', 'new'],
+                        check_exit_code=[0, 255])
+                    self._run_iscsiadm_update_discoverydb(
+                        connection_properties
+                    )
+                else:
+                    LOG.error(_LE("Unable to find target portal: "
+                                  "%(target_portal)s."),
+                              {'target_portal': connection_properties[
+                                  'target_portal']})
+                    raise
+            out = self._run_iscsiadm_bare(
+                ['-m', 'discoverydb',
+                 '-t', 'sendtargets',
+                 '-p', connection_properties['target_portal'],
+                 '--discover'],
+                check_exit_code=[0, 255])[0] or ""
+        else:
+            out = self._run_iscsiadm_bare(
+                ['-m', 'discovery',
+                 '-t', 'sendtargets',
+                 '-p', connection_properties['target_portal']],
+                check_exit_code=[0, 255])[0] or ""
 
         return self._get_target_portals_from_iscsiadm_output(out)
+
+    def _run_iscsiadm_update_discoverydb(self, connection_properties):
+        return self._execute(
+            'iscsiadm',
+            '-m', 'discoverydb',
+            '-t', 'sendtargets',
+            '-p', connection_properties['target_portal'],
+            '--op', 'update',
+            '-n', "discovery.sendtargets.auth.authmethod",
+            '-v', connection_properties['discovery_auth_method'],
+            '-n', "discovery.sendtargets.auth.username",
+            '-v', connection_properties['discovery_auth_username'],
+            '-n', "discovery.sendtargets.auth.password",
+            '-v', connection_properties['discovery_auth_password'],
+            run_as_root=True,
+            root_helper=self._root_helper)
 
     @synchronized('connect_volume')
     def connect_volume(self, connection_properties):
@@ -366,7 +408,11 @@ class ISCSIConnector(InitiatorConnector):
 
         if self.use_multipath:
             # Multipath installed, discovering other targets if available
-            ips_iqns = self._discover_iscsi_portals(connection_properties)
+            try:
+                ips_iqns = self._discover_iscsi_portals(connection_properties)
+            except Exception:
+                raise exception.TargetPortalNotFound(
+                    target_portal=connection_properties['target_portal'])
 
             if not connection_properties.get('target_iqns'):
                 # There are two types of iSCSI multipath devices. One which

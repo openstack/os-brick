@@ -228,6 +228,26 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
             }
         }
 
+    def iscsi_connection_chap(self, volume, location, iqn, auth_method,
+                              auth_username, auth_password,
+                              discovery_auth_method, discovery_auth_username,
+                              discovery_auth_password):
+        return {
+            'driver_volume_type': 'iscsi',
+            'data': {
+                'auth_method': auth_method,
+                'auth_username': auth_username,
+                'auth_password': auth_password,
+                'discovery_auth_method': discovery_auth_method,
+                'discovery_auth_username': discovery_auth_username,
+                'discovery_auth_password': discovery_auth_password,
+                'target_lun': 1,
+                'volume_id': volume['id'],
+                'target_iqn': iqn,
+                'target_portal': location,
+            }
+        }
+
     def test_get_initiator(self):
         def initiator_no_file(*args, **kwargs):
             raise putils.ProcessExecutionError('No file')
@@ -426,6 +446,52 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
         expected_result = {'path': 'iqn.2010-10.org.openstack:volume-00000001',
                            'type': 'block'}
         self.assertEqual(result, expected_result)
+
+    @mock.patch.object(connector.ISCSIConnector,
+                       '_run_iscsiadm_update_discoverydb')
+    @mock.patch.object(os.path, 'exists', return_value=True)
+    def test_iscsi_portals_with_chap_discovery(
+            self, exists, update_discoverydb):
+        location = '10.0.2.15:3260'
+        name = 'volume-00000001'
+        iqn = 'iqn.2010-10.org.openstack:%s' % name
+        vol = {'id': 1, 'name': name}
+        auth_method = 'CHAP'
+        auth_username = 'fake_chap_username'
+        auth_password = 'fake_chap_password'
+        discovery_auth_method = 'CHAP'
+        discovery_auth_username = 'fake_chap_username'
+        discovery_auth_password = 'fake_chap_password'
+        connection_properties = self.iscsi_connection_chap(
+            vol, location, iqn, auth_method, auth_username, auth_password,
+            discovery_auth_method, discovery_auth_username,
+            discovery_auth_password)
+        self.connector_with_multipath = connector.ISCSIConnector(
+            None, execute=self.fake_execute, use_multipath=True)
+        self.cmds = []
+        # The first call returns an error code = 6, mocking an empty
+        # discovery db. The second one mocks a successful return and the
+        # third one a dummy exit code, which will trigger the
+        # TargetPortalNotFound exception in connect_volume
+        update_discoverydb.side_effect = [
+            putils.ProcessExecutionError(None, None, 6),
+            ("", ""),
+            putils.ProcessExecutionError(None, None, 9)]
+
+        self.connector_with_multipath._discover_iscsi_portals(
+            connection_properties['data'])
+        update_discoverydb.assert_called_with(connection_properties['data'])
+
+        expected_cmds = [
+            'iscsiadm -m discoverydb -t sendtargets -p %s --op new' %
+            location,
+            'iscsiadm -m discoverydb -t sendtargets -p %s --discover' %
+            location]
+        self.assertEqual(expected_cmds, self.cmds)
+
+        self.assertRaises(exception.TargetPortalNotFound,
+                          self.connector_with_multipath.connect_volume,
+                          connection_properties['data'])
 
     @mock.patch.object(os.path, 'exists', return_value=True)
     @mock.patch.object(host_driver.HostDriver, 'get_all_block_devices')
@@ -1055,7 +1121,7 @@ class AoEConnectorTestCase(ConnectorTestCase):
 
     @mock.patch.object(os.path, 'exists', side_effect=[True, True])
     def test_connect_volume(self, exists_mock):
-        """Ensure that if path exist aoe-revaliadte was called."""
+        """Ensure that if path exist aoe-revalidate was called."""
         aoe_device, aoe_path = self.connector._get_aoe_info(
             self.connection_properties)
         with mock.patch.object(self.connector, '_execute',
