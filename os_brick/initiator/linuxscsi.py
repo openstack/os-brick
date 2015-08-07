@@ -70,7 +70,7 @@ class LinuxSCSI(executor.Executor):
             self.echo_scsi_command(path, "1")
 
     @utils.retry(exceptions=exception.VolumePathNotRemoved, retries=3,
-                 backoff_rate=1)
+                 backoff_rate=2)
     def wait_for_volume_removal(self, volume_path):
         """This is used to ensure that volumes are gone."""
         LOG.debug("Checking to see if SCSI volume %s has been removed.",
