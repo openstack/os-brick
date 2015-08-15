@@ -61,3 +61,6 @@ sds_cli: CommandFilter, /usr/local/bin/sds/sds_cli, root
 # initiator/connector.py: 'vgs-cluster', 'domain-list', '-l'
 # initiator/connector.py: 'vgs-cluster', 'space-set-apphosts', '-n'...
 vgs-cluster: CommandFilter, vgs-cluster, root
+
+# initiator/linuxscsi.py
+scsi_id: CommandFilter, /lib/udev/scsi_id, root

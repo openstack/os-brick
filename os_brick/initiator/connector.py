@@ -908,19 +908,32 @@ class FibreChannelConnector(InitiatorConnector):
                       "(after %(tries)s rescans)",
                       {'name': self.device_name, 'tries': tries})
 
+        # find out the WWN of the device
+        device_wwn = self._linuxscsi.get_scsi_wwn(self.host_device)
+        LOG.debug("Device WWN = '%(wwn)s'", {'wwn': device_wwn})
+
         # see if the new drive is part of a multipath
         # device.  If so, we'll use the multipath device.
         if self.use_multipath:
-            mdev_info = self._linuxscsi.find_multipath_device(self.device_name)
-            if mdev_info is not None:
-                LOG.debug("Multipath device discovered %(device)s",
-                          {'device': mdev_info['device']})
-                device_path = mdev_info['device']
-                device_info['multipath_id'] = mdev_info['id']
+
+            path = self._linuxscsi.find_multipath_device_path(device_wwn)
+            if path is not None:
+                LOG.debug("Multipath device path discovered %(device)s",
+                          {'device': path})
+                device_path = path
+                # for temporary backwards compatibility
+                device_info['multipath_id'] = device_wwn
             else:
-                # we didn't find a multipath device.
-                # so we assume the kernel only sees 1 device
-                device_path = self.host_device
+                mpath_info = self._linuxscsi.find_multipath_device(
+                    self.device_name)
+                if mpath_info:
+                    device_path = mpath_info['device']
+                    # for temporary backwards compatibility
+                    device_info['multipath_id'] = device_wwn
+                else:
+                    # we didn't find a multipath device.
+                    # so we assume the kernel only sees 1 device
+                    device_path = self.host_device
         else:
             device_path = self.host_device
 
@@ -980,24 +993,24 @@ class FibreChannelConnector(InitiatorConnector):
         target_lun - LUN id of the volume
         """
 
-        # If this is a multipath device, we need to search again
-        # and make sure we remove all the devices. Some of them
-        # might not have shown up at attach time.
-        if self.use_multipath and 'multipath_id' in device_info:
-            multipath_id = device_info['multipath_id']
-            mdev_info = self._linuxscsi.find_multipath_device(multipath_id)
-            devices = mdev_info['devices']
-            self._linuxscsi.flush_multipath_device(multipath_id)
-        else:
-            devices = []
-            volume_paths = self._get_volume_paths(connection_properties)
-            for path in volume_paths:
-                real_path = self._linuxscsi.get_name_from_path(path)
-                device_info = self._linuxscsi.get_device_info(real_path)
-                devices.append(device_info)
+        devices = []
+        volume_paths = self._get_volume_paths(connection_properties)
+        wwn = None
+        for path in volume_paths:
+            real_path = self._linuxscsi.get_name_from_path(path)
+            if not wwn:
+                wwn = self._linuxscsi.get_scsi_wwn(path)
+            device_info = self._linuxscsi.get_device_info(real_path)
+            devices.append(device_info)
 
         LOG.debug("devices to remove = %s", devices)
         self._remove_devices(connection_properties, devices)
+
+        if self.use_multipath:
+            # There is a bug in multipath where the flushing
+            # doesn't remove the entry if friendly names are on
+            # we'll try anyway.
+            self._linuxscsi.flush_multipath_device(wwn)
 
     def _remove_devices(self, connection_properties, devices):
         # There may have been more than 1 device mounted

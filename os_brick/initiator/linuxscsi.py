@@ -24,6 +24,7 @@ from oslo_log import log as logging
 
 from os_brick import exception
 from os_brick import executor
+from os_brick.i18n import _LI
 from os_brick.i18n import _LW
 from os_brick import utils
 
@@ -101,13 +102,22 @@ class LinuxSCSI(executor.Executor):
 
         return dev_info
 
-    def remove_multipath_device(self, multipath_name):
+    def get_scsi_wwn(self, path):
+        """Read the WWN from page 0x83 value for a SCSI device."""
+
+        (out, _err) = self._execute('scsi_id', '--page', '0x83',
+                                    '--whitelisted', path,
+                                    run_as_root=True,
+                                    root_helper=self._root_helper)
+        return out.strip()
+
+    def remove_multipath_device(self, device):
         """This removes LUNs associated with a multipath device
         and the multipath device itself.
         """
 
-        LOG.debug("remove multipath device %s", multipath_name)
-        mpath_dev = self.find_multipath_device(multipath_name)
+        LOG.debug("remove multipath device %s", device)
+        mpath_dev = self.find_multipath_device(device)
         if mpath_dev:
             devices = mpath_dev['devices']
             LOG.debug("multipath LUNs to remove %s", devices)
@@ -142,10 +152,70 @@ class LinuxSCSI(executor.Executor):
             LOG.warning(_LW("multipath call failed exit %(code)s"),
                         {'code': exc.exit_code})
 
-    def find_multipath_device(self, device):
-        """Find a multipath device associated with a LUN device name.
+    @utils.retry(exceptions=exception.VolumeDeviceNotFound)
+    def wait_for_path(self, volume_path):
+        """Wait for a path to show up."""
+        LOG.debug("Checking to see if %s exists yet.",
+                  volume_path)
+        if not os.path.exists(volume_path):
+            LOG.debug("%(path)s doesn't exists yet.", {'path': volume_path})
+            raise exception.VolumeDeviceNotFound(
+                volume_path=volume_path)
+        else:
+            LOG.debug("%s has shown up.", volume_path)
 
-        device can be either a /dev/sdX entry or a multipath id.
+    def find_multipath_device_path(self, wwn):
+        """Look for the multipath device file for a volume WWN.
+
+        Multipath devices can show up in several places on
+        a linux system.
+
+        1) When multipath friendly names are ON:
+            a device file will show up in
+            /dev/disk/by-id/dm-uuid-mpath-<WWN>
+            /dev/disk/by-id/dm-name-mpath<N>
+            /dev/disk/by-id/scsi-mpath<N>
+            /dev/mapper/mpath<N>
+
+        2) When multipath friendly names are OFF:
+            /dev/disk/by-id/dm-uuid-mpath-<WWN>
+            /dev/disk/by-id/scsi-<WWN>
+            /dev/mapper/<WWN>
+
+        """
+        LOG.info(_LI("Find Multipath device file for volume WWN %(wwn)s"),
+                 {'wwn': wwn})
+        # First look for the common path
+        wwn_dict = {'wwn': wwn}
+        path = "/dev/disk/by-id/dm-uuid-mpath-%(wwn)s" % wwn_dict
+        try:
+            self.wait_for_path(path)
+            return path
+        except exception.VolumeDeviceNotFound:
+            pass
+
+        # for some reason the common path wasn't found
+        # lets try the dev mapper path
+        path = "/dev/mapper/%(wwn)s" % wwn_dict
+        try:
+            self.wait_for_path(path)
+            return path
+        except exception.VolumeDeviceNotFound:
+            pass
+
+        # couldn't find a path
+        LOG.warning(_LW("couldn't find a valid multipath device path for "
+                        "%(wwn)s"), wwn_dict)
+        return None
+
+    def find_multipath_device(self, device):
+        """Discover multipath devices for a mpath device.
+
+           This uses the slow multipath -l command to find a
+           multipath device description, then screen scrapes
+           the output to discover the multipath device name
+           and it's devices.
+
         """
 
         mdev = None
@@ -167,19 +237,8 @@ class LinuxSCSI(executor.Executor):
                      if not re.match(MULTIPATH_ERROR_REGEX, line)]
             if lines:
 
-                # Use the device name, be it the WWID, mpathN or custom alias
-                # of a device to build the device path. This should be the
-                # first item on the first line of output from `multipath -l
-                # ${path}` or `multipath -l ${wwid}`..
                 mdev_name = lines[0].split(" ")[0]
                 mdev = '/dev/mapper/%s' % mdev_name
-
-                # Find the WWID for the LUN if we are using mpathN or aliases.
-                wwid_search = MULTIPATH_WWID_REGEX.search(lines[0])
-                if wwid_search is not None:
-                    mdev_id = wwid_search.group('wwid')
-                else:
-                    mdev_id = mdev_name
 
                 # Confirm that the device is present.
                 try:
@@ -187,6 +246,12 @@ class LinuxSCSI(executor.Executor):
                 except OSError:
                     LOG.warn(_LW("Couldn't find multipath device %s"), mdev)
                     return None
+
+                wwid_search = MULTIPATH_WWID_REGEX.search(lines[0])
+                if wwid_search is not None:
+                    mdev_id = wwid_search.group('wwid')
+                else:
+                    mdev_id = mdev_name
 
                 LOG.debug("Found multipath device = %(mdev)s",
                           {'mdev': mdev})

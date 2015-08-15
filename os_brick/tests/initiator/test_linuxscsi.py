@@ -93,6 +93,44 @@ class LinuxSCSITestCase(base.TestCase):
         expected_commands = [('multipath -F')]
         self.assertEqual(expected_commands, self.cmds)
 
+    def test_get_scsi_wwn(self):
+        fake_path = '/dev/disk/by-id/somepath'
+        fake_wwn = '1234567890'
+
+        def fake_execute(*cmd, **kwargs):
+            return fake_wwn, None
+
+        self.linuxscsi._execute = fake_execute
+        wwn = self.linuxscsi.get_scsi_wwn(fake_path)
+        self.assertEqual(fake_wwn, wwn)
+
+    @mock.patch.object(os.path, 'exists', return_value=True)
+    def test_find_multipath_device_path(self, exists_mock):
+        fake_wwn = '1234567890'
+        found_path = self.linuxscsi.find_multipath_device_path(fake_wwn)
+        expected_path = '/dev/disk/by-id/dm-uuid-mpath-%s' % fake_wwn
+        self.assertEqual(expected_path, found_path)
+
+    @mock.patch.object(os.path, 'exists')
+    def test_find_multipath_device_path_mapper(self, exists_mock):
+        # the wait loop tries 3 times before it gives up
+        # we want to test failing to find the
+        # /dev/disk/by-id/dm-uuid-mpath-<WWN> path
+        # but finding the
+        # /dev/mapper/<WWN> path
+        exists_mock.side_effect = [False, False, False, True]
+        fake_wwn = '1234567890'
+        found_path = self.linuxscsi.find_multipath_device_path(fake_wwn)
+        expected_path = '/dev/mapper/%s' % fake_wwn
+        self.assertEqual(expected_path, found_path)
+
+    @mock.patch.object(os.path, 'exists', return_value=False)
+    def test_find_multipath_device_path_fail(self, exists_mock):
+        fake_wwn = '1234567890'
+        found_path = self.linuxscsi.find_multipath_device_path(fake_wwn)
+        expected_path = None
+        self.assertEqual(expected_path, found_path)
+
     @mock.patch.object(linuxscsi.LinuxSCSI, 'find_multipath_device')
     @mock.patch.object(os.path, 'exists', return_value=True)
     def test_remove_multipath_device(self, exists_mock, mock_multipath):

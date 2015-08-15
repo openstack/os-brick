@@ -933,21 +933,26 @@ class FibreChannelConnectorTestCase(ConnectorTestCase):
     @mock.patch.object(linuxfc.LinuxFibreChannel, 'get_fc_hbas')
     @mock.patch.object(linuxfc.LinuxFibreChannel, 'get_fc_hbas_info')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'remove_scsi_device')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_scsi_wwn')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_device_info')
-    def test_connect_volume(self, get_device_info_mock, remove_device_mock,
+    def test_connect_volume(self, get_device_info_mock,
+                            get_scsi_wwn_mock,
+                            remove_device_mock,
                             get_fc_hbas_info_mock,
                             get_fc_hbas_mock, realpath_mock, exists_mock):
         get_fc_hbas_mock.side_effect = self.fake_get_fc_hbas
         get_fc_hbas_info_mock.side_effect = self.fake_get_fc_hbas_info
 
+        wwn = '1234567890'
         multipath_devname = '/dev/md-1'
         devices = {"device": multipath_devname,
-                   "id": "1234567890",
+                   "id": wwn,
                    "devices": [{'device': '/dev/sdb',
                                 'address': '1:0:0:1',
                                 'host': 1, 'channel': 0,
                                 'id': 0, 'lun': 1}]}
         get_device_info_mock.return_value = devices['devices'][0]
+        get_scsi_wwn_mock.return_value = wwn
 
         location = '10.0.2.15:3260'
         name = 'volume-00000001'
