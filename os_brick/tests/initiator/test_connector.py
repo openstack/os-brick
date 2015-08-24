@@ -1002,6 +1002,20 @@ class FibreChannelConnectorS390XTestCase(ConnectorTestCase):
         device_path = "/dev/disk/by-path/ccw-3-zfcp-5:0x0002000000000000"
         self.assertEqual(devices[0], device_path)
 
+    def test_get_lun_string(self):
+        lun = 1
+        lunstring = self.connector._get_lun_string(lun)
+        self.assertEqual(lunstring, "0x0001000000000000")
+        lun = 0xff
+        lunstring = self.connector._get_lun_string(lun)
+        self.assertEqual(lunstring, "0x00ff000000000000")
+        lun = 0x101
+        lunstring = self.connector._get_lun_string(lun)
+        self.assertEqual(lunstring, "0x0101000000000000")
+        lun = 0x4020400a
+        lunstring = self.connector._get_lun_string(lun)
+        self.assertEqual(lunstring, "0x4020400a00000000")
+
     @mock.patch.object(connector.FibreChannelConnectorS390X,
                        '_get_possible_devices', return_value=[(3, 5), ])
     @mock.patch.object(linuxfc.LinuxFibreChannelS390X, 'get_fc_hbas_info',
