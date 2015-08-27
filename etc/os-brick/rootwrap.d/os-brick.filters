@@ -1,0 +1,63 @@
+# os-brick command filters
+# This file should be owned by (and only-writeable by) the root user
+
+[Filters]
+# remotefs/remotefs.py: 'mount', '-t', 'sofs' ...
+mount: CommandFilter, mount, root
+
+# initiator/linuxscsi.py: 'blockdev', '--flushbufs', device
+blockdev: RegExpFilter, blockdev, root, blockdev, (--getsize64|--flushbufs), /dev/.*
+
+# initiator/linuxscsi.py: 'tee', canonpath
+tee: CommandFilter, tee, root
+
+# remotefs/remotefs.py: 'mkdir', canonpath
+mkdir: CommandFilter, mkdir, root
+
+# remotefs/remotefs.py: 'chown', '-R', 'root'
+chown: RegExpFilter, chown, root, chown root:root /etc/pstorage/clusters/(?!.*/\.\.).*
+
+# initiator/connector.py: 'ip', 'addr', 'list'
+ip: CommandFilter, ip, root
+
+# initiator/connector.py: 'dd', if=%(path)s % ("path": path}
+dd: CommandFilter, dd, root
+
+# initiator/connector.py: 'iscsiadm', '-m', ...
+iscsiadm: CommandFilter, iscsiadm, root
+
+# initiator/connector.py: 'aoe-revalidate', aoedev
+# initiator/connector.py: 'aoe-discover'
+# initiator/connector.py: 'aoe-flush'
+aoe-revalidate: CommandFilter, aoe-revalidate, root
+aoe-discover: CommandFilter, aoe-discover, root
+aoe-flush: CommandFilter, aoe-flush, root
+
+# initiator/connector.py:
+read_initiator: ReadFileFilter, /etc/iscsi/initiatorname.iscsi
+
+# initiator/connector.py: 'multipath', '-ll'
+# initiator/linuxscsi.py: 'multipath', '-ll'
+multipath: CommandFilter, multipath, root
+
+# initiator/connector.py: 'multipathd', 'show', 'status'
+multipathd: CommandFilter, multipathd, root
+
+# initiator/linuxfc.py: 'systool', '-c', 'fc_host', '-v'
+systool: CommandFilter, systool, root
+
+# initiator/linuxscsi.py:: 'sg_scan', device
+sg_scan: CommandFilter, sg_scan, root
+
+# remotefs/remotefs.py: 'cp', '-f', tmp_bs_path
+cp: CommandFilter, cp, root
+
+# initiator/connector.py:
+drv_cfg: CommandFilter, /opt/emc/scaleio/sdc/bin/drv_cfg, root, /opt/emc/scaleio/sdc/bin/drv_cfg, --query_guid
+
+# initiator/connector.py
+sds_cli: CommandFilter, /usr/local/bin/sds/sds_cli, root
+
+# initiator/connector.py: 'vgs-cluster', 'domain-list', '-l'
+# initiator/connector.py: 'vgs-cluster', 'space-set-apphosts', '-n'...
+vgs-cluster: CommandFilter, vgs-cluster, root
