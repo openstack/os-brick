@@ -72,6 +72,7 @@ HUAWEISDSHYPERVISOR = "HUAWEISDSHYPERVISOR"
 HGST = "HGST"
 RBD = "RBD"
 SCALEIO = "SCALEIO"
+SCALITY = "SCALITY"
 
 
 def _check_multipathd_running(root_helper, enforce_multipath):
@@ -195,7 +196,7 @@ class InitiatorConnector(executor.Executor):
                                 execute=execute,
                                 device_scan_attempts=device_scan_attempts,
                                 *args, **kwargs)
-        elif protocol == NFS or protocol == GLUSTERFS:
+        elif protocol in (NFS, GLUSTERFS, SCALITY):
             return RemoteFsConnector(mount_type=protocol.lower(),
                                      root_helper=root_helper,
                                      driver=driver,
@@ -1215,14 +1216,11 @@ class RemoteFsConnector(InitiatorConnector):
         conn = kwargs.get('conn')
         if conn:
             mount_point_base = conn.get('mount_point_base')
-            if mount_type.lower() == 'nfs':
-                kwargs['nfs_mount_point_base'] =\
-                    kwargs.get('nfs_mount_point_base') or\
-                    mount_point_base
-            elif mount_type.lower() == 'glusterfs':
-                kwargs['glusterfs_mount_point_base'] =\
-                    kwargs.get('glusterfs_mount_point_base') or\
-                    mount_point_base
+            mount_type_lower = mount_type.lower()
+            if mount_type_lower in ('nfs', 'glusterfs', 'scality'):
+                kwargs[mount_type_lower + '_mount_point_base'] = (
+                    kwargs.get(mount_type_lower + '_mount_point_base') or
+                    mount_point_base)
         else:
             LOG.warning(_LW("Connection details not present."
                             " RemoteFsClient may not initialize properly."))

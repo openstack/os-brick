@@ -35,34 +35,30 @@ class RemoteFsClient(object):
     def __init__(self, mount_type, root_helper,
                  execute=putils.execute, *args, **kwargs):
 
-        self._mount_type = mount_type
-        if mount_type == "nfs":
-            self._mount_base = kwargs.get('nfs_mount_point_base', None)
-            if not self._mount_base:
-                raise exception.InvalidParameterValue(
-                    err=_('nfs_mount_point_base required'))
-            self._mount_options = kwargs.get('nfs_mount_options', None)
-            self._check_nfs_options()
-        elif mount_type == "cifs":
-            self._mount_base = kwargs.get('smbfs_mount_point_base', None)
-            if not self._mount_base:
-                raise exception.InvalidParameterValue(
-                    err=_('smbfs_mount_point_base required'))
-            self._mount_options = kwargs.get('smbfs_mount_options', None)
-        elif mount_type == "glusterfs":
-            self._mount_base = kwargs.get('glusterfs_mount_point_base', None)
-            if not self._mount_base:
-                raise exception.InvalidParameterValue(
-                    err=_('glusterfs_mount_point_base required'))
-            self._mount_options = None
-        elif mount_type == "vzstorage":
-            self._mount_base = kwargs.get('vzstorage_mount_point_base', None)
-            if not self._mount_base:
-                raise exception.InvalidParameterValue(
-                    err=_('vzstorage_mount_point_base required'))
-            self._mount_options = None
-        else:
+        mount_type_to_option_prefix = {
+            'nfs': 'nfs',
+            'cifs': 'smbfs',
+            'glusterfs': 'glusterfs',
+            'vzstorage': 'vzstorage',
+            'scality': 'scality_sofs'
+        }
+
+        if mount_type not in mount_type_to_option_prefix:
             raise exception.ProtocolNotSupported(protocol=mount_type)
+
+        self._mount_type = mount_type
+        option_prefix = mount_type_to_option_prefix[mount_type]
+
+        self._mount_base = kwargs.get(option_prefix + '_mount_point_base')
+        if not self._mount_base:
+            raise exception.InvalidParameterValue(
+                err=_('%s_mount_point_base required') % option_prefix)
+
+        self._mount_options = kwargs.get(option_prefix + '_mount_options')
+
+        if mount_type == "nfs":
+            self._check_nfs_options()
+
         self.root_helper = root_helper
         self.set_execute(execute)
 
