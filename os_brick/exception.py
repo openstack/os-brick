@@ -104,3 +104,7 @@ class VolumePathNotRemoved(BrickException):
 
 class ProtocolNotSupported(BrickException):
     message = _("Connect to volume via protocol %(protocol)s not supported.")
+
+
+class TargetPortalNotFound(BrickException):
+    message = _("Unable to find target portal %(target_portal)s.")
