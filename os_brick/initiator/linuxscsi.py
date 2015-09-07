@@ -160,7 +160,7 @@ class LinuxSCSI(executor.Executor):
         if not os.path.exists(volume_path):
             LOG.debug("%(path)s doesn't exists yet.", {'path': volume_path})
             raise exception.VolumeDeviceNotFound(
-                volume_path=volume_path)
+                device=volume_path)
         else:
             LOG.debug("%s has shown up.", volume_path)
 
