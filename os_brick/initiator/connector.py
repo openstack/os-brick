@@ -531,6 +531,9 @@ class ISCSIConnector(InitiatorConnector):
             multipath_device = self._get_multipath_device_name(host_device)
             if multipath_device is not None:
                 host_device = multipath_device
+                LOG.debug("Unable to find multipath device name for "
+                          "volume. Only using path %(device)s "
+                          "for volume.", {'device': host_device})
 
         device_info['path'] = host_device
         return device_info
@@ -1036,6 +1039,9 @@ class FibreChannelConnector(InitiatorConnector):
                     # we didn't find a multipath device.
                     # so we assume the kernel only sees 1 device
                     device_path = self.host_device
+                    LOG.debug("Unable to find multipath device name for "
+                              "volume. Using path %(device)s for volume.",
+                              {'device': self.host_device})
         else:
             device_path = self.host_device
 
