@@ -486,7 +486,8 @@ class ISCSIConnector(InitiatorConnector):
                     break
                 else:
                     LOG.warning(_LW(
-                        'Failed to login to any of the iSCSI targets.'))
+                        'Failed to connect to iSCSI portal %(portal)s.'),
+                        {'portal': props['target_portal']})
 
             host_devices = self._get_device_path(target_props)
 
