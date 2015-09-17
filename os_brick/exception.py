@@ -108,3 +108,7 @@ class ProtocolNotSupported(BrickException):
 
 class TargetPortalNotFound(BrickException):
     message = _("Unable to find target portal %(target_portal)s.")
+
+
+class BlockDeviceReadOnly(BrickException):
+    message = _("Block device %(device)s is Read-Only.")

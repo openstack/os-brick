@@ -1043,6 +1043,16 @@ class FibreChannelConnector(InitiatorConnector):
                     LOG.debug("Unable to find multipath device name for "
                               "volume. Using path %(device)s for volume.",
                               {'device': self.host_device})
+
+            if connection_properties.get('access_mode', '') != 'ro':
+                try:
+                    # Sometimes the multipath devices will show up as read only
+                    # initially and need additional time/rescans to get to RW.
+                    self._linuxscsi.wait_for_rw(device_wwn, device_path)
+                except exception.BlockDeviceReadOnly:
+                    LOG.warning(_LW('Block device %s is still read-only. '
+                                    'Continuing anyway.'), device_path)
+
         else:
             device_path = self.host_device
 
