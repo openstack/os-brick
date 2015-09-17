@@ -300,3 +300,160 @@ class LinuxSCSITestCase(base.TestCase):
         self.assertEqual("1", info['devices'][1]['channel'])
         self.assertEqual("0", info['devices'][1]['id'])
         self.assertEqual("3", info['devices'][1]['lun'])
+
+    @mock.patch.object(time, 'sleep')
+    def test_wait_for_rw(self, mock_sleep):
+        lsblk_output = """3624a93709a738ed78583fd1200143029 (dm-2)  0
+sdb                                       0
+3624a93709a738ed78583fd120014724e (dm-1)  0
+sdc                                       0
+3624a93709a738ed78583fd120014a2bb (dm-0)  0
+sdd                                       0
+3624a93709a738ed78583fd1200143029 (dm-2)  0
+sde                                       0
+3624a93709a738ed78583fd120014724e (dm-1)  0
+sdf                                       0
+3624a93709a738ed78583fd120014a2bb (dm-0)  0
+sdg                                       0
+3624a93709a738ed78583fd1200143029 (dm-2)  0
+sdh                                       0
+3624a93709a738ed78583fd120014724e (dm-1)  0
+sdi                                       0
+3624a93709a738ed78583fd120014a2bb (dm-0)  0
+sdj                                       0
+3624a93709a738ed78583fd1200143029 (dm-2)  0
+sdk                                       0
+3624a93709a738ed78583fd120014724e (dm-1)  0
+sdl                                       0
+3624a93709a738ed78583fd120014a2bb (dm-0)  0
+sdm                                       0
+vda1                                      0
+vdb                                       0
+vdb1                                      0
+loop0                                     0"""
+
+        mock_execute = mock.Mock()
+        mock_execute.return_value = (lsblk_output, None)
+        self.linuxscsi._execute = mock_execute
+
+        wwn = '3624a93709a738ed78583fd120014a2bb'
+        path = '/dev/disk/by-id/dm-uuid-mpath-' + wwn
+
+        # Ensure no exception is raised and no sleep is called
+        self.linuxscsi.wait_for_rw(wwn, path)
+        self.assertFalse(mock_sleep.called)
+
+    @mock.patch.object(time, 'sleep')
+    def test_wait_for_rw_needs_retry(self, mock_sleep):
+        lsblk_ro_output = """3624a93709a738ed78583fd1200143029 (dm-2)  0
+sdb                                       0
+3624a93709a738ed78583fd120014724e (dm-1)  0
+sdc                                       0
+3624a93709a738ed78583fd120014a2bb (dm-0)  0
+sdd                                       0
+3624a93709a738ed78583fd1200143029 (dm-2)  1
+sde                                       0
+3624a93709a738ed78583fd120014724e (dm-1)  0
+sdf                                       0
+3624a93709a738ed78583fd120014a2bb (dm-0)  0
+sdg                                       0
+3624a93709a738ed78583fd1200143029 (dm-2)  1
+sdh                                       0
+3624a93709a738ed78583fd120014724e (dm-1)  0
+sdi                                       0
+3624a93709a738ed78583fd120014a2bb (dm-0)  0
+sdj                                       0
+3624a93709a738ed78583fd1200143029 (dm-2)  1
+sdk                                       0
+3624a93709a738ed78583fd120014724e (dm-1)  0
+sdl                                       0
+3624a93709a738ed78583fd120014a2bb (dm-0)  0
+sdm                                       0
+vda1                                      0
+vdb                                       0
+vdb1                                      0
+loop0                                     0"""
+        lsblk_rw_output = """3624a93709a738ed78583fd1200143029 (dm-2)  0
+sdb                                       0
+3624a93709a738ed78583fd120014724e (dm-1)  0
+sdc                                       0
+3624a93709a738ed78583fd120014a2bb (dm-0)  0
+sdd                                       0
+3624a93709a738ed78583fd1200143029 (dm-2)  0
+sde                                       0
+3624a93709a738ed78583fd120014724e (dm-1)  0
+sdf                                       0
+3624a93709a738ed78583fd120014a2bb (dm-0)  0
+sdg                                       0
+3624a93709a738ed78583fd1200143029 (dm-2)  0
+sdh                                       0
+3624a93709a738ed78583fd120014724e (dm-1)  0
+sdi                                       0
+3624a93709a738ed78583fd120014a2bb (dm-0)  0
+sdj                                       0
+3624a93709a738ed78583fd1200143029 (dm-2)  0
+sdk                                       0
+3624a93709a738ed78583fd120014724e (dm-1)  0
+sdl                                       0
+3624a93709a738ed78583fd120014a2bb (dm-0)  0
+sdm                                       0
+vda1                                      0
+vdb                                       0
+vdb1                                      0
+loop0                                     0"""
+        mock_execute = mock.Mock()
+        mock_execute.side_effect = [(lsblk_ro_output, None),
+                                    ('', None),  # multipath -r output
+                                    (lsblk_rw_output, None)]
+        self.linuxscsi._execute = mock_execute
+
+        wwn = '3624a93709a738ed78583fd1200143029'
+        path = '/dev/disk/by-id/dm-uuid-mpath-' + wwn
+
+        self.linuxscsi.wait_for_rw(wwn, path)
+        self.assertEqual(1, mock_sleep.call_count)
+
+    @mock.patch.object(time, 'sleep')
+    def test_wait_for_rw_always_readonly(self, mock_sleep):
+        lsblk_output = """3624a93709a738ed78583fd1200143029 (dm-2)  0
+sdb                                       0
+3624a93709a738ed78583fd120014724e (dm-1)  0
+sdc                                       0
+3624a93709a738ed78583fd120014a2bb (dm-0)  1
+sdd                                       0
+3624a93709a738ed78583fd1200143029 (dm-2)  0
+sde                                       0
+3624a93709a738ed78583fd120014724e (dm-1)  0
+sdf                                       0
+3624a93709a738ed78583fd120014a2bb (dm-0)  1
+sdg                                       0
+3624a93709a738ed78583fd1200143029 (dm-2)  0
+sdh                                       0
+3624a93709a738ed78583fd120014724e (dm-1)  0
+sdi                                       0
+3624a93709a738ed78583fd120014a2bb (dm-0)  1
+sdj                                       0
+3624a93709a738ed78583fd1200143029 (dm-2)  0
+sdk                                       0
+3624a93709a738ed78583fd120014724e (dm-1)  0
+sdl                                       0
+3624a93709a738ed78583fd120014a2bb (dm-0)  1
+sdm                                       0
+vda1                                      0
+vdb                                       0
+vdb1                                      0
+loop0                                     0"""
+
+        mock_execute = mock.Mock()
+        mock_execute.return_value = (lsblk_output, None)
+        self.linuxscsi._execute = mock_execute
+
+        wwn = '3624a93709a738ed78583fd120014a2bb'
+        path = '/dev/disk/by-id/dm-uuid-mpath-' + wwn
+
+        self.assertRaises(exception.BlockDeviceReadOnly,
+                          self.linuxscsi.wait_for_rw,
+                          wwn,
+                          path)
+
+        self.assertEqual(4, mock_sleep.call_count)
