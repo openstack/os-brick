@@ -1817,7 +1817,7 @@ class ScaleIOConnector(InitiatorConnector):
             raise exception.BrickException(message=msg)
 
         if r.status_code != 200 and "errorCode" in sdc_id:
-            msg = (_("Error getting sdc id from ip %(sdc_ip): %(err)s") %
+            msg = (_("Error getting sdc id from ip %(sdc_ip)s: %(err)s") %
                    {'sdc_ip': self.local_sdc_ip, 'err': sdc_id['message']})
 
             LOG.error(msg)
