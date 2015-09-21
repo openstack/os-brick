@@ -4,4 +4,4 @@ source = brick
 omit = brick/tests/*,brick/openstack/*
 
 [report]
-ignore-errors = True
+ignore_errors = True
