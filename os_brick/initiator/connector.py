@@ -342,9 +342,9 @@ class ISCSIConnector(InitiatorConnector):
                 if data[2] in self.supported_transports:
                     return transport_iface
 
-        LOG.warn(_LW("No useable transport found for iscsi iface %s. "
-                     "Falling back to default transport."),
-                 transport_iface)
+        LOG.warning(_LW("No useable transport found for iscsi iface %s. "
+                        "Falling back to default transport."),
+                    transport_iface)
         return 'default'
 
     def _get_transport(self):
@@ -874,7 +874,7 @@ class ISCSIConnector(InitiatorConnector):
                 mpath_map['/dev/' + m[1].split(" ")[0]] = mpath_dev
 
         if mpath_line and not mpath_map:
-            LOG.warn(_LW("Failed to parse the output of multipath -ll."))
+            LOG.warning(_LW("Failed to parse the output of multipath -ll."))
         return mpath_map
 
     def _run_iscsiadm_bare(self, iscsi_command, **kwargs):

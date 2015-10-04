@@ -244,7 +244,8 @@ class LinuxSCSI(executor.Executor):
                 try:
                     os.stat(mdev)
                 except OSError:
-                    LOG.warn(_LW("Couldn't find multipath device %s"), mdev)
+                    LOG.warning(_LW("Couldn't find multipath device %s"),
+                                mdev)
                     return None
 
                 wwid_search = MULTIPATH_WWID_REGEX.search(lines[0])
