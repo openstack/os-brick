@@ -123,11 +123,11 @@ class LinuxSCSI(executor.Executor):
         LOG.debug("remove multipath device %s", device)
         mpath_dev = self.find_multipath_device(device)
         if mpath_dev:
+            self.flush_multipath_device(mpath_dev['id'])
             devices = mpath_dev['devices']
             LOG.debug("multipath LUNs to remove %s", devices)
             for device in devices:
                 self.remove_scsi_device(device['device'])
-            self.flush_multipath_device(mpath_dev['id'])
 
     def flush_device_io(self, device):
         """This is used to flush any remaining IO in the buffers."""
