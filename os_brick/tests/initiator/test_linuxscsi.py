@@ -164,11 +164,11 @@ class LinuxSCSITestCase(base.TestCase):
 
         self.linuxscsi.remove_multipath_device('/dev/dm-3')
         expected_commands = [
+            ('multipath -f 350002ac20398383d'),
             ('blockdev --flushbufs /dev/sde'),
             ('tee -a /sys/block/sde/device/delete'),
             ('blockdev --flushbufs /dev/sdf'),
-            ('tee -a /sys/block/sdf/device/delete'),
-            ('multipath -f 350002ac20398383d'), ]
+            ('tee -a /sys/block/sdf/device/delete'), ]
         self.assertEqual(expected_commands, self.cmds)
 
     def test_find_multipath_device_3par_ufn(self):
