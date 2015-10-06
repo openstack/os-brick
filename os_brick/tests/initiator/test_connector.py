@@ -706,6 +706,54 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
         self.assertEqual(expected_result, result)
         self.assertEqual(expected_calls, mock_connect.call_args_list)
 
+    @mock.patch.object(os.path, 'exists', return_value=True)
+    @mock.patch.object(connector.ISCSIConnector,
+                       '_get_target_portals_from_iscsiadm_output')
+    @mock.patch.object(connector.ISCSIConnector, '_connect_to_iscsi_portal')
+    @mock.patch.object(host_driver.HostDriver, 'get_all_block_devices')
+    @mock.patch.object(connector.ISCSIConnector, '_get_iscsi_devices')
+    @mock.patch.object(connector.ISCSIConnector, '_rescan_multipath')
+    @mock.patch.object(connector.ISCSIConnector, '_run_multipath')
+    @mock.patch.object(connector.ISCSIConnector, '_get_multipath_device_name')
+    def test_connect_volume_multipath_failed_iscsi_login(
+            self, mock_device_name, mock_run_multipath,
+            mock_rescan_multipath, mock_iscsi_devices, mock_devices,
+            mock_connect, mock_portals, mock_exists):
+        location1 = '10.0.2.15:3260'
+        location2 = '10.0.3.15:3260'
+        name1 = 'volume-00000001-1'
+        name2 = 'volume-00000001-2'
+        iqn1 = 'iqn.2010-10.org.openstack:%s' % name1
+        iqn2 = 'iqn.2010-10.org.openstack:%s' % name2
+        fake_multipath_dev = '/dev/mapper/fake-multipath-dev'
+        vol = {'id': 1, 'name': name1}
+        connection_properties = self.iscsi_connection(vol, location1, iqn1)
+        devs = ['/dev/disk/by-path/ip-%s-iscsi-%s-lun-1' % (location1, iqn1),
+                '/dev/disk/by-path/ip-%s-iscsi-%s-lun-2' % (location2, iqn2)]
+        mock_devices.return_value = devs
+        mock_iscsi_devices.return_value = devs
+        mock_device_name.return_value = fake_multipath_dev
+        mock_portals.return_value = [[location1, iqn1], [location2, iqn1],
+                                     [location2, iqn2]]
+
+        mock_connect.return_value = False
+        self.assertRaises(exception.FailedISCSITargetPortalLogin,
+                          self.connector_with_multipath.connect_volume,
+                          connection_properties['data'])
+
+    @mock.patch.object(connector.ISCSIConnector, '_connect_to_iscsi_portal')
+    def test_connect_volume_failed_iscsi_login(self, mock_connect):
+        location1 = '10.0.2.15:3260'
+        name1 = 'volume-00000001-1'
+        iqn1 = 'iqn.2010-10.org.openstack:%s' % name1
+        vol = {'id': 1, 'name': name1}
+        connection_properties = self.iscsi_connection(vol, location1, iqn1)
+
+        mock_connect.return_value = False
+        self.assertRaises(exception.FailedISCSITargetPortalLogin,
+                          self.connector.connect_volume,
+                          connection_properties['data'])
+
     @mock.patch.object(time, 'sleep')
     @mock.patch.object(os.path, 'exists', return_value=False)
     def test_connect_volume_with_not_found_device(self, exists_mock,
