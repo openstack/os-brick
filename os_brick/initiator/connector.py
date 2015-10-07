@@ -1425,9 +1425,10 @@ class RBDConnector(InitiatorConnector):
 
     def disconnect_volume(self, connection_properties, device_info):
         """Disconnect a volume."""
-        rbd_handle = device_info.get('path', None)
-        if rbd_handle is not None:
-            rbd_handle.close()
+        if device_info:
+            rbd_handle = device_info.get('path', None)
+            if rbd_handle is not None:
+                rbd_handle.close()
 
     def check_valid_device(self, path, run_as_root=True):
         """Verify an existing RBD handle is connected and valid."""
