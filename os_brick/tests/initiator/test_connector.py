@@ -416,7 +416,7 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
                           'Test requires /dev/disk/by-path')
     def test_connect_volume_with_alternative_targets(self):
         location = '10.0.2.15:3260'
-        location2 = '10.0.3.15:3260'
+        location2 = '[2001:db8::1]:3260'
         iqn = 'iqn.2010-10.org.openstack:volume-00000001'
         iqn2 = 'iqn.2010-10.org.openstack:volume-00000001-2'
         extra_props = {'target_portals': [location, location2],
@@ -453,7 +453,8 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
     def test_connect_volume_with_alternative_targets_primary_error(
             self, mock_iscsiadm, mock_exists):
         location = '10.0.2.15:3260'
-        location2 = '10.0.3.15:3260'
+        location2 = '[2001:db8::1]:3260'
+        dev_loc2 = '2001:db8::1:3260'  # udev location2
         name = 'volume-00000001'
         iqn = 'iqn.2010-10.org.openstack:%s' % name
         iqn2 = 'iqn.2010-10.org.openstack:%s-2' % name
@@ -462,7 +463,7 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
         connection_info['data']['target_portals'] = [location, location2]
         connection_info['data']['target_iqns'] = [iqn, iqn2]
         connection_info['data']['target_luns'] = [1, 2]
-        dev_str2 = '/dev/disk/by-path/ip-%s-iscsi-%s-lun-2' % (location2, iqn2)
+        dev_str2 = '/dev/disk/by-path/ip-%s-iscsi-%s-lun-2' % (dev_loc2, iqn2)
 
         def fake_run_iscsiadm(iscsi_properties, iscsi_command, **kwargs):
             if iscsi_properties['target_portal'] == location:
@@ -594,7 +595,8 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
             mock_get_device_map, mock_devices, mock_exists, mock_scsi_wwn):
         mock_scsi_wwn.return_value = FAKE_SCSI_WWN
         location1 = '10.0.2.15:3260'
-        location2 = '10.0.3.15:3260'
+        location2 = '[2001:db8::1]:3260'
+        dev_loc2 = '2001:db8::1:3260'  # udev location2
         name1 = 'volume-00000001-1'
         name2 = 'volume-00000001-2'
         iqn1 = 'iqn.2010-10.org.openstack:%s' % name1
@@ -604,7 +606,7 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
         connection_properties = self.iscsi_connection_multipath(
             vol, [location1, location2], [iqn1, iqn2], [1, 2])
         devs = ['/dev/disk/by-path/ip-%s-iscsi-%s-lun-1' % (location1, iqn1),
-                '/dev/disk/by-path/ip-%s-iscsi-%s-lun-2' % (location2, iqn2)]
+                '/dev/disk/by-path/ip-%s-iscsi-%s-lun-2' % (dev_loc2, iqn2)]
         mock_devices.return_value = devs
         mock_iscsi_devices.return_value = devs
         mock_device_name.return_value = fake_multipath_dev
@@ -648,7 +650,8 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
             mock_scsi_wwn):
         mock_scsi_wwn.return_value = FAKE_SCSI_WWN
         location1 = '10.0.2.15:3260'
-        location2 = '10.0.3.15:3260'
+        location2 = '[2001:db8::1]:3260'
+        dev_loc2 = '2001:db8::1:3260'  # udev location2
         name1 = 'volume-00000001-1'
         name2 = 'volume-00000001-2'
         iqn1 = 'iqn.2010-10.org.openstack:%s' % name1
@@ -658,7 +661,7 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
         connection_properties = self.iscsi_connection_multipath(
             vol, [location1, location2], [iqn1, iqn2], [1, 2])
         dev1 = '/dev/disk/by-path/ip-%s-iscsi-%s-lun-1' % (location1, iqn1)
-        dev2 = '/dev/disk/by-path/ip-%s-iscsi-%s-lun-2' % (location2, iqn2)
+        dev2 = '/dev/disk/by-path/ip-%s-iscsi-%s-lun-2' % (dev_loc2, iqn2)
 
         def fake_run_iscsiadm(iscsi_properties, iscsi_command, **kwargs):
             if iscsi_properties['target_portal'] == location1:
@@ -720,7 +723,8 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
             mock_connect, mock_portals, mock_exists, mock_scsi_wwn):
         mock_scsi_wwn.return_value = FAKE_SCSI_WWN
         location1 = '10.0.2.15:3260'
-        location2 = '10.0.3.15:3260'
+        location2 = '[2001:db8::1]:3260'
+        dev_loc2 = '2001:db8::1:3260'  # udev location2
         name1 = 'volume-00000001-1'
         name2 = 'volume-00000001-2'
         iqn1 = 'iqn.2010-10.org.openstack:%s' % name1
@@ -729,7 +733,7 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
         vol = {'id': 1, 'name': name1}
         connection_properties = self.iscsi_connection(vol, location1, iqn1)
         devs = ['/dev/disk/by-path/ip-%s-iscsi-%s-lun-1' % (location1, iqn1),
-                '/dev/disk/by-path/ip-%s-iscsi-%s-lun-2' % (location2, iqn2)]
+                '/dev/disk/by-path/ip-%s-iscsi-%s-lun-2' % (dev_loc2, iqn2)]
         mock_devices.return_value = devs
         mock_iscsi_devices.return_value = devs
         mock_device_name.return_value = fake_multipath_dev
