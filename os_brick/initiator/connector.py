@@ -446,6 +446,7 @@ class ISCSIConnector(InitiatorConnector):
 
         device_info = {'type': 'block'}
 
+        connected_to_portal = False
         if self.use_multipath:
             # Multipath installed, discovering other targets if available
             try:
@@ -474,7 +475,8 @@ class ISCSIConnector(InitiatorConnector):
                 props = copy.deepcopy(connection_properties)
                 props['target_portal'] = ip
                 props['target_iqn'] = iqn
-                self._connect_to_iscsi_portal(props)
+                if self._connect_to_iscsi_portal(props):
+                    connected_to_portal = True
 
             self._rescan_iscsi()
             host_devices = self._get_device_path(connection_properties)
@@ -483,13 +485,19 @@ class ISCSIConnector(InitiatorConnector):
             for props in self._iterate_all_targets(connection_properties):
                 if self._connect_to_iscsi_portal(props):
                     target_props = props
+                    connected_to_portal = True
+                    host_devices = self._get_device_path(target_props)
                     break
                 else:
                     LOG.warning(_LW(
                         'Failed to connect to iSCSI portal %(portal)s.'),
                         {'portal': props['target_portal']})
 
-            host_devices = self._get_device_path(target_props)
+        # make sure we've logged into an iSCSI portal
+        if not connected_to_portal:
+            msg = _("Could not login to any iSCSI portal.")
+            LOG.error(msg)
+            raise exception.FailedISCSITargetPortalLogin(message=msg)
 
         # The /dev/disk/by-path/... node is not always present immediately
         # TODO(justinsb): This retry-with-delay is a pattern, move to utils?
