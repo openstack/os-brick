@@ -1022,6 +1022,23 @@ class FibreChannelConnectorTestCase(ConnectorTestCase):
                     'target_lun': 1,
                 }}
 
+    def test_get_pci_num(self):
+        hba = {'device_path': "/sys/devices/pci0000:00/0000:00:03.0"
+                              "/0000:05:00.3/host2/fc_host/host2"}
+        pci_num = self.connector._get_pci_num(hba)
+        self.assertEqual("0000:05:00.3", pci_num)
+
+        hba = {'device_path': "/sys/devices/pci0000:00/0000:00:03.0"
+                              "/0000:05:00.3/0000:06:00.6/host2/fc_host/host2"}
+        pci_num = self.connector._get_pci_num(hba)
+        self.assertEqual("0000:06:00.6", pci_num)
+
+        hba = {'device_path': "/sys/devices/pci0000:20/0000:20:03.0"
+                              "/0000:21:00.2/net/ens2f2/ctlr_2/host3"
+                              "/fc_host/host3"}
+        pci_num = self.connector._get_pci_num(hba)
+        self.assertEqual("0000:21:00.2", pci_num)
+
     @mock.patch.object(os.path, 'exists', return_value=True)
     @mock.patch.object(linuxfc.LinuxFibreChannel, 'get_fc_hbas')
     @mock.patch.object(linuxfc.LinuxFibreChannel, 'get_fc_hbas_info')
