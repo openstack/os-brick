@@ -164,6 +164,40 @@ class LinuxSCSI(executor.Executor):
         else:
             LOG.debug("%s has shown up.", volume_path)
 
+    @utils.retry(exceptions=exception.BlockDeviceReadOnly, retries=5)
+    def wait_for_rw(self, wwn, device_path):
+        """Wait for block device to be Read-Write."""
+        LOG.debug("Checking to see if %s is read-only.",
+                  device_path)
+        out, info = self._execute('lsblk', '-o', 'NAME,RO', '-l', '-n')
+        LOG.debug("lsblk output: %s", out)
+        blkdevs = out.splitlines()
+        for blkdev in blkdevs:
+            # Entries might look like:
+            #
+            #   "3624a93709a738ed78583fd120013902b (dm-1)  1"
+            #
+            # or
+            #
+            #   "sdd                                       0"
+            #
+            # We are looking for the first and last part of them. For FC
+            # multipath devices the name is in the format of '<WWN> (dm-<ID>)'
+            blkdev_parts = blkdev.split(' ')
+            ro = blkdev_parts[-1]
+            name = blkdev_parts[0]
+
+            # We must validate that all pieces of the dm-# device are rw,
+            # if some are still ro it can cause problems.
+            if wwn in name and int(ro) == 1:
+                LOG.debug("Block device %s is read-only", device_path)
+                self._execute('multipath', '-r', check_exit_code=[0, 1, 21],
+                              run_as_root=True, root_helper=self._root_helper)
+                raise exception.BlockDeviceReadOnly(
+                    device=device_path)
+        else:
+            LOG.debug("Block device %s is not read-only.", device_path)
+
     def find_multipath_device_path(self, wwn):
         """Look for the multipath device file for a volume WWN.
 
