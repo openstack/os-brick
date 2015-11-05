@@ -544,7 +544,13 @@ class ISCSIConnector(InitiatorConnector):
                           "volume. Only using path %(device)s "
                           "for volume.", {'device': host_device})
 
+        # find out the WWN of the device
+        device_wwn = self._linuxscsi.get_scsi_wwn(host_device)
+        LOG.debug("Device WWN = '%(wwn)s'", {'wwn': device_wwn})
+        device_info['scsi_wwn'] = device_wwn
         device_info['path'] = host_device
+
+        LOG.debug("connect_volume returning %s", device_info)
         return device_info
 
     @synchronized('connect_volume')
@@ -1025,6 +1031,7 @@ class FibreChannelConnector(InitiatorConnector):
         # find out the WWN of the device
         device_wwn = self._linuxscsi.get_scsi_wwn(self.host_device)
         LOG.debug("Device WWN = '%(wwn)s'", {'wwn': device_wwn})
+        device_info['scsi_wwn'] = device_wwn
 
         # see if the new drive is part of a multipath
         # device.  If so, we'll use the multipath device.
@@ -1065,6 +1072,7 @@ class FibreChannelConnector(InitiatorConnector):
             device_path = self.host_device
 
         device_info['path'] = device_path
+        LOG.debug("connect_volume returning %s", device_info)
         return device_info
 
     def _get_host_devices(self, possible_devs, lun):
