@@ -32,6 +32,9 @@ LOG = logging.getLogger(__name__)
 
 MULTIPATH_ERROR_REGEX = re.compile("\w{3} \d+ \d\d:\d\d:\d\d \|.*$")
 MULTIPATH_WWID_REGEX = re.compile("\((?P<wwid>.+)\)")
+MULTIPATH_DEVICE_ACTIONS = ['unchanged:', 'reject:', 'reload:',
+                            'switchpg:', 'rename:', 'create:',
+                            'resize:']
 
 
 class LinuxSCSI(executor.Executor):
@@ -272,6 +275,10 @@ class LinuxSCSI(executor.Executor):
             if lines:
 
                 mdev_name = lines[0].split(" ")[0]
+
+                if mdev_name in MULTIPATH_DEVICE_ACTIONS:
+                    mdev_name = lines[0].split(" ")[1]
+
                 mdev = '/dev/mapper/%s' % mdev_name
 
                 # Confirm that the device is present.
