@@ -376,6 +376,20 @@ class InitiatorConnector(executor.Executor):
         """
         pass
 
+    @abc.abstractmethod
+    def extend_volume(self, connection_properties):
+        """Update the attached volume's size.
+
+        This method will attempt to update the local hosts's
+        volume after the volume has been extended on the remote
+        system.  The new volume size in bytes will be returned.
+        If there is a failure to update, then None will be returned.
+
+        :param connection_properties: The volume connection properties.
+        :returns: new size of the volume.
+        """
+        pass
+
     def get_all_available_volumes(self, connection_properties=None):
         """Return all volumes that exist in the search directory.
 
@@ -423,6 +437,9 @@ class FakeConnector(InitiatorConnector):
 
     def get_search_path(self):
         return '/dev/disk/by-path'
+
+    def extend_volume(self, connection_properties):
+        return None
 
     def get_all_available_volumes(self, connection_properties=None):
         return ['/dev/disk/by-path/fake-volume-1',
@@ -740,6 +757,25 @@ class ISCSIConnector(InitiatorConnector):
             '-v', connection_properties['discovery_auth_password'],
             run_as_root=True,
             root_helper=self._root_helper)
+
+    @synchronized('extend_volume')
+    def extend_volume(self, connection_properties):
+        """Update the local kernel's size information.
+
+        Try and update the local kernel's size information
+        for an iSCSI volume.
+        """
+        LOG.info(_LI("Extend volume for %s"), connection_properties)
+
+        volume_paths = self.get_volume_paths(connection_properties)
+        LOG.info(_LI("Found paths for volume %s"), volume_paths)
+        if volume_paths:
+            return self._linuxscsi.extend_volume(volume_paths[0])
+        else:
+            LOG.warning(_LW("Couldn't find any volume paths on the host to "
+                            "extend volume for %(props)s"),
+                        {'props': connection_properties})
+            raise exception.VolumePathsNotFound()
 
     @synchronized('connect_volume')
     def connect_volume(self, connection_properties):
@@ -1261,6 +1297,22 @@ class FibreChannelConnector(InitiatorConnector):
 
         return volume_paths
 
+    @synchronized('extend_volume')
+    def extend_volume(self, connection_properties):
+        """Update the local kernel's size information.
+
+        Try and update the local kernel's size information
+        for an FC volume.
+        """
+        volume_paths = self.get_volume_paths(connection_properties)
+        if volume_paths:
+            return self._linuxscsi.extend_volume(volume_paths[0])
+        else:
+            LOG.warning(_LW("Couldn't find any volume paths on the host to "
+                            "extend volume for %(props)s"),
+                        {'props': connection_properties})
+            raise exception.VolumePathsNotFound()
+
     @synchronized('connect_volume')
     def connect_volume(self, connection_properties):
         """Attach the volume to instance_name.
@@ -1674,6 +1726,10 @@ class AoEConnector(InitiatorConnector):
         LOG.debug('aoe-flush %(dev)s: stdout=%(out)s stderr%(err)s',
                   {'dev': aoe_device, 'out': out, 'err': err})
 
+    def extend_volume(self, connection_properties):
+        # TODO(walter-boring): is this possible?
+        raise NotImplementedError
+
 
 class RemoteFsConnector(InitiatorConnector):
     """Connector class to attach/detach NFS and GlusterFS volumes."""
@@ -1752,6 +1808,10 @@ class RemoteFsConnector(InitiatorConnector):
         :param device_info: historical difference, but same as connection_props
         :type device_info: dict
         """
+
+    def extend_volume(self, connection_properties):
+        # TODO(walter-boring): is this possible?
+        raise NotImplementedError
 
 
 class RBDConnector(InitiatorConnector):
@@ -1841,6 +1901,10 @@ class RBDConnector(InitiatorConnector):
 
         return True
 
+    def extend_volume(self, connection_properties):
+        # TODO(walter-boring): is this possible?
+        raise NotImplementedError
+
 
 class LocalConnector(InitiatorConnector):
     """"Connector class to attach/detach File System backed volumes."""
@@ -1890,6 +1954,10 @@ class LocalConnector(InitiatorConnector):
         :type device_info: dict
         """
         pass
+
+    def extend_volume(self, connection_properties):
+        # TODO(walter-boring): is this possible?
+        raise NotImplementedError
 
 
 class DRBDConnector(InitiatorConnector):
@@ -1967,6 +2035,10 @@ class DRBDConnector(InitiatorConnector):
     def get_search_path(self):
         # TODO(linbit): is it allowed to return "/dev", or is that too broad?
         return None
+
+    def extend_volume(self, connection_properties):
+        # TODO(walter-boring): is this possible?
+        raise NotImplementedError
 
 
 class HuaweiStorHyperConnector(InitiatorConnector):
@@ -2123,6 +2195,10 @@ class HuaweiStorHyperConnector(InitiatorConnector):
         else:
             return None
 
+    def extend_volume(self, connection_properties):
+        # TODO(walter-boring): is this possible?
+        raise NotImplementedError
+
 
 class HGSTConnector(InitiatorConnector):
     """Connector class to attach/detach HGST volumes."""
@@ -2267,6 +2343,10 @@ class HGSTConnector(InitiatorConnector):
                 msg = (_("Unable to set apphost for space %s") %
                        connection_properties['name'])
                 raise exception.BrickException(message=msg)
+
+    def extend_volume(self, connection_properties):
+        # TODO(walter-boring): is this possible?
+        raise NotImplementedError
 
 
 class ScaleIOConnector(InitiatorConnector):
@@ -2713,3 +2793,7 @@ class ScaleIOConnector(InitiatorConnector):
                         'err': response['message']})
                 LOG.error(msg)
                 raise exception.BrickException(message=msg)
+
+    def extend_volume(self, connection_properties):
+        # TODO(walter-boring): is this possible?
+        raise NotImplementedError
