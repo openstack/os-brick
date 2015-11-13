@@ -304,6 +304,32 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
                          self.connector._validate_iface_transport(
                              'fake_transport'))
 
+    def test_get_search_path(self):
+        search_path = self.connector.get_search_path()
+        expected = "/dev/disk/by-path"
+        self.assertEqual(expected, search_path)
+
+    @mock.patch.object(os.path, 'exists', return_value=True)
+    @mock.patch.object(connector.ISCSIConnector, '_get_potential_volume_paths')
+    def test_get_volume_paths(self, mock_potential_paths, mock_exists):
+        name1 = 'volume-00000001-1'
+        vol = {'id': 1, 'name': name1}
+        location = '10.0.2.15:3260'
+        iqn = 'iqn.2010-10.org.openstack:%s' % name1
+
+        fake_path = ("/dev/disk/by-path/ip-%(ip)s-iscsi-%(iqn)s-lun-%(lun)s" %
+                     {'ip': '10.0.2.15', 'iqn': iqn, 'lun': 1})
+        fake_props = {}
+        fake_devices = [fake_path]
+        expected = fake_devices
+        mock_potential_paths.return_value = (fake_devices, fake_props)
+
+        connection_properties = self.iscsi_connection(vol, [location],
+                                                      [iqn])
+        volume_paths = self.connector.get_volume_paths(
+            connection_properties['data'])
+        self.assertEqual(expected, volume_paths)
+
     def _test_connect_volume(self, extra_props, additional_commands,
                              transport=None, disconnect_mock=None):
         # for making sure the /dev/disk/by-path is gone
@@ -1083,6 +1109,11 @@ class FibreChannelConnectorTestCase(ConnectorTestCase):
                     'target_lun': 1,
                 }}
 
+    def test_get_search_path(self):
+        search_path = self.connector.get_search_path()
+        expected = "/dev/disk/by-path"
+        self.assertEqual(expected, search_path)
+
     @mock.patch.object(os.path, 'exists', return_value=True)
     @mock.patch.object(linuxfc.LinuxFibreChannel, 'get_fc_hbas')
     @mock.patch.object(linuxfc.LinuxFibreChannel, 'get_fc_hbas_info')
@@ -1096,7 +1127,7 @@ class FibreChannelConnectorTestCase(ConnectorTestCase):
         location = '10.0.2.15:3260'
         wwn = '1234567890123456'
         connection_info = self.fibrechan_connection(vol, location, wwn)
-        volume_paths = self.connector._get_volume_paths(
+        volume_paths = self.connector.get_volume_paths(
             connection_info['data'])
 
         expected = ['/dev/disk/by-path/pci-0000:05:00.2'
@@ -1390,6 +1421,17 @@ class AoEConnectorTestCase(ConnectorTestCase):
                           FakeFixedIntervalLoopingCall).start()
         self.addCleanup(mock.patch.stopall)
 
+    def test_get_search_path(self):
+        expected = "/dev/etherd"
+        actual_path = self.connector.get_search_path()
+        self.assertEqual(expected, actual_path)
+
+    @mock.patch.object(os.path, 'exists', return_value=True)
+    def test_get_volume_paths(self, mock_exists):
+        expected = ["/dev/etherd/efake_shelf.fake_lun"]
+        paths = self.connector.get_volume_paths(self.connection_properties)
+        self.assertEqual(expected, paths)
+
     @mock.patch.object(os.path, 'exists', side_effect=[True, True])
     def test_connect_volume(self, exists_mock):
         """Ensure that if path exist aoe-revalidate was called."""
@@ -1444,15 +1486,31 @@ class RemoteFsConnectorTestCase(ConnectorTestCase):
     """Test cases for Remote FS initiator class."""
     TEST_DEV = '172.18.194.100:/var/nfs'
     TEST_PATH = '/mnt/test/df0808229363aad55c27da50c38d6328'
+    TEST_BASE = '/mnt/test'
+    TEST_NAME = '9c592d52-ce47-4263-8c21-4ecf3c029cdb'
 
     def setUp(self):
         super(RemoteFsConnectorTestCase, self).setUp()
         self.connection_properties = {
             'export': self.TEST_DEV,
-            'name': '9c592d52-ce47-4263-8c21-4ecf3c029cdb'}
+            'name': self.TEST_NAME}
         self.connector = connector.RemoteFsConnector(
-            'nfs', root_helper='sudo', nfs_mount_point_base='/mnt/test',
+            'nfs', root_helper='sudo',
+            nfs_mount_point_base=self.TEST_BASE,
             nfs_mount_options='vers=3')
+
+    def test_get_search_path(self):
+        expected = self.TEST_BASE
+        actual = self.connector.get_search_path()
+        self.assertEqual(expected, actual)
+
+    @mock.patch.object(remotefs.RemoteFsClient, 'mount')
+    def test_get_volume_paths(self, mock_mount):
+        path = ("%(path)s/%(name)s" % {'path': self.TEST_PATH,
+                                       'name': self.TEST_NAME})
+        expected = [path]
+        actual = self.connector.get_volume_paths(self.connection_properties)
+        self.assertEqual(expected, actual)
 
     @mock.patch.object(remotefs.RemoteFsClient, 'mount')
     @mock.patch.object(remotefs.RemoteFsClient, 'get_mount_point',
@@ -1472,6 +1530,18 @@ class LocalConnectorTestCase(ConnectorTestCase):
         super(LocalConnectorTestCase, self).setUp()
         self.connection_properties = {'name': 'foo',
                                       'device_path': '/tmp/bar'}
+
+    def test_get_search_path(self):
+        self.connector = connector.LocalConnector(None)
+        actual = self.connector.get_search_path()
+        self.assertIsNone(actual)
+
+    def test_get_volume_paths(self):
+        self.connector = connector.LocalConnector(None)
+        expected = [self.connection_properties['device_path']]
+        actual = self.connector.get_volume_paths(
+            self.connection_properties)
+        self.assertEqual(expected, actual)
 
     def test_connect_volume(self):
         self.connector = connector.LocalConnector(None)
@@ -1554,6 +1624,21 @@ class HuaweiStorHyperConnectorTestCase(ConnectorTestCase):
         if 'detach' == method:
             HuaweiStorHyperConnectorTestCase.attached = True
             return 'ret_code=330155007', None
+
+    def test_get_search_path(self):
+        actual = self.connector.get_search_path()
+        self.assertIsNone(actual)
+
+    @mock.patch.object(connector.HuaweiStorHyperConnector,
+                       '_query_attached_volume')
+    def test_get_volume_paths(self, mock_query_attached):
+        path = self.device_info['path']
+        mock_query_attached.return_value = {'ret_code': 0,
+                                            'dev_addr': path}
+
+        expected = [path]
+        actual = self.connector.get_volume_paths(self.connection_properties)
+        self.assertEqual(expected, actual)
 
     def test_connect_volume(self):
         """Test the basic connect volume case."""
@@ -1762,6 +1847,20 @@ Request Succeeded
         obj = connector.InitiatorConnector.factory('HGST', None)
         self.assertEqual("HGSTConnector", obj.__class__.__name__)
 
+    def test_get_search_path(self):
+        expected = "/dev"
+        actual = self.connector.get_search_path()
+        self.assertEqual(expected, actual)
+
+    @mock.patch.object(os.path, 'exists', return_value=True)
+    def test_get_volume_paths(self, mock_exists):
+
+        cprops = {'name': 'space', 'noremovehost': 'stor1'}
+        path = "/dev/%s" % cprops['name']
+        expected = [path]
+        actual = self.connector.get_volume_paths(cprops)
+        self.assertEqual(expected, actual)
+
     def test_connect_volume(self):
         """Tests that a simple connection succeeds"""
         self._fail_set_apphosts = False
@@ -1868,6 +1967,19 @@ class RBDConnectorTestCase(ConnectorTestCase):
             'auth_username': self.user,
             'name': '%s/%s' % (self.pool, self.volume),
         }
+
+    def test_get_search_path(self):
+        rbd = connector.RBDConnector(None)
+        path = rbd.get_search_path()
+        self.assertIsNone(path)
+
+    @mock.patch('os_brick.initiator.linuxrbd.rbd')
+    @mock.patch('os_brick.initiator.linuxrbd.rados')
+    def test_get_volume_paths(self, mock_rados, mock_rbd):
+        rbd = connector.RBDConnector(None)
+        expected = []
+        actual = rbd.get_volume_paths(self.connection_properties)
+        self.assertEqual(expected, actual)
 
     @mock.patch('os_brick.initiator.linuxrbd.rbd')
     @mock.patch('os_brick.initiator.linuxrbd.rados')
@@ -2018,6 +2130,20 @@ class ScaleIOConnectorTestCase(ConnectorTestCase):
             return self.mock_calls[api_call]
         except KeyError:
             return self.error_404
+
+    def test_get_search_path(self):
+        expected = "/dev/disk/by-id"
+        actual = self.connector.get_search_path()
+        self.assertEqual(expected, actual)
+
+    @mock.patch.object(os.path, 'exists', return_value=True)
+    @mock.patch.object(connector.ScaleIOConnector, '_wait_for_volume_path')
+    def test_get_volume_paths(self, mock_wait_for_path, mock_exists):
+        mock_wait_for_path.return_value = "emc-vol-vol1"
+        expected = ['/dev/disk/by-id/emc-vol-vol1']
+        actual = self.connector.get_volume_paths(
+            self.fake_connection_properties)
+        self.assertEqual(expected, actual)
 
     def test_connect_volume(self):
         """Successful connect to volume"""
