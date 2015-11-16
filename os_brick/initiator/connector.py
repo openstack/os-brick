@@ -101,6 +101,18 @@ def get_connector_properties(root_helper, my_ip, multipath, enforce_multipath,
     For the compatibility reason, even if multipath=False is specified,
     some cinder storage drivers may export the target for multipath, which
     can be found via sendtargets discovery.
+
+    :param root_helper: The command prefix for executing as root.
+    :type my_ip: str
+    :param my_ip: The IP address of the local host.
+    :type my_ip: str
+    :param multipath: Enable multipath?
+    :type multipath: bool
+    :param enforce_multipath: Should we enforce that the multipath daemon is
+                              running?  If the daemon isn't running then the
+                              return dict will have multipath as False.
+    :type enforce_multipath: bool
+    :returns: dict containing all of the collected initiator values.
     """
 
     iscsi = ISCSIConnector(root_helper=root_helper)
@@ -241,6 +253,14 @@ class InitiatorConnector(executor.Executor):
             raise ValueError(msg)
 
     def check_valid_device(self, path, run_as_root=True):
+        """Test to see if the device path is a real device.
+
+        :param path: The file system path for the device.
+        :type path: str
+        :param run_as_root: run the tests as root user?
+        :type run_as_root: bool
+        :returns: bool
+        """
         cmd = ('dd', 'if=%(path)s' % {"path": path},
                'of=/dev/null', 'count=1')
         out, info = None, None
@@ -264,6 +284,49 @@ class InitiatorConnector(executor.Executor):
 
         The connection_properties describes the information needed by
         the specific protocol to use to make the connection.
+
+        The connection_properties is a dictionary that describes the target
+        volume.  It varies slightly from protocol type, (iscsi, fibre_channel),
+        but the structure is usually the same.
+
+
+        An exmaple for iSCSI:
+
+        {'driver_volume_type': 'iscsi',
+         'data': {
+             'target_luns': [0, 2],
+             'target_iqns': ['iqn.2000-05.com.3pardata:20810002ac00383d',
+                             'iqn.2000-05.com.3pardata:21810002ac00383d'],
+             'target_discovered': True,
+             'encrypted': False,
+             'qos_specs': None,
+             'target_portals': ['10.52.1.11:3260', '10.52.2.11:3260'],
+             'access_mode': 'rw',
+        }}
+
+        An example for fibre_channel:
+
+        {'driver_volume_type': 'fibre_channel',
+         'data': {
+            'initiator_target_map': {'100010604b010459': ['21230002AC00383D'],
+                                     '100010604b01045d': ['21230002AC00383D']
+                                    },
+            'target_discovered': True,
+            'encrypted': False,
+            'qos_specs': None,
+            'target_lun': 1,
+            'access_mode': 'rw',
+            'target_wwn': [
+                '20210002AC00383D',
+                '20220002AC00383D',
+                ],
+         }}
+
+
+        :param connection_properties: The dictionary that describes all
+                                      of the target volume attributes.
+        :type connection_properties: dict
+        :returns: dict
         """
         pass
 
@@ -273,6 +336,12 @@ class InitiatorConnector(executor.Executor):
 
         The connection_properties are the same as from connect_volume.
         The device_info is returned from connect_volume.
+
+        :param connection_properties: The dictionary that describes all
+                                      of the target volume attributes.
+        :type connection_properties: dict
+        :param device_info: historical difference, but same as connection_props
+        :type device_info: dict
         """
         pass
 
@@ -283,6 +352,10 @@ class InitiatorConnector(executor.Executor):
         The job of this method is to find out what paths in
         the system are associated with a volume as described
         by the connection_properties.
+
+        :param connection_properties: The dictionary that describes all
+                                      of the target volume attributes.
+        :type connection_properties: dict
         """
         pass
 
@@ -306,6 +379,10 @@ class InitiatorConnector(executor.Executor):
         This method is used in coordination with get_volume_paths()
         to verify that volumes have gone away after disconnect_volume
         has been called.
+
+        :param connection_properties: The dictionary that describes all
+                                      of the target volume attributes.
+        :type connection_properties: dict
         """
         path = self.get_search_path()
         if path:
@@ -373,6 +450,10 @@ class ISCSIConnector(InitiatorConnector):
         already exist for a volume.  We aren't trying to attach/discover
         a new volume, but find any existing paths for a volume we
         think is already attached.
+
+        :param connection_properties: The dictionary that describes all
+                                      of the target volume attributes.
+        :type connection_properties: dict
         """
         volume_paths = []
 
@@ -437,6 +518,18 @@ class ISCSIConnector(InitiatorConnector):
         In this case, we don't want to connect to the portal.  If we
         blindly try and connect to a portal, it could create a new iSCSI
         session that didn't exist previously, and then leave it stale.
+
+        :param connection_properties: The dictionary that describes all
+                                      of the target volume attributes.
+        :type connection_properties: dict
+        :param connect_to_portal: Do we want to try a new connection to the
+                                  target portal(s)?  Set this to False if you
+                                  want to search for existing volumes, not
+                                  discover new volumes.
+        :param connect_to_portal: bool
+        :param use_rescan: Issue iSCSI rescan during discovery?
+        :type use_rescan: bool
+        :returns: dict
         """
 
         target_props = None
@@ -524,6 +617,10 @@ class ISCSIConnector(InitiatorConnector):
         unlike default(iscsi_tcp)/iser, this is not one and the same for
         offloaded transports, where the default format is
         transport_name.hwaddress
+
+        :param transport_iface: The iscsi transport type.
+        :type transport_iface: str
+        :returns: str
         """
         # Note that default(iscsi_tcp) and iser do not require a separate
         # iface file, just the transport is enough and do not need to be
@@ -640,6 +737,11 @@ class ISCSIConnector(InitiatorConnector):
     def connect_volume(self, connection_properties):
         """Attach the volume to instance_name.
 
+        :param connection_properties: The valid dictionary that describes all
+                                      of the target volume attributes.
+        :type connection_properties: dict
+        :returns: dict
+
         connection_properties for iSCSI must include:
         target_portal(s) - ip and optional port
         target_iqn(s) - iSCSI Qualified Name
@@ -709,6 +811,12 @@ class ISCSIConnector(InitiatorConnector):
     @synchronized('connect_volume')
     def disconnect_volume(self, connection_properties, device_info):
         """Detach the volume from instance_name.
+
+        :param connection_properties: The dictionary that describes all
+                                      of the target volume attributes.
+        :type connection_properties: dict
+        :param device_info: historical difference, but same as connection_props
+        :type device_info: dict
 
         connection_properties for iSCSI must include:
         target_portal(s) - IP and optional port
@@ -1138,6 +1246,11 @@ class FibreChannelConnector(InitiatorConnector):
     def connect_volume(self, connection_properties):
         """Attach the volume to instance_name.
 
+        :param connection_properties: The dictionary that describes all
+                                      of the target volume attributes.
+        :type connection_properties: dict
+        :returns: dict
+
         connection_properties for Fibre Channel must include:
         target_wwn - World Wide Name
         target_lun - LUN id of the volume
@@ -1252,7 +1365,7 @@ class FibreChannelConnector(InitiatorConnector):
         return host_devices
 
     def _get_possible_devices(self, hbas, wwnports):
-        """Compute the possible valid fibre channel device options.
+        """Compute the possible fibre channel device options.
 
         :param hbas: available hba devices.
         :param wwnports: possible wwn addresses. Can either be string
@@ -1288,6 +1401,12 @@ class FibreChannelConnector(InitiatorConnector):
     @synchronized('connect_volume')
     def disconnect_volume(self, connection_properties, device_info):
         """Detach the volume from instance_name.
+
+        :param connection_properties: The dictionary that describes all
+                                      of the target volume attributes.
+        :type connection_properties: dict
+        :param device_info: historical difference, but same as connection_props
+        :type device_info: dict
 
         connection_properties for Fibre Channel must include:
         target_wwn - World Wide Name
@@ -1443,6 +1562,11 @@ class AoEConnector(InitiatorConnector):
     def connect_volume(self, connection_properties):
         """Discover and attach the volume.
 
+        :param connection_properties: The dictionary that describes all
+                                      of the target volume attributes.
+        :type connection_properties: dict
+        :returns: dict
+
         connection_properties for AoE must include:
         target_shelf - shelf id of volume
         target_lun - lun id of volume
@@ -1493,6 +1617,12 @@ class AoEConnector(InitiatorConnector):
     @lockutils.synchronized('aoe_control', 'aoe-')
     def disconnect_volume(self, connection_properties, device_info):
         """Detach and flush the volume.
+
+        :param connection_properties: The dictionary that describes all
+                                      of the target volume attributes.
+        :type connection_properties: dict
+        :param device_info: historical difference, but same as connection_props
+        :type device_info: dict
 
         connection_properties for AoE must include:
         target_shelf - shelf id of volume
@@ -1585,9 +1715,14 @@ class RemoteFsConnector(InitiatorConnector):
     def connect_volume(self, connection_properties):
         """Ensure that the filesystem containing the volume is mounted.
 
-        connection_properties must include:
-        export - remote filesystem device (e.g. '172.18.194.100:/var/nfs')
-        name - file name within the filesystem
+        :param connection_properties: The dictionary that describes all
+                                      of the target volume attributes.
+             connection_properties must include:
+             export - remote filesystem device (e.g. '172.18.194.100:/var/nfs')
+             name - file name within the filesystem
+        :type connection_properties: dict
+        :returns: dict
+
 
         connection_properties may optionally include:
         options - options to pass to mount
@@ -1596,7 +1731,14 @@ class RemoteFsConnector(InitiatorConnector):
         return {'path': path}
 
     def disconnect_volume(self, connection_properties, device_info):
-        """No need to do anything to disconnect a volume in a filesystem."""
+        """No need to do anything to disconnect a volume in a filesystem.
+
+        :param connection_properties: The dictionary that describes all
+                                      of the target volume attributes.
+        :type connection_properties: dict
+        :param device_info: historical difference, but same as connection_props
+        :type device_info: dict
+        """
 
 
 class RBDConnector(InitiatorConnector):
@@ -1641,13 +1783,26 @@ class RBDConnector(InitiatorConnector):
         return rbd_handle
 
     def connect_volume(self, connection_properties):
-        """Connect to a volume."""
+        """Connect to a volume.
+
+        :param connection_properties: The dictionary that describes all
+                                      of the target volume attributes.
+        :type connection_properties: dict
+        :returns: dict
+        """
 
         rbd_handle = self._get_rbd_handle(connection_properties)
         return {'path': rbd_handle}
 
     def disconnect_volume(self, connection_properties, device_info):
-        """Disconnect a volume."""
+        """Disconnect a volume.
+
+        :param connection_properties: The dictionary that describes all
+                                      of the target volume attributes.
+        :type connection_properties: dict
+        :param device_info: historical difference, but same as connection_props
+        :type device_info: dict
+        """
         if device_info:
             rbd_handle = device_info.get('path', None)
             if rbd_handle is not None:
@@ -1696,8 +1851,12 @@ class LocalConnector(InitiatorConnector):
     def connect_volume(self, connection_properties):
         """Connect to a volume.
 
-        connection_properties must include:
-        device_path - path to the volume to be connected
+        :param connection_properties: The dictionary that describes all
+                                      of the target volume attributes.
+               connection_properties must include:
+               device_path - path to the volume to be connected
+        :type connection_properties: dict
+        :returns: dict
         """
         if 'device_path' not in connection_properties:
             msg = (_("Invalid connection_properties specified "
@@ -1709,7 +1868,14 @@ class LocalConnector(InitiatorConnector):
         return device_info
 
     def disconnect_volume(self, connection_properties, device_info):
-        """Disconnect a volume from the local host."""
+        """Disconnect a volume from the local host.
+
+        :param connection_properties: The dictionary that describes all
+                                      of the target volume attributes.
+        :type connection_properties: dict
+        :param device_info: historical difference, but same as connection_props
+        :type device_info: dict
+        """
         pass
 
 
@@ -1768,7 +1934,13 @@ class HuaweiStorHyperConnector(InitiatorConnector):
 
     @synchronized('connect_volume')
     def connect_volume(self, connection_properties):
-        """Connect to a volume."""
+        """Connect to a volume.
+
+        :param connection_properties: The dictionary that describes all
+                                      of the target volume attributes.
+        :type connection_properties: dict
+        :returns: dict
+        """
         LOG.debug("Connect_volume connection properties: %s.",
                   connection_properties)
         out = self._attach_volume(connection_properties['volume_id'])
@@ -1792,7 +1964,14 @@ class HuaweiStorHyperConnector(InitiatorConnector):
 
     @synchronized('connect_volume')
     def disconnect_volume(self, connection_properties, device_info):
-        """Disconnect a volume from the local host."""
+        """Disconnect a volume from the local host.
+
+        :param connection_properties: The dictionary that describes all
+                                      of the target volume attributes.
+        :type connection_properties: dict
+        :param device_info: historical difference, but same as connection_props
+        :type device_info: dict
+        """
         LOG.debug("Disconnect_volume: %s.", connection_properties)
         out = self._detach_volume(connection_properties['volume_id'])
         if not out or int(out['ret_code']) not in (self.attached_success_code,
@@ -1931,8 +2110,12 @@ class HGSTConnector(InitiatorConnector):
     def connect_volume(self, connection_properties):
         """Attach a Space volume to running host.
 
-        connection_properties for HGST must include:
-        name - Name of space to attach
+        :param connection_properties: The dictionary that describes all
+                                      of the target volume attributes.
+            connection_properties for HGST must include:
+            name - Name of space to attach
+        :type connection_properties: dict
+        :returns: dict
         """
         if connection_properties is None:
             msg = _("Connection properties passed in as None.")
@@ -1963,9 +2146,14 @@ class HGSTConnector(InitiatorConnector):
     def disconnect_volume(self, connection_properties, device_info):
         """Detach and flush the volume.
 
-        connection_properties for HGST must include:
-        name - Name of space to detach
-        noremovehost - Host which should never be removed
+        :param connection_properties: The dictionary that describes all
+               of the target volume attributes.
+               For HGST must include:
+               name - Name of space to detach
+               noremovehost - Host which should never be removed
+        :type connection_properties: dict
+        :param device_info: historical difference, but same as connection_props
+        :type device_info: dict
         """
         if connection_properties is None:
             msg = _("Connection properties passed in as None.")
@@ -2231,7 +2419,13 @@ class ScaleIOConnector(InitiatorConnector):
         return device_info
 
     def connect_volume(self, connection_properties):
-        """Connect the volume."""
+        """Connect the volume.
+
+        :param connection_properties: The dictionary that describes all
+                                      of the target volume attributes.
+        :type connection_properties: dict
+        :returns: dict
+        """
         device_info = self.get_config(connection_properties)
         LOG.debug(
             _(
@@ -2353,6 +2547,14 @@ class ScaleIOConnector(InitiatorConnector):
         return device_info
 
     def disconnect_volume(self, connection_properties, device_info):
+        """Disconnect the ScaleIO volume.
+
+        :param connection_properties: The dictionary that describes all
+                                      of the target volume attributes.
+        :type connection_properties: dict
+        :param device_info: historical difference, but same as connection_props
+        :type device_info: dict
+        """
         self.get_config(connection_properties)
         self.volume_id = self._get_volume_id()
         LOG.info(_LI(
