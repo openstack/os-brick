@@ -1970,6 +1970,18 @@ class ScaleIOConnectorTestCase(ConnectorTestCase):
         """Fake REST server"""
         api_call = url.split(':', 2)[2].split('/', 1)[1].replace('api/', '')
 
+        if 'setMappedSdcLimits' in api_call:
+            self.assertNotIn("iops_limit", kwargs['data'])
+            if "iopsLimit" not in kwargs['data']:
+                self.assertIn("bandwidthLimitInKbps",
+                              kwargs['data'])
+            elif "bandwidthLimitInKbps" not in kwargs['data']:
+                self.assertIn("iopsLimit", kwargs['data'])
+            else:
+                self.assertIn("bandwidthLimitInKbps",
+                              kwargs['data'])
+                self.assertIn("iopsLimit", kwargs['data'])
+
         try:
             return self.mock_calls[api_call]
         except KeyError:

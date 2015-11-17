@@ -2024,7 +2024,7 @@ class ScaleIOConnector(InitiatorConnector):
             if self.bandwidth_limit is not None:
                 params['bandwidthLimitInKbps'] = self.bandwidth_limit
             if self.iops_limit is not None:
-                params['iops_limit'] = self.iops_limit
+                params['iopsLimit'] = self.iops_limit
 
             request = (
                 "https://%(server_ip)s:%(server_port)s/api/instances/"
