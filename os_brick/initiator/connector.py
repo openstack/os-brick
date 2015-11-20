@@ -1322,24 +1322,18 @@ class FibreChannelConnector(InitiatorConnector):
 
     def _get_pci_num(self, hba):
         # NOTE(walter-boring)
-        # device path is in format of
+        # device path is in format of (FC and FCoE) :
         # /sys/devices/pci0000:00/0000:00:03.0/0000:05:00.3/host2/fc_host/host2
-        # sometimes an extra entry exists before the host2 value
-        # we always want the value prior to the host2 value
-        pci_num = None
+        # /sys/devices/pci0000:20/0000:20:03.0/0000:21:00.2/net/ens2f2/ctlr_2
+        # /host3/fc_host/host3
+        # we always want the value prior to the host or net value
         if hba is not None:
             if "device_path" in hba:
-                index = 0
                 device_path = hba['device_path'].split('/')
-                for value in device_path:
-                    if value.startswith('host'):
-                        break
-                    index = index + 1
-
-                if index > 0:
-                    pci_num = device_path[index - 1]
-
-        return pci_num
+                for index, value in enumerate(device_path):
+                    if value.startswith('net') or value.startswith('host'):
+                        return device_path[index - 1]
+        return None
 
 
 class FibreChannelConnectorS390X(FibreChannelConnector):
