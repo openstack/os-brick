@@ -14,6 +14,38 @@ import mock
 
 from os_brick.initiator import linuxrbd
 from os_brick.tests import base
+from oslo_utils import encodeutils
+
+
+class RBDClientTestCase(base.TestCase):
+
+    def setUp(self):
+        super(RBDClientTestCase, self).setUp()
+
+    @mock.patch('os_brick.initiator.linuxrbd.rbd')
+    @mock.patch('os_brick.initiator.linuxrbd.rados')
+    def test_with_client(self, mock_rados, mock_rbd):
+        with linuxrbd.RBDClient('test_user', 'test_pool') as client:
+
+            # Verify object attributes are assigned as expected
+            self.assertEqual('/etc/ceph/ceph.conf', client.rbd_conf)
+            self.assertEqual(encodeutils.safe_encode('test_user'),
+                             client.rbd_user)
+            self.assertEqual(encodeutils.safe_encode('test_pool'),
+                             client.rbd_pool)
+
+            # Assert connect is called with correct paramaters
+            mock_rados.Rados.assert_called_once_with(
+                rados_id=encodeutils.safe_encode('test_user'),
+                conffile='/etc/ceph/ceph.conf')
+
+            # Ensure correct calls to connect to cluster
+            self.assertEqual(
+                1, mock_rados.Rados.return_value.connect.call_count)
+            mock_rados.Rados.return_value.open_ioctx.assert_called_once_with(
+                encodeutils.safe_encode('test_pool'))
+
+        self.assertEqual(1, mock_rados.Rados.return_value.shutdown.call_count)
 
 
 class RBDVolumeIOWrapperTestCase(base.TestCase):

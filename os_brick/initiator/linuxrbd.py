@@ -57,6 +57,12 @@ class RBDClient(object):
 
         self.client, self.ioctx = self.connect()
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, type_, value, traceback):
+        self.disconnect()
+
     def connect(self):
         client = self.rados.Rados(rados_id=self.rbd_user,
                                   conffile=self.rbd_conf)
