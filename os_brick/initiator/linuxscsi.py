@@ -266,7 +266,8 @@ class LinuxSCSI(executor.Executor):
         except putils.ProcessExecutionError as exc:
             LOG.warning(_LW("multipath call failed exit %(code)s"),
                         {'code': exc.exit_code})
-            return None
+            raise exception.CommandExecutionFailed(
+                cmd='multipath -l %s' % device)
 
         if out:
             lines = out.strip()
