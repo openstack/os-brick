@@ -40,7 +40,8 @@ class RemoteFsClient(object):
             'cifs': 'smbfs',
             'glusterfs': 'glusterfs',
             'vzstorage': 'vzstorage',
-            'scality': 'scality_sofs'
+            'scality': 'scality_sofs',
+            'quobyte': 'quobyte'
         }
 
         if mount_type not in mount_type_to_option_prefix:

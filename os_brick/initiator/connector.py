@@ -74,6 +74,7 @@ HGST = "HGST"
 RBD = "RBD"
 SCALEIO = "SCALEIO"
 SCALITY = "SCALITY"
+QUOBYTE = "QUOBYTE"
 
 
 def _check_multipathd_running(root_helper, enforce_multipath):
@@ -194,7 +195,7 @@ class InitiatorConnector(executor.Executor):
                                 execute=execute,
                                 device_scan_attempts=device_scan_attempts,
                                 *args, **kwargs)
-        elif protocol in (NFS, GLUSTERFS, SCALITY):
+        elif protocol in (NFS, GLUSTERFS, SCALITY, QUOBYTE):
             return RemoteFsConnector(mount_type=protocol.lower(),
                                      root_helper=root_helper,
                                      driver=driver,
@@ -1538,7 +1539,7 @@ class RemoteFsConnector(InitiatorConnector):
         if conn:
             mount_point_base = conn.get('mount_point_base')
             mount_type_lower = mount_type.lower()
-            if mount_type_lower in ('nfs', 'glusterfs', 'scality'):
+            if mount_type_lower in ('nfs', 'glusterfs', 'scality', 'quobyte'):
                 kwargs[mount_type_lower + '_mount_point_base'] = (
                     kwargs.get(mount_type_lower + '_mount_point_base') or
                     mount_point_base)
