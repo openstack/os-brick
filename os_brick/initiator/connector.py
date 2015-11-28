@@ -693,8 +693,8 @@ class ISCSIConnector(InitiatorConnector):
             multipath_device = self._get_multipath_device_name(host_device)
             if multipath_device is not None:
                 host_device = multipath_device
-                LOG.debug("Unable to find multipath device name for "
-                          "volume. Only using path %(device)s "
+                LOG.debug("Found multipath device name for "
+                          "volume. Using path %(device)s "
                           "for volume.", {'device': host_device})
 
         # find out the WWN of the device
