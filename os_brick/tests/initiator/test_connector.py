@@ -1756,6 +1756,66 @@ class RBDConnectorTestCase(ConnectorTestCase):
         self.assertEqual(1, volume_close.call_count)
 
 
+class DRBDConnectorTestCase(ConnectorTestCase):
+
+    RESOURCE_TEMPLATE = '''
+        resource r0 {
+            on host1 {
+            }
+            net {
+                shared-secret "%(shared-secret)s";
+            }
+        }
+'''
+
+    def setUp(self):
+        super(DRBDConnectorTestCase, self).setUp()
+
+        self.connector = connector.DRBDConnector(
+            None, execute=self._fake_exec)
+
+        self.execs = []
+
+    def _fake_exec(self, *cmd, **kwargs):
+        self.execs.append(cmd)
+
+        # out, err
+        return ('', '')
+
+    def test_connect_volume(self):
+        """Test connect_volume."""
+
+        cprop = {
+            'provider_auth': 'my-secret',
+            'config': self.RESOURCE_TEMPLATE,
+            'name': 'my-precious',
+            'device': '/dev/drbd951722',
+            'data': {},
+        }
+
+        res = self.connector.connect_volume(cprop)
+
+        self.assertEqual(cprop['device'], res['path'])
+        self.assertEqual('adjust', self.execs[0][1])
+        self.assertEqual(cprop['name'], self.execs[0][4])
+
+    def test_disconnect_volume(self):
+        """Test the disconnect volume case."""
+
+        cprop = {
+            'provider_auth': 'my-secret',
+            'config': self.RESOURCE_TEMPLATE,
+            'name': 'my-precious',
+            'device': '/dev/drbd951722',
+            'data': {},
+        }
+        dev_info = {}
+
+        self.connector.disconnect_volume(cprop, dev_info)
+
+        self.assertEqual('down', self.execs[0][1])
+
+
 class ScaleIOConnectorTestCase(ConnectorTestCase):
     """Test cases for ScaleIO connector"""
     # Fake volume information
