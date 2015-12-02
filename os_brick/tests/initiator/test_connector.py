@@ -171,6 +171,10 @@ class ConnectorTestCase(base.TestCase):
         obj = connector.InitiatorConnector.factory("scaleio", None)
         self.assertEqual("ScaleIOConnector", obj.__class__.__name__)
 
+        obj = connector.InitiatorConnector.factory(
+            'quobyte', None, quobyte_mount_point_base='/mnt/test')
+        self.assertEqual(obj.__class__.__name__, "RemoteFsConnector")
+
         self.assertRaises(ValueError,
                           connector.InitiatorConnector.factory,
                           "bogus", None)

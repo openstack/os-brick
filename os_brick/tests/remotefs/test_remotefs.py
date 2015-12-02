@@ -177,6 +177,9 @@ class RemoteFsClientTestCase(base.TestCase):
     def test_no_mount_point_scality(self):
         self._test_no_mount_point('scality')
 
+    def test_no_mount_point_quobyte(self):
+        self._test_no_mount_point('quobyte')
+
     def test_invalid_fs(self):
         self.assertRaises(exception.ProtocolNotSupported,
                           remotefs.RemoteFsClient,
