@@ -104,7 +104,7 @@ def get_connector_properties(root_helper, my_ip, multipath, enforce_multipath,
     can be found via sendtargets discovery.
 
     :param root_helper: The command prefix for executing as root.
-    :type my_ip: str
+    :type root_helper: str
     :param my_ip: The IP address of the local host.
     :type my_ip: str
     :param multipath: Enable multipath?
@@ -287,11 +287,11 @@ class InitiatorConnector(executor.Executor):
         the specific protocol to use to make the connection.
 
         The connection_properties is a dictionary that describes the target
-        volume.  It varies slightly from protocol type, (iscsi, fibre_channel),
+        volume.  It varies slightly by protocol type (iscsi, fibre_channel),
         but the structure is usually the same.
 
 
-        An exmaple for iSCSI:
+        An example for iSCSI:
 
         {'driver_volume_type': 'iscsi',
          'data': {
