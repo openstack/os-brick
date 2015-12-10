@@ -886,16 +886,27 @@ class ISCSIConnector(InitiatorConnector):
         if not devices:
             self._disconnect_from_iscsi_portal(connection_properties)
 
+    def _munge_portal(self, target):
+        """Remove brackets from portal.
+
+        In case IPv6 address was used the udev path should not contain any
+        brackets. Udev code specifically forbids that.
+        """
+        portal, iqn, lun = target
+        return (portal.replace('[', '').replace(']', ''), iqn, lun)
+
     def _get_device_path(self, connection_properties):
         if self._get_transport() == "default":
-            return ["/dev/disk/by-path/ip-%s-iscsi-%s-lun-%s" % x for x in
+            return ["/dev/disk/by-path/ip-%s-iscsi-%s-lun-%s" %
+                    self._munge_portal(x) for x in
                     self._get_all_targets(connection_properties)]
         else:
             # we are looking for paths in the format :
             # /dev/disk/by-path/pci-XXXX:XX:XX.X-ip-PORTAL:PORT-iscsi-IQN-lun-LUN_ID
             device_list = []
             for x in self._get_all_targets(connection_properties):
-                look_for_device = glob.glob('/dev/disk/by-path/*ip-%s-iscsi-%s-lun-%s' % x)  # noqa
+                look_for_device = glob.glob('/dev/disk/by-path/*ip-%s-iscsi-%s-lun-%s'  # noqa
+                                            % self._munge_portal(x))
                 if look_for_device:
                     device_list.extend(look_for_device)
             return device_list
