@@ -1937,6 +1937,7 @@ class ScaleIOConnector(InitiatorConnector):
                        'path': self.volume_path}
         return device_info
 
+    @lockutils.synchronized('scaleio', 'scaleio-')
     def connect_volume(self, connection_properties):
         """Connect the volume."""
         device_info = self.get_config(connection_properties)
@@ -2059,6 +2060,7 @@ class ScaleIOConnector(InitiatorConnector):
 
         return device_info
 
+    @lockutils.synchronized('scaleio', 'scaleio-')
     def disconnect_volume(self, connection_properties, device_info):
         self.get_config(connection_properties)
         self.volume_id = self._get_volume_id()
