@@ -63,6 +63,7 @@ connector_list = [
     'os_brick.initiator.windows.fibre_channel.WindowsFCConnector',
     'os_brick.initiator.windows.smbfs.WindowsSMBFSConnector',
     'os_brick.initiator.connectors.vrtshyperscale.HyperScaleConnector',
+    'os_brick.initiator.connectors.storpool.StorPoolConnector',
     'os_brick.initiator.connectors.nvme.NVMeConnector',
 ]
 
@@ -111,6 +112,8 @@ _connector_mapping_linux = {
         'os_brick.initiator.connectors.gpfs.GPFSConnector',
     initiator.VERITAS_HYPERSCALE:
         'os_brick.initiator.connectors.vrtshyperscale.HyperScaleConnector',
+    initiator.STORPOOL:
+        'os_brick.initiator.connectors.storpool.StorPoolConnector',
     initiator.NVME:
         'os_brick.initiator.connectors.nvme.NVMeConnector',
 }
