@@ -58,6 +58,9 @@ drv_cfg: CommandFilter, /opt/emc/scaleio/sdc/bin/drv_cfg, root, /opt/emc/scaleio
 # initiator/connector.py
 sds_cli: CommandFilter, /usr/local/bin/sds/sds_cli, root
 
+# initiator/connector.py
+drbdadm: CommandFilter, drbdadm, root
+
 # initiator/connector.py: 'vgc-cluster', 'domain-list', '-l'
 # initiator/connector.py: 'vgc-cluster', 'space-set-apphosts', '-n'...
 vgc-cluster: CommandFilter, vgc-cluster, root

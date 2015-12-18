@@ -30,6 +30,7 @@ import re
 import requests
 import socket
 import sys
+import tempfile
 import time
 
 from oslo_concurrency import lockutils
@@ -66,6 +67,7 @@ ISCSI = "ISCSI"
 ISER = "ISER"
 FIBRE_CHANNEL = "FIBRE_CHANNEL"
 AOE = "AOE"
+DRBD = "DRBD"
 NFS = "NFS"
 GLUSTERFS = "GLUSTERFS"
 LOCAL = "LOCAL"
@@ -214,6 +216,11 @@ class InitiatorConnector(executor.Executor):
                                      execute=execute,
                                      device_scan_attempts=device_scan_attempts,
                                      *args, **kwargs)
+        elif protocol == DRBD:
+            return DRBDConnector(root_helper=root_helper,
+                                 driver=driver,
+                                 execute=execute,
+                                 *args, **kwargs)
         elif protocol == LOCAL:
             return LocalConnector(root_helper=root_helper,
                                   driver=driver,
@@ -1883,6 +1890,83 @@ class LocalConnector(InitiatorConnector):
         :type device_info: dict
         """
         pass
+
+
+class DRBDConnector(InitiatorConnector):
+    """"Connector class to attach/detach DRBD resources."""
+
+    def __init__(self, root_helper, driver=None,
+                 execute=putils.execute, *args, **kwargs):
+
+        super(DRBDConnector, self).__init__(root_helper, driver=driver,
+                                            execute=execute, *args, **kwargs)
+
+        self._execute = execute
+        self._root_helper = root_helper
+
+    def check_valid_device(self, path, run_as_root=True):
+        """Verify an existing volume."""
+        # TODO(linbit): check via drbdsetup first, to avoid blocking/hanging
+        # in case of network problems?
+
+        return super(DRBDConnector, self).check_valid_device(path, run_as_root)
+
+    def get_all_available_volumes(self, connection_properties=None):
+
+        base = "/dev/"
+        blkdev_list = []
+
+        for e in os.listdir(base):
+            path = base + e
+            if os.path.isblk(path):
+                blkdev_list.append(path)
+
+        return blkdev_list
+
+    def _drbdadm_command(self, cmd, data_dict, sh_secret):
+        # TODO(linbit): Write that resource file to a permanent location?
+        tmp = tempfile.NamedTemporaryFile(suffix="res", delete=False, mode="w")
+        try:
+            kv = {'shared-secret': sh_secret}
+            tmp.write(data_dict['config'] % kv)
+            tmp.close()
+
+            (out, err) = self._execute('drbdadm', cmd,
+                                       "-c", tmp.name,
+                                       data_dict['name'],
+                                       run_as_root=True,
+                                       root_helper=self._root_helper)
+        finally:
+            os.unlink(tmp.name)
+
+        return (out, err)
+
+    def connect_volume(self, connection_properties):
+        """Attach the volume."""
+
+        self._drbdadm_command("adjust", connection_properties,
+                              connection_properties['provider_auth'])
+
+        device_info = {
+            'type': 'block',
+            'path': connection_properties['device'],
+        }
+
+        return device_info
+
+    def disconnect_volume(self, connection_properties, device_info):
+        """Detach the volume."""
+
+        self._drbdadm_command("down", connection_properties,
+                              connection_properties['provider_auth'])
+
+    def get_volume_paths(self, connection_properties):
+        path = connection_properties['device']
+        return [path]
+
+    def get_search_path(self):
+        # TODO(linbit): is it allowed to return "/dev", or is that too broad?
+        return None
 
 
 class HuaweiStorHyperConnector(InitiatorConnector):
