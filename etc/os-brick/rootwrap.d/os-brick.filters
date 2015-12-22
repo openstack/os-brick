@@ -67,3 +67,39 @@ vgc-cluster: CommandFilter, vgc-cluster, root
 
 # initiator/linuxscsi.py
 scsi_id: CommandFilter, /lib/udev/scsi_id, root
+
+# local_dev lvm related commands
+
+# LVM related show commands
+pvs: EnvFilter, env, root, LC_ALL=C, pvs
+vgs: EnvFilter, env, root, LC_ALL=C, vgs
+lvs: EnvFilter, env, root, LC_ALL=C, lvs
+lvdisplay: EnvFilter, env, root, LC_ALL=C, lvdisplay
+
+# local_dev/lvm.py: 'vgcreate', vg_name, pv_list
+vgcreate: CommandFilter, vgcreate, root
+
+# local_dev/lvm.py: 'lvcreate', '-L', sizestr, '-n', volume_name,..
+# local_dev/lvm.py: 'lvcreate', '-L', ...
+lvcreate: EnvFilter, env, root, LC_ALL=C, lvcreate
+lvcreate_lvmconf: EnvFilter, env, root, LVM_SYSTEM_DIR=, LC_ALL=C, lvcreate
+
+# local_dev/lvm.py: 'lvextend', '-L' '%(new_size)s', '%(lv_name)s' ...
+# local_dev/lvm.py: 'lvextend', '-L' '%(new_size)s', '%(thin_pool)s' ...
+lvextend: EnvFilter, env, root, LC_ALL=C, lvextend
+lvextend_lvmconf: EnvFilter, env, root, LVM_SYSTEM_DIR=, LC_ALL=C, lvextend
+
+# local_dev/lvm.py: 'lvremove', '-f', %s/%s % ...
+lvremove: CommandFilter, lvremove, root
+
+# local_dev/lvm.py: 'lvrename', '%(vg)s', '%(orig)s' '(new)s'...
+lvrename: CommandFilter, lvrename, root
+
+# local_dev/lvm.py: 'lvchange -a y -K <lv>'
+lvchange: CommandFilter, lvchange, root
+
+# local_dev/lvm.py: 'lvconvert', '--merge', snapshot_name
+lvconvert: CommandFilter, lvconvert, root
+
+# local_dev/lvm.py: 'udevadm', 'settle'
+udevadm: CommandFilter, udevadm, root
