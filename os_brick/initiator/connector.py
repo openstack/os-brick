@@ -946,7 +946,7 @@ class ISCSIConnector(InitiatorConnector):
                                    check_exit_code=check_exit_code,
                                    attempts=attempts,
                                    delay_on_retry=delay_on_retry)
-        msg = ("iscsiadm %(iscsi_command)s: stdout=%(out)s stderr=%(err)s",
+        msg = ("iscsiadm %(iscsi_command)s: stdout=%(out)s stderr=%(err)s" %
                {'iscsi_command': iscsi_command, 'out': out, 'err': err})
         # don't let passwords be shown in log output
         LOG.debug(strutils.mask_password(msg))
