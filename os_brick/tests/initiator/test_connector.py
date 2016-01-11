@@ -388,6 +388,7 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
                 ('iscsiadm -m node -T %s -p %s --login' % (iqn, location)),
                 ('iscsiadm -m node -T %s -p %s --op update'
                  ' -n node.startup -v automatic' % (iqn, location)),
+                ('scsi_id --page 0x83 --whitelisted %s' % dev_str),
                 ('blockdev --flushbufs /dev/sdb'),
                 ('tee -a /sys/block/sdb/device/delete'),
                 ('iscsiadm -m node -T %s -p %s --op update'
