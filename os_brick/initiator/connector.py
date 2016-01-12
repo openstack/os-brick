@@ -153,6 +153,7 @@ class InitiatorConnector(executor.Executor):
             driver = host_driver.HostDriver()
         self.set_driver(driver)
         self.device_scan_attempts = device_scan_attempts
+        self._linuxscsi = linuxscsi.LinuxSCSI(root_helper, execute=execute)
 
     def set_driver(self, driver):
         """The driver is used to find used LUNs."""
@@ -285,6 +286,45 @@ class InitiatorConnector(executor.Executor):
         if info is None:
             return False
         return True
+
+    def _discover_mpath_device(self, device_wwn,
+                               connection_properties):
+        """This method discovers a multipath device.
+
+        Discover a multipath device based on a defined connection_property
+        and a device_wwn and return the multipath_id and path of the multipath
+        enabled device if there is one.
+        """
+
+        path = self._linuxscsi.find_multipath_device_path(device_wwn)
+        device_path = None
+        multipath_id = None
+
+        if path is None:
+            mpath_info = self._linuxscsi.find_multipath_device(
+                self.device_name)
+            if mpath_info:
+                device_path = mpath_info['device']
+                multipath_id = device_wwn
+            else:
+                # we didn't find a multipath device.
+                # so we assume the kernel only sees 1 device
+                device_path = self.host_device
+                LOG.debug("Unable to find multipath device name for "
+                          "volume. Using path %(device)s for volume.",
+                          {'device': self.host_device})
+        else:
+            device_path = path
+            multipath_id = device_wwn
+        if connection_properties.get('access_mode', '') != 'ro':
+            try:
+                # Sometimes the multipath devices will show up as read only
+                # initially and need additional time/rescans to get to RW.
+                self._linuxscsi.wait_for_rw(device_wwn, device_path)
+            except exception.BlockDeviceReadOnly:
+                LOG.warning(_LW('Block device %s is still read-only. '
+                                'Continuing anyway.'), device_path)
+        return device_path, multipath_id
 
     @abc.abstractmethod
     def connect_volume(self, connection_properties):
@@ -797,20 +837,18 @@ class ISCSIConnector(InitiatorConnector):
         # Choose an accessible host device
         host_device = next(dev for dev in host_devices if os.path.exists(dev))
 
-        if self.use_multipath:
-            # We use the multipath device instead of the single path device
-            self._rescan_multipath()
-            multipath_device = self._get_multipath_device_name(host_device)
-            if multipath_device is not None:
-                host_device = multipath_device
-                LOG.debug("Found multipath device name for "
-                          "volume. Using path %(device)s "
-                          "for volume.", {'device': host_device})
-
         # find out the WWN of the device
         device_wwn = self._linuxscsi.get_scsi_wwn(host_device)
         LOG.debug("Device WWN = '%(wwn)s'", {'wwn': device_wwn})
         device_info['scsi_wwn'] = device_wwn
+
+        if self.use_multipath:
+            (host_device, multipath_id) = (super(
+                ISCSIConnector, self)._discover_mpath_device(
+                device_wwn, connection_properties))
+            if multipath_id:
+                device_info['multipath_id'] = multipath_id
+
         device_info['path'] = host_device
 
         LOG.debug("connect_volume returning %s", device_info)
@@ -1334,37 +1372,14 @@ class FibreChannelConnector(InitiatorConnector):
         # see if the new drive is part of a multipath
         # device.  If so, we'll use the multipath device.
         if self.use_multipath:
+            (device_path, multipath_id) = (super(
+                FibreChannelConnector, self)._discover_mpath_device(
+                device_wwn, connection_properties))
+            if multipath_id:
+                device_info['multipath_id'] = multipath_id
 
-            path = self._linuxscsi.find_multipath_device_path(device_wwn)
-            if path is not None:
-                LOG.debug("Multipath device path discovered %(device)s",
-                          {'device': path})
-                device_path = path
-                # for temporary backwards compatibility
+            if device_path and device_info['multipath_id'] is None:
                 device_info['multipath_id'] = device_wwn
-            else:
-                mpath_info = self._linuxscsi.find_multipath_device(
-                    self.device_name)
-                if mpath_info:
-                    device_path = mpath_info['device']
-                    # for temporary backwards compatibility
-                    device_info['multipath_id'] = device_wwn
-                else:
-                    # we didn't find a multipath device.
-                    # so we assume the kernel only sees 1 device
-                    device_path = self.host_device
-                    LOG.debug("Unable to find multipath device name for "
-                              "volume. Using path %(device)s for volume.",
-                              {'device': self.host_device})
-
-            if connection_properties.get('access_mode', '') != 'ro':
-                try:
-                    # Sometimes the multipath devices will show up as read only
-                    # initially and need additional time/rescans to get to RW.
-                    self._linuxscsi.wait_for_rw(device_wwn, device_path)
-                except exception.BlockDeviceReadOnly:
-                    LOG.warning(_LW('Block device %s is still read-only. '
-                                    'Continuing anyway.'), device_path)
 
         else:
             device_path = self.host_device

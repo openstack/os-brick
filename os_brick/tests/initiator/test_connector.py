@@ -334,6 +334,31 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
             connection_properties['data'])
         self.assertEqual(expected, volume_paths)
 
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'find_multipath_device_path')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'find_multipath_device')
+    def test_discover_mpath_device(self, mock_multipath_device,
+                                   mock_multipath_device_path):
+        location1 = '10.0.2.15:3260'
+        location2 = '[2001:db8::1]:3260'
+        name1 = 'volume-00000001-1'
+        name2 = 'volume-00000001-2'
+        iqn1 = 'iqn.2010-10.org.openstack:%s' % name1
+        iqn2 = 'iqn.2010-10.org.openstack:%s' % name2
+        fake_multipath_dev = '/dev/mapper/fake-multipath-dev'
+        vol = {'id': 1, 'name': name1}
+        connection_properties = self.iscsi_connection_multipath(
+            vol, [location1, location2], [iqn1, iqn2], [1, 2])
+        mock_multipath_device_path.return_value = fake_multipath_dev
+        mock_multipath_device.return_value = FAKE_SCSI_WWN
+        (result_path, result_mpath_id) = (
+            self.connector_with_multipath._discover_mpath_device(
+                FAKE_SCSI_WWN,
+                connection_properties['data']))
+        result = {'path': result_path, 'multipath_id': result_mpath_id}
+        expected_result = {'path': fake_multipath_dev,
+                           'multipath_id': FAKE_SCSI_WWN}
+        self.assertEqual(expected_result, result)
+
     def _test_connect_volume(self, extra_props, additional_commands,
                              transport=None, disconnect_mock=None):
         # for making sure the /dev/disk/by-path is gone
@@ -509,16 +534,19 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
     @mock.patch.object(connector.ISCSIConnector, '_rescan_multipath')
     @mock.patch.object(connector.ISCSIConnector, '_get_multipath_device_name')
     @mock.patch.object(os.path, 'exists', return_value=True)
+    @mock.patch.object(connector.InitiatorConnector, '_discover_mpath_device')
     def test_connect_volume_with_multipath(
-            self, exists_mock, get_device_mock, rescan_multipath_mock,
-            rescan_iscsi_mock, connect_to_mock, portals_mock, iscsiadm_mock,
-            mock_iscsi_wwn):
+            self, mock_discover_mpath_device, exists_mock, get_device_mock,
+            rescan_multipath_mock, rescan_iscsi_mock, connect_to_mock,
+            portals_mock, iscsiadm_mock, mock_iscsi_wwn):
         mock_iscsi_wwn.return_value = FAKE_SCSI_WWN
         location = '10.0.2.15:3260'
         name = 'volume-00000001'
         iqn = 'iqn.2010-10.org.openstack:%s' % name
         vol = {'id': 1, 'name': name}
         connection_properties = self.iscsi_connection(vol, location, iqn)
+        mock_discover_mpath_device.return_value = (
+            'iqn.2010-10.org.openstack:%s' % name, FAKE_SCSI_WWN)
 
         self.connector_with_multipath = \
             connector.ISCSIConnector(None, use_multipath=True)
@@ -528,10 +556,11 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
 
         result = self.connector_with_multipath.connect_volume(
             connection_properties['data'])
-        expected_result = {'path': 'iqn.2010-10.org.openstack:volume-00000001',
+        expected_result = {'multipath_id': FAKE_SCSI_WWN,
+                           'path': 'iqn.2010-10.org.openstack:volume-00000001',
                            'type': 'block',
                            'scsi_wwn': FAKE_SCSI_WWN}
-        self.assertEqual(result, expected_result)
+        self.assertEqual(expected_result, result)
 
     @mock.patch.object(connector.ISCSIConnector,
                        '_run_iscsiadm_update_discoverydb')
@@ -585,13 +614,13 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
     @mock.patch.object(connector.ISCSIConnector, '_get_multipath_device_map',
                        return_value={})
     @mock.patch.object(connector.ISCSIConnector, '_get_iscsi_devices')
-    @mock.patch.object(connector.ISCSIConnector, '_rescan_multipath')
     @mock.patch.object(connector.ISCSIConnector, '_run_multipath')
     @mock.patch.object(connector.ISCSIConnector, '_get_multipath_device_name')
     @mock.patch.object(connector.ISCSIConnector, '_get_multipath_iqns')
+    @mock.patch.object(connector.InitiatorConnector, '_discover_mpath_device')
     def test_connect_volume_with_multiple_portals(
-            self, mock_get_iqn, mock_device_name, mock_run_multipath,
-            mock_rescan_multipath, mock_iscsi_devices,
+            self, mock_discover_mpath_device, mock_get_iqn, mock_device_name,
+            mock_run_multipath, mock_iscsi_devices,
             mock_get_device_map, mock_devices, mock_exists, mock_scsi_wwn):
         mock_scsi_wwn.return_value = FAKE_SCSI_WWN
         location1 = '10.0.2.15:3260'
@@ -609,12 +638,14 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
                 '/dev/disk/by-path/ip-%s-iscsi-%s-lun-2' % (dev_loc2, iqn2)]
         mock_devices.return_value = devs
         mock_iscsi_devices.return_value = devs
-        mock_device_name.return_value = fake_multipath_dev
         mock_get_iqn.return_value = [iqn1, iqn2]
+        mock_discover_mpath_device.return_value = (fake_multipath_dev,
+                                                   FAKE_SCSI_WWN)
 
         result = self.connector_with_multipath.connect_volume(
             connection_properties['data'])
-        expected_result = {'path': fake_multipath_dev, 'type': 'block',
+        expected_result = {'multipath_id': FAKE_SCSI_WWN,
+                           'path': fake_multipath_dev, 'type': 'block',
                            'scsi_wwn': FAKE_SCSI_WWN}
         cmd_format = 'iscsiadm -m node -T %s -p %s --%s'
         expected_commands = [cmd_format % (iqn1, location1, 'login'),
@@ -622,7 +653,6 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
         self.assertEqual(expected_result, result)
         for command in expected_commands:
             self.assertIn(command, self.cmds)
-        mock_device_name.assert_called_once_with(devs[0])
 
         self.cmds = []
         self.connector_with_multipath.disconnect_volume(
@@ -643,11 +673,12 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
     @mock.patch.object(connector.ISCSIConnector, '_get_multipath_device_name')
     @mock.patch.object(connector.ISCSIConnector, '_get_multipath_iqns')
     @mock.patch.object(connector.ISCSIConnector, '_run_iscsiadm')
+    @mock.patch.object(connector.InitiatorConnector, '_discover_mpath_device')
     def test_connect_volume_with_multiple_portals_primary_error(
-            self, mock_iscsiadm, mock_get_iqn, mock_device_name,
-            mock_run_multipath, mock_rescan_multipath, mock_iscsi_devices,
-            mock_get_multipath_device_map, mock_devices, mock_exists,
-            mock_scsi_wwn):
+            self, mock_discover_mpath_device, mock_iscsiadm, mock_get_iqn,
+            mock_device_name, mock_run_multipath, mock_rescan_multipath,
+            mock_iscsi_devices, mock_get_multipath_device_map, mock_devices,
+            mock_exists, mock_scsi_wwn):
         mock_scsi_wwn.return_value = FAKE_SCSI_WWN
         location1 = '10.0.2.15:3260'
         location2 = '[2001:db8::1]:3260'
@@ -675,15 +706,17 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
         mock_device_name.return_value = fake_multipath_dev
         mock_get_iqn.return_value = [iqn2]
         mock_iscsiadm.side_effect = fake_run_iscsiadm
+        mock_discover_mpath_device.return_value = (fake_multipath_dev,
+                                                   FAKE_SCSI_WWN)
 
         props = connection_properties['data'].copy()
         result = self.connector_with_multipath.connect_volume(
             connection_properties['data'])
 
-        expected_result = {'path': fake_multipath_dev, 'type': 'block',
+        expected_result = {'multipath_id': FAKE_SCSI_WWN,
+                           'path': fake_multipath_dev, 'type': 'block',
                            'scsi_wwn': FAKE_SCSI_WWN}
         self.assertEqual(expected_result, result)
-        mock_device_name.assert_called_once_with(dev2)
         props['target_portal'] = location1
         props['target_iqn'] = iqn1
         mock_iscsiadm.assert_any_call(props, ('--login',),
@@ -717,10 +750,12 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
     @mock.patch.object(connector.ISCSIConnector, '_rescan_multipath')
     @mock.patch.object(connector.ISCSIConnector, '_run_multipath')
     @mock.patch.object(connector.ISCSIConnector, '_get_multipath_device_name')
+    @mock.patch.object(connector.InitiatorConnector, '_discover_mpath_device')
     def test_connect_volume_with_multipath_connecting(
-            self, mock_device_name, mock_run_multipath,
-            mock_rescan_multipath, mock_iscsi_devices, mock_devices,
-            mock_connect, mock_portals, mock_exists, mock_scsi_wwn):
+            self, mock_discover_mpath_device, mock_device_name,
+            mock_run_multipath, mock_rescan_multipath, mock_iscsi_devices,
+            mock_devices, mock_connect, mock_portals, mock_exists,
+            mock_scsi_wwn):
         mock_scsi_wwn.return_value = FAKE_SCSI_WWN
         location1 = '10.0.2.15:3260'
         location2 = '[2001:db8::1]:3260'
@@ -739,10 +774,13 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
         mock_device_name.return_value = fake_multipath_dev
         mock_portals.return_value = [[location1, iqn1], [location2, iqn1],
                                      [location2, iqn2]]
+        mock_discover_mpath_device.return_value = (fake_multipath_dev,
+                                                   FAKE_SCSI_WWN)
 
         result = self.connector_with_multipath.connect_volume(
             connection_properties['data'])
-        expected_result = {'path': fake_multipath_dev, 'type': 'block',
+        expected_result = {'multipath_id': FAKE_SCSI_WWN,
+                           'path': fake_multipath_dev, 'type': 'block',
                            'scsi_wwn': FAKE_SCSI_WWN}
         props1 = connection_properties['data'].copy()
         props2 = connection_properties['data'].copy()
