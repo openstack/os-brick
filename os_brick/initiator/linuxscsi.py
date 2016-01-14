@@ -18,6 +18,7 @@
 """
 import os
 import re
+import six
 
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
@@ -320,3 +321,90 @@ class LinuxSCSI(executor.Executor):
                     "devices": devices}
             return info
         return None
+
+    def get_device_size(self, device):
+        """Get the size in bytes of a volume."""
+        (out, _err) = self._execute('blockdev', '--getsize64',
+                                    device, run_as_root=True,
+                                    root_helper=self._root_helper)
+        var = six.text_type(out)
+        if var.isnumeric():
+            return int(var)
+        else:
+            return None
+
+    def multipath_reconfigure(self):
+        """Issue a multipathd reconfigure.
+
+        When attachments come and go, the multipathd seems
+        to get lost and not see the maps.  This causes
+        resize map to fail 100%.  To overcome this we have
+        to issue a reconfigure prior to resize map.
+        """
+        (out, _err) = self._execute('multipathd', 'reconfigure',
+                                    run_as_root=True,
+                                    root_helper=self._root_helper)
+        return out
+
+    def multipath_resize_map(self, mpath_id):
+        """Issue a multipath resize map on device.
+
+        This forces the multipath daemon to update it's
+        size information a particular multipath device.
+        """
+        (out, _err) = self._execute('multipathd', 'resize', 'map', mpath_id,
+                                    run_as_root=True,
+                                    root_helper=self._root_helper)
+        return out
+
+    def extend_volume(self, volume_path):
+        """Signal the SCSI subsystem to test for volume resize.
+
+        This function tries to signal the local system's kernel
+        that an already attached volume might have been resized.
+        """
+        LOG.debug("extend volume %s", volume_path)
+
+        device = self.get_device_info(volume_path)
+        LOG.debug("Volume device info = %s", device)
+        device_id = ("%(host)s:%(channel)s:%(id)s:%(lun)s" %
+                     {'host': device['host'],
+                      'channel': device['channel'],
+                      'id': device['id'],
+                      'lun': device['lun']})
+
+        scsi_path = ("/sys/bus/scsi/drivers/sd/%(device_id)s" %
+                     {'device_id': device_id})
+
+        size = self.get_device_size(volume_path)
+        LOG.debug("Starting size: %s", size)
+
+        # now issue the device rescan
+        rescan_path = "%(scsi_path)s/rescan" % {'scsi_path': scsi_path}
+        self.echo_scsi_command(rescan_path, "1")
+        new_size = self.get_device_size(volume_path)
+        LOG.debug("volume size after scsi device rescan %s", new_size)
+
+        scsi_wwn = self.get_scsi_wwn(volume_path)
+        mpath_device = self.find_multipath_device_path(scsi_wwn)
+        if mpath_device:
+            # Force a reconfigure so that resize works
+            self.multipath_reconfigure()
+
+            size = self.get_device_size(mpath_device)
+            LOG.info(_LI("mpath(%(device)s) current size %(size)s"),
+                     {'device': mpath_device, 'size': size})
+            result = self.multipath_resize_map(scsi_wwn)
+            if 'fail' in result:
+                msg = (_LI("Multipathd failed to update the size mapping of "
+                           "multipath device %(scsi_wwn)s volume %(volume)s") %
+                       {'scsi_wwn': scsi_wwn, 'volume': volume_path})
+                LOG.error(msg)
+                return None
+
+            new_size = self.get_device_size(mpath_device)
+            LOG.info(_LI("mpath(%(device)s) new size %(size)s"),
+                     {'device': mpath_device, 'size': new_size})
+            return new_size
+        else:
+            return new_size

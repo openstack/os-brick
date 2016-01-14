@@ -98,6 +98,10 @@ class VolumeDeviceNotFound(BrickException):
     message = _("Volume device not found at %(device)s.")
 
 
+class VolumePathsNotFound(BrickException):
+    message = _("Could not find any paths for the volume.")
+
+
 class VolumePathNotRemoved(BrickException):
     message = _("Volume path %(volume_path)s was not removed in time.")
 

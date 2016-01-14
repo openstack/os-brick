@@ -1067,6 +1067,31 @@ Setting up iSCSI targets: unused
             # our stub method is called which asserts the password is scrubbed
             self.assertTrue(debug_mock.called)
 
+    @mock.patch.object(connector.ISCSIConnector, 'get_volume_paths')
+    def test_extend_volume_no_path(self, mock_volume_paths):
+        mock_volume_paths.return_value = []
+        volume = {'id': 'fake_uuid'}
+        connection_info = self.iscsi_connection(volume,
+                                                "10.0.2.15:3260",
+                                                "fake_iqn")
+
+        self.assertRaises(exception.VolumePathsNotFound,
+                          self.connector.extend_volume,
+                          connection_info['data'])
+
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'extend_volume')
+    @mock.patch.object(connector.ISCSIConnector, 'get_volume_paths')
+    def test_extend_volume(self, mock_volume_paths, mock_scsi_extend):
+        fake_new_size = 1024
+        mock_volume_paths.return_value = ['/dev/vdx']
+        mock_scsi_extend.return_value = fake_new_size
+        volume = {'id': 'fake_uuid'}
+        connection_info = self.iscsi_connection(volume,
+                                                "10.0.2.15:3260",
+                                                "fake_iqn")
+        new_size = self.connector.extend_volume(connection_info['data'])
+        self.assertEqual(fake_new_size, new_size)
+
 
 class FibreChannelConnectorTestCase(ConnectorTestCase):
     def setUp(self):
@@ -1358,6 +1383,33 @@ class FibreChannelConnectorTestCase(ConnectorTestCase):
                                             'ro',
                                             False)
 
+    @mock.patch.object(connector.FibreChannelConnector, 'get_volume_paths')
+    def test_extend_volume_no_path(self, mock_volume_paths):
+        mock_volume_paths.return_value = []
+        volume = {'id': 'fake_uuid'}
+        wwn = '1234567890123456'
+        connection_info = self.fibrechan_connection(volume,
+                                                    "10.0.2.15:3260",
+                                                    wwn)
+
+        self.assertRaises(exception.VolumePathsNotFound,
+                          self.connector.extend_volume,
+                          connection_info['data'])
+
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'extend_volume')
+    @mock.patch.object(connector.FibreChannelConnector, 'get_volume_paths')
+    def test_extend_volume(self, mock_volume_paths, mock_scsi_extend):
+        fake_new_size = 1024
+        mock_volume_paths.return_value = ['/dev/vdx']
+        mock_scsi_extend.return_value = fake_new_size
+        volume = {'id': 'fake_uuid'}
+        wwn = '1234567890123456'
+        connection_info = self.fibrechan_connection(volume,
+                                                    "10.0.2.15:3260",
+                                                    wwn)
+        new_size = self.connector.extend_volume(connection_info['data'])
+        self.assertEqual(fake_new_size, new_size)
+
 
 class FibreChannelConnectorS390XTestCase(ConnectorTestCase):
 
@@ -1507,6 +1559,11 @@ class AoEConnectorTestCase(ConnectorTestCase):
                                return_value=["", ""]):
             self.connector.disconnect_volume(self.connection_properties, {})
 
+    def test_extend_volume(self):
+        self.assertRaises(NotImplementedError,
+                          self.connector.extend_volume,
+                          self.connection_properties)
+
 
 class RemoteFsConnectorTestCase(ConnectorTestCase):
     """Test cases for Remote FS initiator class."""
@@ -1549,6 +1606,11 @@ class RemoteFsConnectorTestCase(ConnectorTestCase):
         """Nothing should happen here -- make sure it doesn't blow up."""
         self.connector.disconnect_volume(self.connection_properties, {})
 
+    def test_extend_volume(self):
+        self.assertRaises(NotImplementedError,
+                          self.connector.extend_volume,
+                          self.connection_properties)
+
 
 class LocalConnectorTestCase(ConnectorTestCase):
 
@@ -1556,31 +1618,33 @@ class LocalConnectorTestCase(ConnectorTestCase):
         super(LocalConnectorTestCase, self).setUp()
         self.connection_properties = {'name': 'foo',
                                       'device_path': '/tmp/bar'}
+        self.connector = connector.LocalConnector(None)
 
     def test_get_search_path(self):
-        self.connector = connector.LocalConnector(None)
         actual = self.connector.get_search_path()
         self.assertIsNone(actual)
 
     def test_get_volume_paths(self):
-        self.connector = connector.LocalConnector(None)
         expected = [self.connection_properties['device_path']]
         actual = self.connector.get_volume_paths(
             self.connection_properties)
         self.assertEqual(expected, actual)
 
     def test_connect_volume(self):
-        self.connector = connector.LocalConnector(None)
         cprops = self.connection_properties
         dev_info = self.connector.connect_volume(cprops)
         self.assertEqual(dev_info['type'], 'local')
         self.assertEqual(dev_info['path'], cprops['device_path'])
 
     def test_connect_volume_with_invalid_connection_data(self):
-        self.connector = connector.LocalConnector(None)
         cprops = {}
         self.assertRaises(ValueError,
                           self.connector.connect_volume, cprops)
+
+    def test_extend_volume(self):
+        self.assertRaises(NotImplementedError,
+                          self.connector.extend_volume,
+                          self.connection_properties)
 
 
 class HuaweiStorHyperConnectorTestCase(ConnectorTestCase):
@@ -1795,6 +1859,11 @@ class HuaweiStorHyperConnectorTestCase(ConnectorTestCase):
         LOG.debug("self.cmds = %s." % self.cmds)
         LOG.debug("expected = %s." % expected_commands)
 
+    def test_extend_volume(self):
+        self.assertRaises(NotImplementedError,
+                          self.connector.extend_volume,
+                          self.connection_properties)
+
 
 class HGSTConnectorTestCase(ConnectorTestCase):
     """Test cases for HGST initiator class."""
@@ -1979,6 +2048,12 @@ Request Succeeded
                           self.connector.disconnect_volume,
                           cprops, None)
 
+    def test_extend_volume(self):
+        cprops = {'name': 'space', 'noremovehost': 'stor1'}
+        self.assertRaises(NotImplementedError,
+                          self.connector.extend_volume,
+                          cprops)
+
 
 class RBDConnectorTestCase(ConnectorTestCase):
 
@@ -2045,6 +2120,12 @@ class RBDConnectorTestCase(ConnectorTestCase):
 
         self.assertEqual(1, volume_close.call_count)
 
+    def test_extend_volume(self):
+        rbd = connector.RBDConnector(None)
+        self.assertRaises(NotImplementedError,
+                          rbd.extend_volume,
+                          self.connection_properties)
+
 
 class DRBDConnectorTestCase(ConnectorTestCase):
 
@@ -2104,6 +2185,12 @@ class DRBDConnectorTestCase(ConnectorTestCase):
         self.connector.disconnect_volume(cprop, dev_info)
 
         self.assertEqual('down', self.execs[0][1])
+
+    def test_extend_volume(self):
+        cprop = {'name': 'something'}
+        self.assertRaises(NotImplementedError,
+                          self.connector.extend_volume,
+                          cprop)
 
 
 class ScaleIOConnectorTestCase(ConnectorTestCase):
@@ -2338,3 +2425,8 @@ class ScaleIOConnectorTestCase(ConnectorTestCase):
                  message='Test error map volume'), 500)
 
         self.test_disconnect_volume()
+
+    def test_extend_volume(self):
+        self.assertRaises(NotImplementedError,
+                          self.connector.extend_volume,
+                          self.fake_connection_properties)
