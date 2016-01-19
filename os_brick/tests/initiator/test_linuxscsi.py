@@ -506,6 +506,12 @@ loop0                                     0"""
         ret_size = self.linuxscsi.get_device_size('/dev/fake')
         self.assertEqual(None, ret_size)
 
+        size_bad = '1024\n'
+        size_good = 1024
+        mock_execute.return_value = (size_bad, None)
+        ret_size = self.linuxscsi.get_device_size('/dev/fake')
+        self.assertEqual(size_good, ret_size)
+
     def test_multipath_reconfigure(self):
         self.linuxscsi.multipath_reconfigure()
         expected_commands = ['multipathd reconfigure']
