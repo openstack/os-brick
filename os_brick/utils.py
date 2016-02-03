@@ -56,3 +56,42 @@ def retry(exceptions, interval=1, retries=3, backoff_rate=2):
         return _wrapper
 
     return _decorator
+
+
+def platform_matches(current_platform, connector_platform):
+    curr_p = current_platform.upper()
+    conn_p = connector_platform.upper()
+    if conn_p == 'ALL':
+        return True
+
+    # Add tests against families of platforms
+    if curr_p == conn_p:
+        return True
+
+    return False
+
+
+def os_matches(current_os, connector_os):
+    curr_os = current_os.upper()
+    conn_os = connector_os.upper()
+    if conn_os == 'ALL':
+        return True
+
+    # add tests against OSs
+    if (conn_os == curr_os or
+       conn_os in curr_os):
+        return True
+
+    return False
+
+
+def merge_dict(dict1, dict2):
+    """Try to safely merge 2 dictionaries."""
+    if type(dict1) is not dict:
+        raise Exception("dict1 is not a dictionary")
+    if type(dict2) is not dict:
+        raise Exception("dict2 is not a dictionary")
+
+    dict3 = dict1.copy()
+    dict3.update(dict2)
+    return dict3

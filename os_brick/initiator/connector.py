@@ -38,12 +38,10 @@ from oslo_concurrency import lockutils
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
 from oslo_service import loopingcall
+from oslo_utils import importutils
 from oslo_utils import strutils
 import six
 from six.moves import urllib
-
-S390X = "s390x"
-S390 = "s390"
 
 from os_brick import exception
 from os_brick import executor
@@ -54,7 +52,6 @@ from os_brick.initiator import linuxfc
 from os_brick.initiator import linuxrbd
 from os_brick.initiator import linuxscsi
 from os_brick.initiator import linuxsheepdog
-from os_brick.privileged import rootwrap as priv_rootwrap
 from os_brick.remotefs import remotefs
 from os_brick.i18n import _, _LE, _LI, _LW
 
@@ -65,6 +62,15 @@ DEVICE_SCAN_ATTEMPTS_DEFAULT = 3
 MULTIPATH_ERROR_REGEX = re.compile("\w{3} \d+ \d\d:\d\d:\d\d \|.*$")
 MULTIPATH_DEV_CHECK_REGEX = re.compile("\s+dm-\d+\s+")
 MULTIPATH_PATH_CHECK_REGEX = re.compile("\s+\d+:\d+:\d+:\d+\s+")
+
+PLATFORM_ALL = 'ALL'
+PLATFORM_x86 = 'X86'
+PLATFORM_S390 = 'S390'
+OS_TYPE_ALL = 'ALL'
+OS_TYPE_LINUX = 'LINUX'
+
+S390X = "s390x"
+S390 = "s390"
 
 ISCSI = "ISCSI"
 ISER = "ISER"
@@ -84,19 +90,21 @@ DISCO = "DISCO"
 VZSTORAGE = "VZSTORAGE"
 SHEEPDOG = "SHEEPDOG"
 
-
-def _check_multipathd_running(root_helper, enforce_multipath):
-    try:
-        priv_rootwrap.execute('multipathd', 'show', 'status',
-                              run_as_root=True, root_helper=root_helper)
-    except putils.ProcessExecutionError as err:
-        LOG.error(_LE('multipathd is not running: exit code %(err)s'),
-                  {'err': err.exit_code})
-        if enforce_multipath:
-            raise
-        return False
-
-    return True
+connector_list = [
+    'os_brick.initiator.connector.InitiatorConnector',
+    'os_brick.initiator.connector.ISCSIConnector',
+    'os_brick.initiator.connector.FibreChannelConnector',
+    'os_brick.initiator.connector.FibreChannelConnectorS390X',
+    'os_brick.initiator.connector.AoEConnector',
+    'os_brick.initiator.connector.RemoteFsConnector',
+    'os_brick.initiator.connector.RBDConnector',
+    'os_brick.initiator.connector.LocalConnector',
+    'os_brick.initiator.connector.DRBDConnector',
+    'os_brick.initiator.connector.HuaweiStorHyperConnector',
+    'os_brick.initiator.connector.HGSTConnector',
+    'os_brick.initiator.connector.ScaleIOConnector',
+    'os_brick.initiator.connector.DISCOConnector',
+]
 
 
 def get_connector_properties(root_helper, my_ip, multipath, enforce_multipath,
@@ -123,32 +131,39 @@ def get_connector_properties(root_helper, my_ip, multipath, enforce_multipath,
     :type enforce_multipath: bool
     :returns: dict containing all of the collected initiator values.
     """
-
-    iscsi = ISCSIConnector(root_helper=root_helper)
-    fc = linuxfc.LinuxFibreChannel(root_helper=root_helper)
-
     props = {}
-    props['ip'] = my_ip
-    props['host'] = host if host else socket.gethostname()
-    initiator = iscsi.get_initiator()
-    if initiator:
-        props['initiator'] = initiator
-    wwpns = fc.get_fc_wwpns()
-    if wwpns:
-        props['wwpns'] = wwpns
-    wwnns = fc.get_fc_wwnns()
-    if wwnns:
-        props['wwnns'] = wwnns
-    props['multipath'] = (multipath and
-                          _check_multipathd_running(root_helper,
-                                                    enforce_multipath))
     props['platform'] = platform.machine()
     props['os_type'] = sys.platform
+    props['ip'] = my_ip
+    props['host'] = host if host else socket.gethostname()
+
+    for item in connector_list:
+        connector = importutils.import_class(item)
+
+        if (utils.platform_matches(props['platform'], connector.platform) and
+           utils.os_matches(props['os_type'], connector.os_type)):
+            LOG.debug("Fetching connector for %s" % connector.__name__)
+            props = utils.merge_dict(props,
+                                     connector.get_connector_properties(
+                                         root_helper,
+                                         host=host,
+                                         multipath=multipath,
+                                         enforce_multipath=enforce_multipath))
+
     return props
 
 
 @six.add_metaclass(abc.ABCMeta)
 class InitiatorConnector(executor.Executor):
+
+    # This object can be used on any platform (x86, S390)
+    platform = PLATFORM_ALL
+
+    # This object can be used on any os type (linux, windows)
+    # TODO(walter-boring) This class stil has a reliance on
+    # linuxscsi object, making it specific to linux.  Need to fix that.
+    os_type = OS_TYPE_LINUX
+
     def __init__(self, root_helper, driver=None, execute=None,
                  device_scan_attempts=DEVICE_SCAN_ATTEMPTS_DEFAULT,
                  *args, **kwargs):
@@ -162,8 +177,20 @@ class InitiatorConnector(executor.Executor):
 
     def set_driver(self, driver):
         """The driver is used to find used LUNs."""
-
         self.driver = driver
+
+    @staticmethod
+    def get_connector_properties(root_helper, *args, **kwargs):
+        """The generic connector properties."""
+        multipath = kwargs['multipath']
+        enforce_multipath = kwargs['enforce_multipath']
+        props = {}
+        # TODO(walter-boring) move this into platform specific lib
+        props['multipath'] = (multipath and
+                              linuxscsi.LinuxSCSI.is_multipath_running(
+                                  enforce_multipath, root_helper))
+
+        return props
 
     @staticmethod
     def factory(protocol, root_helper, driver=None,
@@ -513,6 +540,17 @@ class ISCSIConnector(InitiatorConnector):
             transport=transport, *args, **kwargs)
         self.use_multipath = use_multipath
         self.transport = self._validate_iface_transport(transport)
+
+    @staticmethod
+    def get_connector_properties(root_helper, *args, **kwargs):
+        """The iSCSI connector properties."""
+        props = {}
+        iscsi = ISCSIConnector(root_helper=root_helper)
+        initiator = iscsi.get_initiator()
+        if initiator:
+            props['initiator'] = initiator
+
+        return props
 
     def get_search_path(self):
         """Where do we look for iSCSI based volumes."""
@@ -1312,6 +1350,21 @@ class FibreChannelConnector(InitiatorConnector):
         self._linuxscsi.set_execute(execute)
         self._linuxfc.set_execute(execute)
 
+    @staticmethod
+    def get_connector_properties(root_helper, *args, **kwargs):
+        """The Fibre Channel connector properties."""
+        props = {}
+        fc = linuxfc.LinuxFibreChannel(root_helper)
+
+        wwpns = fc.get_fc_wwpns()
+        if wwpns:
+            props['wwpns'] = wwpns
+        wwnns = fc.get_fc_wwnns()
+        if wwnns:
+            props['wwnns'] = wwnns
+
+        return props
+
     def get_search_path(self):
         """Where do we look for FC based volumes."""
         return '/dev/disk/by-path'
@@ -1544,6 +1597,7 @@ class FibreChannelConnector(InitiatorConnector):
 
 class FibreChannelConnectorS390X(FibreChannelConnector):
     """Connector class to attach/detach Fibre Channel volumes on S390X arch."""
+    platform = PLATFORM_S390
 
     def __init__(self, root_helper, driver=None,
                  execute=None, use_multipath=False,
@@ -1607,6 +1661,7 @@ class FibreChannelConnectorS390X(FibreChannelConnector):
 
 class AoEConnector(InitiatorConnector):
     """Connector class to attach/detach AoE volumes."""
+
     def __init__(self, root_helper, driver=None,
                  device_scan_attempts=DEVICE_SCAN_ATTEMPTS_DEFAULT,
                  *args, **kwargs):
@@ -1615,6 +1670,11 @@ class AoEConnector(InitiatorConnector):
             driver=driver,
             device_scan_attempts=device_scan_attempts,
             *args, **kwargs)
+
+    @staticmethod
+    def get_connector_properties(root_helper, *args, **kwargs):
+        """The AoE connector properties."""
+        return {}
 
     def get_search_path(self):
         return '/dev/etherd'
@@ -1779,6 +1839,11 @@ class RemoteFsConnector(InitiatorConnector):
             device_scan_attempts=device_scan_attempts,
             *args, **kwargs)
 
+    @staticmethod
+    def get_connector_properties(root_helper, *args, **kwargs):
+        """The RemoteFS connector properties."""
+        return {}
+
     def set_execute(self, execute):
         super(RemoteFsConnector, self).set_execute(execute)
         self._remotefsclient.set_execute(execute)
@@ -1845,6 +1910,11 @@ class RBDConnector(InitiatorConnector):
                                            device_scan_attempts=
                                            device_scan_attempts,
                                            *args, **kwargs)
+
+    @staticmethod
+    def get_connector_properties(root_helper, *args, **kwargs):
+        """The RBD connector properties."""
+        return {}
 
     def get_volume_paths(self, connection_properties):
         # TODO(walter-boring): don't know where the connector
@@ -1932,6 +2002,11 @@ class LocalConnector(InitiatorConnector):
         super(LocalConnector, self).__init__(root_helper, driver=driver,
                                              *args, **kwargs)
 
+    @staticmethod
+    def get_connector_properties(root_helper, *args, **kwargs):
+        """The Local connector properties."""
+        return {}
+
     def get_volume_paths(self, connection_properties):
         path = connection_properties['device_path']
         return [path]
@@ -1980,6 +2055,20 @@ class LocalConnector(InitiatorConnector):
 
 class DRBDConnector(InitiatorConnector):
     """"Connector class to attach/detach DRBD resources."""
+
+    def __init__(self, root_helper, driver=None,
+                 execute=putils.execute, *args, **kwargs):
+
+        super(DRBDConnector, self).__init__(root_helper, driver=driver,
+                                            execute=execute, *args, **kwargs)
+
+        self._execute = execute
+        self._root_helper = root_helper
+
+    @staticmethod
+    def get_connector_properties(root_helper, *args, **kwargs):
+        """The DRBD connector properties."""
+        return {}
 
     def check_valid_device(self, path, run_as_root=True):
         """Verify an existing volume."""
@@ -2052,6 +2141,7 @@ class DRBDConnector(InitiatorConnector):
 
 class HuaweiStorHyperConnector(InitiatorConnector):
     """"Connector class to attach/detach SDSHypervisor volumes."""
+
     attached_success_code = 0
     has_been_attached_code = 50151401
     attach_mnid_done_code = 50151405
@@ -2073,6 +2163,11 @@ class HuaweiStorHyperConnector(InitiatorConnector):
         super(HuaweiStorHyperConnector, self).__init__(root_helper,
                                                        driver=driver,
                                                        *args, **kwargs)
+
+    @staticmethod
+    def get_connector_properties(root_helper, *args, **kwargs):
+        """The HuaweiStor connector properties."""
+        return {}
 
     def get_search_path(self):
         # TODO(walter-boring): Where is the location on the filesystem to
@@ -2210,6 +2305,7 @@ class HuaweiStorHyperConnector(InitiatorConnector):
 
 class HGSTConnector(InitiatorConnector):
     """Connector class to attach/detach HGST volumes."""
+
     VGCCLUSTER = 'vgc-cluster'
 
     def __init__(self, root_helper, driver=None,
@@ -2220,6 +2316,11 @@ class HGSTConnector(InitiatorConnector):
                                             device_scan_attempts,
                                             *args, **kwargs)
         self._vgc_host = None
+
+    @staticmethod
+    def get_connector_properties(root_helper, *args, **kwargs):
+        """The HGST connector properties."""
+        return {}
 
     def _log_cli_err(self, err):
         """Dumps the full command output to a logfile in error cases."""
@@ -2357,6 +2458,7 @@ class HGSTConnector(InitiatorConnector):
 
 class ScaleIOConnector(InitiatorConnector):
     """Class implements the connector driver for ScaleIO."""
+
     OK_STATUS_CODE = 200
     VOLUME_NOT_MAPPED_ERROR = 84
     VOLUME_ALREADY_MAPPED_ERROR = 81
@@ -2383,6 +2485,11 @@ class ScaleIOConnector(InitiatorConnector):
         self.volume_path = None
         self.iops_limit = None
         self.bandwidth_limit = None
+
+    @staticmethod
+    def get_connector_properties(root_helper, *args, **kwargs):
+        """The ScaleIO connector properties."""
+        return {}
 
     def get_search_path(self):
         return "/dev/disk/by-id"
@@ -2824,6 +2931,11 @@ class DISCOConnector(InitiatorConnector):
         self.server_port = None
         self.server_ip = None
 
+    @staticmethod
+    def get_connector_properties(root_helper, *args, **kwargs):
+        """The DISCO connector properties."""
+        return {}
+
     def get_search_path(self):
         """Get directory path where to get DISCO volumes."""
         return "/dev"
@@ -2983,6 +3095,11 @@ class SheepdogConnector(InitiatorConnector):
                                                 device_scan_attempts=
                                                 device_scan_attempts,
                                                 *args, **kwargs)
+
+    @staticmethod
+    def get_connector_properties(root_helper, *args, **kwargs):
+        """The Sheepdog connector properties."""
+        return {}
 
     def get_volume_paths(self, connection_properties):
         # TODO(lixiaoy1): don't know where the connector
