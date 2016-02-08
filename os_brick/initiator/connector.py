@@ -54,6 +54,7 @@ from os_brick.initiator import linuxfc
 from os_brick.initiator import linuxrbd
 from os_brick.initiator import linuxscsi
 from os_brick.initiator import linuxsheepdog
+from os_brick.privileged import rootwrap as priv_rootwrap
 from os_brick.remotefs import remotefs
 from os_brick.i18n import _, _LE, _LI, _LW
 
@@ -86,8 +87,8 @@ SHEEPDOG = "SHEEPDOG"
 
 def _check_multipathd_running(root_helper, enforce_multipath):
     try:
-        putils.execute('multipathd', 'show', 'status',
-                       run_as_root=True, root_helper=root_helper)
+        priv_rootwrap.execute('multipathd', 'show', 'status',
+                              run_as_root=True, root_helper=root_helper)
     except putils.ProcessExecutionError as err:
         LOG.error(_LE('multipathd is not running: exit code %(err)s'),
                   {'err': err.exit_code})
@@ -148,8 +149,7 @@ def get_connector_properties(root_helper, my_ip, multipath, enforce_multipath,
 
 @six.add_metaclass(abc.ABCMeta)
 class InitiatorConnector(executor.Executor):
-    def __init__(self, root_helper, driver=None,
-                 execute=putils.execute,
+    def __init__(self, root_helper, driver=None, execute=None,
                  device_scan_attempts=DEVICE_SCAN_ATTEMPTS_DEFAULT,
                  *args, **kwargs):
         super(InitiatorConnector, self).__init__(root_helper, execute=execute,
@@ -167,7 +167,7 @@ class InitiatorConnector(executor.Executor):
 
     @staticmethod
     def factory(protocol, root_helper, driver=None,
-                execute=putils.execute, use_multipath=False,
+                use_multipath=False,
                 device_scan_attempts=DEVICE_SCAN_ATTEMPTS_DEFAULT,
                 arch=None,
                 *args, **kwargs):
@@ -188,7 +188,6 @@ class InitiatorConnector(executor.Executor):
                 kwargs.update({'transport': 'iser'})
             return ISCSIConnector(root_helper=root_helper,
                                   driver=driver,
-                                  execute=execute,
                                   use_multipath=use_multipath,
                                   device_scan_attempts=device_scan_attempts,
                                   *args, **kwargs)
@@ -197,7 +196,6 @@ class InitiatorConnector(executor.Executor):
                 return FibreChannelConnectorS390X(
                     root_helper=root_helper,
                     driver=driver,
-                    execute=execute,
                     use_multipath=use_multipath,
                     device_scan_attempts=device_scan_attempts,
                     *args, **kwargs)
@@ -205,72 +203,61 @@ class InitiatorConnector(executor.Executor):
                 return FibreChannelConnector(
                     root_helper=root_helper,
                     driver=driver,
-                    execute=execute,
                     use_multipath=use_multipath,
                     device_scan_attempts=device_scan_attempts,
                     *args, **kwargs)
         elif protocol == AOE:
             return AoEConnector(root_helper=root_helper,
                                 driver=driver,
-                                execute=execute,
                                 device_scan_attempts=device_scan_attempts,
                                 *args, **kwargs)
         elif protocol in (NFS, GLUSTERFS, SCALITY, QUOBYTE, VZSTORAGE):
             return RemoteFsConnector(mount_type=protocol.lower(),
                                      root_helper=root_helper,
                                      driver=driver,
-                                     execute=execute,
                                      device_scan_attempts=device_scan_attempts,
                                      *args, **kwargs)
         elif protocol == DRBD:
             return DRBDConnector(root_helper=root_helper,
                                  driver=driver,
-                                 execute=execute,
                                  *args, **kwargs)
         elif protocol == LOCAL:
             return LocalConnector(root_helper=root_helper,
                                   driver=driver,
-                                  execute=execute,
                                   device_scan_attempts=device_scan_attempts,
                                   *args, **kwargs)
         elif protocol == HUAWEISDSHYPERVISOR:
             return HuaweiStorHyperConnector(
                 root_helper=root_helper,
                 driver=driver,
-                execute=execute,
                 device_scan_attempts=device_scan_attempts,
                 *args, **kwargs)
         elif protocol == HGST:
             return HGSTConnector(root_helper=root_helper,
                                  driver=driver,
-                                 execute=execute,
                                  device_scan_attempts=device_scan_attempts,
                                  *args, **kwargs)
         elif protocol == RBD:
             return RBDConnector(root_helper=root_helper,
                                 driver=driver,
-                                execute=execute,
                                 device_scan_attempts=device_scan_attempts,
                                 *args, **kwargs)
         elif protocol == SCALEIO:
             return ScaleIOConnector(
                 root_helper=root_helper,
                 driver=driver,
-                execute=execute,
                 device_scan_attempts=device_scan_attempts,
                 *args, **kwargs)
         elif protocol == DISCO:
             return DISCOConnector(
                 root_helper=root_helper,
                 driver=driver,
-                execute=execute,
                 device_scan_attempts=device_scan_attempts,
                 *args, **kwargs
             )
         elif protocol == SHEEPDOG:
             return SheepdogConnector(root_helper=root_helper,
                                      driver=driver,
-                                     execute=execute,
                                      device_scan_attempts=device_scan_attempts,
                                      *args, **kwargs)
         else:
@@ -515,7 +502,7 @@ class ISCSIConnector(InitiatorConnector):
                             'cxgb4i', 'qla4xxx', 'ocs', 'iser']
 
     def __init__(self, root_helper, driver=None,
-                 execute=putils.execute, use_multipath=False,
+                 execute=None, use_multipath=False,
                  device_scan_attempts=DEVICE_SCAN_ATTEMPTS_DEFAULT,
                  transport='default', *args, **kwargs):
         self._linuxscsi = linuxscsi.LinuxSCSI(root_helper, execute)
@@ -1308,7 +1295,7 @@ class FibreChannelConnector(InitiatorConnector):
     """Connector class to attach/detach Fibre Channel volumes."""
 
     def __init__(self, root_helper, driver=None,
-                 execute=putils.execute, use_multipath=False,
+                 execute=None, use_multipath=False,
                  device_scan_attempts=DEVICE_SCAN_ATTEMPTS_DEFAULT,
                  *args, **kwargs):
         self._linuxscsi = linuxscsi.LinuxSCSI(root_helper, execute)
@@ -1559,7 +1546,7 @@ class FibreChannelConnectorS390X(FibreChannelConnector):
     """Connector class to attach/detach Fibre Channel volumes on S390X arch."""
 
     def __init__(self, root_helper, driver=None,
-                 execute=putils.execute, use_multipath=False,
+                 execute=None, use_multipath=False,
                  device_scan_attempts=DEVICE_SCAN_ATTEMPTS_DEFAULT,
                  *args, **kwargs):
         super(FibreChannelConnectorS390X, self).__init__(
@@ -1621,13 +1608,11 @@ class FibreChannelConnectorS390X(FibreChannelConnector):
 class AoEConnector(InitiatorConnector):
     """Connector class to attach/detach AoE volumes."""
     def __init__(self, root_helper, driver=None,
-                 execute=putils.execute,
                  device_scan_attempts=DEVICE_SCAN_ATTEMPTS_DEFAULT,
                  *args, **kwargs):
         super(AoEConnector, self).__init__(
             root_helper,
             driver=driver,
-            execute=execute,
             device_scan_attempts=device_scan_attempts,
             *args, **kwargs)
 
@@ -1764,7 +1749,7 @@ class RemoteFsConnector(InitiatorConnector):
     """Connector class to attach/detach NFS and GlusterFS volumes."""
 
     def __init__(self, mount_type, root_helper, driver=None,
-                 execute=putils.execute,
+                 execute=None,
                  device_scan_attempts=DEVICE_SCAN_ATTEMPTS_DEFAULT,
                  *args, **kwargs):
         kwargs = kwargs or {}
@@ -1852,13 +1837,11 @@ class RemoteFsConnector(InitiatorConnector):
 class RBDConnector(InitiatorConnector):
     """"Connector class to attach/detach RBD volumes."""
 
-    def __init__(self, root_helper, driver=None,
-                 execute=putils.execute, use_multipath=False,
+    def __init__(self, root_helper, driver=None, use_multipath=False,
                  device_scan_attempts=DEVICE_SCAN_ATTEMPTS_DEFAULT,
                  *args, **kwargs):
 
         super(RBDConnector, self).__init__(root_helper, driver=driver,
-                                           execute=execute,
                                            device_scan_attempts=
                                            device_scan_attempts,
                                            *args, **kwargs)
@@ -1944,10 +1927,10 @@ class RBDConnector(InitiatorConnector):
 class LocalConnector(InitiatorConnector):
     """"Connector class to attach/detach File System backed volumes."""
 
-    def __init__(self, root_helper, driver=None, execute=putils.execute,
+    def __init__(self, root_helper, driver=None,
                  *args, **kwargs):
         super(LocalConnector, self).__init__(root_helper, driver=driver,
-                                             execute=execute, *args, **kwargs)
+                                             *args, **kwargs)
 
     def get_volume_paths(self, connection_properties):
         path = connection_properties['device_path']
@@ -1997,15 +1980,6 @@ class LocalConnector(InitiatorConnector):
 
 class DRBDConnector(InitiatorConnector):
     """"Connector class to attach/detach DRBD resources."""
-
-    def __init__(self, root_helper, driver=None,
-                 execute=putils.execute, *args, **kwargs):
-
-        super(DRBDConnector, self).__init__(root_helper, driver=driver,
-                                            execute=execute, *args, **kwargs)
-
-        self._execute = execute
-        self._root_helper = root_helper
 
     def check_valid_device(self, path, run_as_root=True):
         """Verify an existing volume."""
@@ -2085,7 +2059,7 @@ class HuaweiStorHyperConnector(InitiatorConnector):
     not_mount_node_code = 50155007
     iscliexist = True
 
-    def __init__(self, root_helper, driver=None, execute=putils.execute,
+    def __init__(self, root_helper, driver=None,
                  *args, **kwargs):
         self.cli_path = os.getenv('HUAWEISDSHYPERVISORCLI_PATH')
         if not self.cli_path:
@@ -2098,7 +2072,6 @@ class HuaweiStorHyperConnector(InitiatorConnector):
                           'HuaweiStorHyperConnector init failed.'))
         super(HuaweiStorHyperConnector, self).__init__(root_helper,
                                                        driver=driver,
-                                                       execute=execute,
                                                        *args, **kwargs)
 
     def get_search_path(self):
@@ -2240,11 +2213,9 @@ class HGSTConnector(InitiatorConnector):
     VGCCLUSTER = 'vgc-cluster'
 
     def __init__(self, root_helper, driver=None,
-                 execute=putils.execute,
                  device_scan_attempts=DEVICE_SCAN_ATTEMPTS_DEFAULT,
                  *args, **kwargs):
         super(HGSTConnector, self).__init__(root_helper, driver=driver,
-                                            execute=execute,
                                             device_scan_attempts=
                                             device_scan_attempts,
                                             *args, **kwargs)
@@ -2389,15 +2360,14 @@ class ScaleIOConnector(InitiatorConnector):
     OK_STATUS_CODE = 200
     VOLUME_NOT_MAPPED_ERROR = 84
     VOLUME_ALREADY_MAPPED_ERROR = 81
-    GET_GUID_CMD = ['drv_cfg', '--query_guid']
+    GET_GUID_CMD = ['/opt/emc/scaleio/sdc/bin/drv_cfg', '--query_guid']
 
-    def __init__(self, root_helper, driver=None, execute=putils.execute,
+    def __init__(self, root_helper, driver=None,
                  device_scan_attempts=DEVICE_SCAN_ATTEMPTS_DEFAULT,
                  *args, **kwargs):
         super(ScaleIOConnector, self).__init__(
             root_helper,
             driver=driver,
-            execute=execute,
             device_scan_attempts=device_scan_attempts,
             *args, **kwargs
         )
@@ -2839,14 +2809,13 @@ class DISCOConnector(InitiatorConnector):
 
     DISCO_PREFIX = 'dms'
 
-    def __init__(self, root_helper, driver=None, execute=putils.execute,
+    def __init__(self, root_helper, driver=None,
                  device_scan_attempts=DEVICE_SCAN_ATTEMPTS_DEFAULT,
                  *args, **kwargs):
         """Init DISCO connector."""
         super(DISCOConnector, self).__init__(
             root_helper,
             driver=driver,
-            execute=execute,
             device_scan_attempts=device_scan_attempts,
             *args, **kwargs
         )
@@ -3006,13 +2975,11 @@ class DISCOConnector(InitiatorConnector):
 class SheepdogConnector(InitiatorConnector):
     """"Connector class to attach/detach sheepdog volumes."""
 
-    def __init__(self, root_helper, driver=None,
-                 execute=putils.execute, use_multipath=False,
+    def __init__(self, root_helper, driver=None, use_multipath=False,
                  device_scan_attempts=DEVICE_SCAN_ATTEMPTS_DEFAULT,
                  *args, **kwargs):
 
         super(SheepdogConnector, self).__init__(root_helper, driver=driver,
-                                                execute=execute,
                                                 device_scan_attempts=
                                                 device_scan_attempts,
                                                 *args, **kwargs)

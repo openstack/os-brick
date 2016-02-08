@@ -27,11 +27,6 @@ LOG = logging.getLogger(__name__)
 
 
 class LinuxFibreChannel(linuxscsi.LinuxSCSI):
-    def __init__(self, root_helper, execute=putils.execute,
-                 *args, **kwargs):
-        super(LinuxFibreChannel, self).__init__(root_helper, execute,
-                                                *args, **kwargs)
-
     def rescan_hosts(self, hbas):
         for hba in hbas:
             self.echo_scsi_command("/sys/class/scsi_host/%s/scan"
@@ -142,11 +137,6 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
 
 
 class LinuxFibreChannelS390X(LinuxFibreChannel):
-    def __init__(self, root_helper, execute=putils.execute,
-                 *args, **kwargs):
-        super(LinuxFibreChannelS390X, self).__init__(root_helper, execute,
-                                                     *args, **kwargs)
-
     def get_fc_hbas_info(self):
         """Get Fibre Channel WWNs and device paths from the system, if any."""
 

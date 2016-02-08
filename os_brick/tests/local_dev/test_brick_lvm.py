@@ -17,6 +17,7 @@ from oslo_concurrency import processutils
 
 from os_brick import exception
 from os_brick.local_dev import lvm as brick
+from os_brick.privileged import rootwrap as priv_rootwrap
 from os_brick.tests import base
 
 
@@ -27,7 +28,7 @@ class BrickLvmTestCase(base.TestCase):
         self.volume_group_name = 'fake-vg'
 
         # Stub processutils.execute for static methods
-        self.mock_object(processutils, 'execute',
+        self.mock_object(priv_rootwrap, 'execute',
                          self.fake_execute)
         self.vg = brick.LVM(self.volume_group_name,
                             'sudo',
@@ -232,30 +233,30 @@ class BrickLvmTestCase(base.TestCase):
         # use the self._executor fake we pass in on init
         # so we need to stub processutils.execute appropriately
 
-        with mock.patch.object(processutils, 'execute',
+        with mock.patch.object(priv_rootwrap, 'execute',
                                side_effect=self.fake_execute):
             self.assertTrue(self.vg.supports_thin_provisioning('sudo'))
 
-        with mock.patch.object(processutils, 'execute',
+        with mock.patch.object(priv_rootwrap, 'execute',
                                side_effect=self.fake_pretend_lvm_version):
             self.assertTrue(self.vg.supports_thin_provisioning('sudo'))
 
-        with mock.patch.object(processutils, 'execute',
+        with mock.patch.object(priv_rootwrap, 'execute',
                                side_effect=self.fake_old_lvm_version):
             self.assertFalse(self.vg.supports_thin_provisioning('sudo'))
 
-        with mock.patch.object(processutils, 'execute',
+        with mock.patch.object(priv_rootwrap, 'execute',
                                side_effect=self.fake_customised_lvm_version):
             self.assertTrue(self.vg.supports_thin_provisioning('sudo'))
 
     def test_snapshot_lv_activate_support(self):
         self.vg._supports_snapshot_lv_activation = None
-        with mock.patch.object(processutils, 'execute',
+        with mock.patch.object(priv_rootwrap, 'execute',
                                side_effect=self.fake_execute):
             self.assertTrue(self.vg.supports_snapshot_lv_activation)
 
         self.vg._supports_snapshot_lv_activation = None
-        with mock.patch.object(processutils, 'execute',
+        with mock.patch.object(priv_rootwrap, 'execute',
                                side_effect=self.fake_old_lvm_version):
             self.assertFalse(self.vg.supports_snapshot_lv_activation)
 
@@ -265,12 +266,12 @@ class BrickLvmTestCase(base.TestCase):
         """Tests if lvchange -K is available via a lvm2 version check."""
 
         self.vg._supports_lvchange_ignoreskipactivation = None
-        with mock.patch.object(processutils, 'execute',
+        with mock.patch.object(priv_rootwrap, 'execute',
                                side_effect=self.fake_pretend_lvm_version):
             self.assertTrue(self.vg.supports_lvchange_ignoreskipactivation)
 
         self.vg._supports_lvchange_ignoreskipactivation = None
-        with mock.patch.object(processutils, 'execute',
+        with mock.patch.object(priv_rootwrap, 'execute',
                                side_effect=self.fake_old_lvm_version):
             self.assertFalse(self.vg.supports_lvchange_ignoreskipactivation)
 

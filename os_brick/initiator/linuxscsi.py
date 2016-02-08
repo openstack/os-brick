@@ -39,11 +39,6 @@ MULTIPATH_DEVICE_ACTIONS = ['unchanged:', 'reject:', 'reload:',
 
 
 class LinuxSCSI(executor.Executor):
-    def __init__(self, root_helper, execute=putils.execute,
-                 *args, **kwargs):
-        super(LinuxSCSI, self).__init__(root_helper, execute,
-                                        *args, **kwargs)
-
     def echo_scsi_command(self, path, content):
         """Used to echo strings to scsi subsystem."""
 
@@ -109,7 +104,7 @@ class LinuxSCSI(executor.Executor):
     def get_scsi_wwn(self, path):
         """Read the WWN from page 0x83 value for a SCSI device."""
 
-        (out, _err) = self._execute('scsi_id', '--page', '0x83',
+        (out, _err) = self._execute('/lib/udev/scsi_id', '--page', '0x83',
                                     '--whitelisted', path,
                                     run_as_root=True,
                                     root_helper=self._root_helper)

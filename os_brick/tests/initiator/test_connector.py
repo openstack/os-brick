@@ -36,6 +36,7 @@ from os_brick.initiator import linuxfc
 from os_brick.initiator import linuxrbd
 from os_brick.initiator import linuxscsi
 from os_brick.initiator import linuxsheepdog
+from os_brick.privileged import rootwrap as priv_rootwrap
 from os_brick.remotefs import remotefs
 from os_brick.tests import base
 
@@ -79,14 +80,14 @@ class ConnectorUtilsTestCase(base.TestCase):
     def test_brick_get_connector_properties(self):
         self._test_brick_get_connector_properties(False, False, False)
 
-    @mock.patch.object(putils, 'execute')
+    @mock.patch.object(priv_rootwrap, 'execute')
     def test_brick_get_connector_properties_multipath(self, mock_execute):
         self._test_brick_get_connector_properties(True, True, True)
         mock_execute.assert_called_once_with('multipathd', 'show', 'status',
                                              run_as_root=True,
                                              root_helper='sudo')
 
-    @mock.patch.object(putils, 'execute',
+    @mock.patch.object(priv_rootwrap, 'execute',
                        side_effect=putils.ProcessExecutionError)
     def test_brick_get_connector_properties_fallback(self, mock_execute):
         self._test_brick_get_connector_properties(True, False, False)
@@ -94,7 +95,7 @@ class ConnectorUtilsTestCase(base.TestCase):
                                              run_as_root=True,
                                              root_helper='sudo')
 
-    @mock.patch.object(putils, 'execute',
+    @mock.patch.object(priv_rootwrap, 'execute',
                        side_effect=putils.ProcessExecutionError)
     def test_brick_get_connector_properties_raise(self, mock_execute):
         self.assertRaises(putils.ProcessExecutionError,
@@ -419,7 +420,7 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
                 ('iscsiadm -m node -T %s -p %s --login' % (iqn, location)),
                 ('iscsiadm -m node -T %s -p %s --op update'
                  ' -n node.startup -v automatic' % (iqn, location)),
-                ('scsi_id --page 0x83 --whitelisted %s' % dev_str),
+                ('/lib/udev/scsi_id --page 0x83 --whitelisted %s' % dev_str),
                 ('blockdev --flushbufs /dev/sdb'),
                 ('tee -a /sys/block/sdb/device/delete'),
                 ('iscsiadm -m node -T %s -p %s --op update'

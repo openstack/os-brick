@@ -25,6 +25,7 @@ from oslo_log import log as logging
 import six
 
 from os_brick import exception
+from os_brick.privileged import rootwrap as priv_rootwrap
 from os_brick.i18n import _, _LI
 
 LOG = logging.getLogger(__name__)
@@ -33,7 +34,15 @@ LOG = logging.getLogger(__name__)
 class RemoteFsClient(object):
 
     def __init__(self, mount_type, root_helper,
-                 execute=putils.execute, *args, **kwargs):
+                 execute=None, *args, **kwargs):
+        # For backwards compatibility, `putils.execute` is interpreted
+        # as a sentinel to mean "I want the os-brick default" :-/
+        # This can be burnt as soon as we update all the callsites (in
+        # nova+cinder) to the new default - and then we shall never
+        # speak of it again.
+        # TODO(gus): RemoteFsClient should probably inherit from Executor
+        if execute is None or execute == putils.execute:
+            execute = priv_rootwrap.execute
 
         mount_type_to_option_prefix = {
             'nfs': 'nfs',

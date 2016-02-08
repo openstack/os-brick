@@ -20,10 +20,19 @@
 
 from oslo_concurrency import processutils as putils
 
+from os_brick.privileged import rootwrap as priv_rootwrap
+
 
 class Executor(object):
-    def __init__(self, root_helper, execute=putils.execute,
+    def __init__(self, root_helper, execute=None,
                  *args, **kwargs):
+        # For backwards compatibility, `putils.execute` is interpreted
+        # as a sentinel to mean "I want the os-brick default" :-/
+        # This can be burnt as soon as we update all the callsites (in
+        # nova+cinder) to the new default - and then we shall never
+        # speak of it again.
+        if execute is None or execute is putils.execute:
+            execute = priv_rootwrap.execute
         self.set_execute(execute)
         self.set_root_helper(root_helper)
 

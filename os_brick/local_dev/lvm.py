@@ -24,6 +24,7 @@ import re
 from os_brick import exception
 from os_brick import executor
 from os_brick.i18n import _LE, _LI
+from os_brick.privileged import rootwrap as priv_rootwrap
 from os_brick import utils
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
@@ -41,7 +42,7 @@ class LVM(executor.Executor):
 
     def __init__(self, vg_name, root_helper, create_vg=False,
                  physical_volumes=None, lvm_type='default',
-                 executor=putils.execute, lvm_conf=None):
+                 executor=None, lvm_conf=None):
 
         """Initialize the LVM object.
 
@@ -197,9 +198,9 @@ class LVM(executor.Executor):
         """
 
         cmd = LVM.LVM_CMD_PREFIX + ['vgs', '--version']
-        (out, _err) = putils.execute(*cmd,
-                                     root_helper=root_helper,
-                                     run_as_root=True)
+        (out, _err) = priv_rootwrap.execute(*cmd,
+                                            root_helper=root_helper,
+                                            run_as_root=True)
         lines = out.split('\n')
 
         for line in lines:
@@ -277,9 +278,9 @@ class LVM(executor.Executor):
             cmd.append(vg_name)
 
         try:
-            (out, _err) = putils.execute(*cmd,
-                                         root_helper=root_helper,
-                                         run_as_root=True)
+            (out, _err) = priv_rootwrap.execute(*cmd,
+                                                root_helper=root_helper,
+                                                run_as_root=True)
         except putils.ProcessExecutionError as err:
             with excutils.save_and_reraise_exception(reraise=True) as ctx:
                 if "not found" in err.stderr or "Failed to find" in err.stderr:
@@ -335,9 +336,9 @@ class LVM(executor.Executor):
                                     '-o', 'vg_name,name,size,free',
                                     '--separator', field_sep,
                                     '--nosuffix']
-        (out, _err) = putils.execute(*cmd,
-                                     root_helper=root_helper,
-                                     run_as_root=True)
+        (out, _err) = priv_rootwrap.execute(*cmd,
+                                            root_helper=root_helper,
+                                            run_as_root=True)
 
         pvs = out.split()
         if vg_name is not None:
@@ -379,9 +380,9 @@ class LVM(executor.Executor):
         if vg_name is not None:
             cmd.append(vg_name)
 
-        (out, _err) = putils.execute(*cmd,
-                                     root_helper=root_helper,
-                                     run_as_root=True)
+        (out, _err) = priv_rootwrap.execute(*cmd,
+                                            root_helper=root_helper,
+                                            run_as_root=True)
         vg_list = []
         if out is not None:
             vgs = out.split()
