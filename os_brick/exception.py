@@ -128,3 +128,7 @@ class VolumeGroupNotFound(BrickException):
 
 class VolumeGroupCreationFailed(BrickException):
     message = _("Failed to create Volume Group: %(vg_name)s")
+
+
+class CommandExecutionFailed(BrickException):
+    message = _("Failed to execute command %(cmd)s")
