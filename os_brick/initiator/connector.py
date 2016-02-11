@@ -459,13 +459,10 @@ class InitiatorConnector(executor.Executor):
         path = self.get_search_path()
         if path:
             # now find all entries in the search path
-            file_list = []
             if os.path.isdir(path):
-                files = os.listdir(path)
-                for entry in files:
-                    file_list.append(path + entry)
-
-            return file_list
+                path_items = [path, '/*']
+                file_filter = ''.join(path_items)
+                return glob.glob(file_filter)
         else:
             return []
 
