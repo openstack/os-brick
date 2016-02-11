@@ -409,3 +409,20 @@ class LinuxSCSI(executor.Executor):
             return new_size
         else:
             return new_size
+
+    def process_lun_id(self, lun_ids):
+        if isinstance(lun_ids, list):
+            processed = []
+            for x in lun_ids:
+                x = self._format_lun_id(x)
+                processed.append(x)
+        else:
+            processed = self._format_lun_id(lun_ids)
+        return processed
+
+    def _format_lun_id(self, lun_id):
+        if lun_id < 256:
+                return lun_id
+        else:
+            return ("0x%04x%04x00000000" %
+                    (lun_id & 0xffff, lun_id >> 16 & 0xffff))

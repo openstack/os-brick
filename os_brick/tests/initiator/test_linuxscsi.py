@@ -627,3 +627,29 @@ loop0                                     0"""
         expected_cmds = ['tee -a /sys/bus/scsi/drivers/sd/0:0:0:1/rescan',
                          'multipathd reconfigure']
         self.assertEqual(expected_cmds, self.cmds)
+
+    def test_process_lun_id_list(self):
+        lun_list = [2, 255, 88, 370, 5, 256]
+        result = self.linuxscsi.process_lun_id(lun_list)
+        expected = [2, 255, 88, '0x0172000000000000',
+                    5, '0x0100000000000000']
+
+        self.assertEqual(expected, result)
+
+    def test_process_lun_id_single_val_make_hex(self):
+        lun_id = 499
+        result = self.linuxscsi.process_lun_id(lun_id)
+        expected = '0x01f3000000000000'
+        self.assertEqual(expected, result)
+
+    def test_process_lun_id_single_val_make_hex_border_case(self):
+        lun_id = 256
+        result = self.linuxscsi.process_lun_id(lun_id)
+        expected = '0x0100000000000000'
+        self.assertEqual(expected, result)
+
+    def test_process_lun_id_single_var_return(self):
+        lun_id = 13
+        result = self.linuxscsi.process_lun_id(lun_id)
+        expected = 13
+        self.assertEqual(expected, result)

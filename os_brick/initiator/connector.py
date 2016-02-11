@@ -981,7 +981,8 @@ class ISCSIConnector(InitiatorConnector):
         brackets. Udev code specifically forbids that.
         """
         portal, iqn, lun = target
-        return (portal.replace('[', '').replace(']', ''), iqn, lun)
+        return (portal.replace('[', '').replace(']', ''), iqn,
+                self._linuxscsi.process_lun_id(lun))
 
     def _get_device_path(self, connection_properties):
         if self._get_transport() == "default":
@@ -1453,7 +1454,7 @@ class FibreChannelConnector(InitiatorConnector):
             host_device = "/dev/disk/by-path/pci-%s-fc-%s-lun-%s" % (
                 pci_num,
                 target_wwn,
-                lun)
+                self._linuxscsi.process_lun_id(lun))
             host_devices.append(host_device)
         return host_devices
 
