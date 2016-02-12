@@ -348,6 +348,7 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
         iqn1 = 'iqn.2010-10.org.openstack:%s' % name1
         iqn2 = 'iqn.2010-10.org.openstack:%s' % name2
         fake_multipath_dev = '/dev/mapper/fake-multipath-dev'
+        fake_raw_dev = '/dev/disk/by-path/fake-raw-lun'
         vol = {'id': 1, 'name': name1}
         connection_properties = self.iscsi_connection_multipath(
             vol, [location1, location2], [iqn1, iqn2], [1, 2])
@@ -356,7 +357,8 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
         (result_path, result_mpath_id) = (
             self.connector_with_multipath._discover_mpath_device(
                 FAKE_SCSI_WWN,
-                connection_properties['data']))
+                connection_properties['data'],
+                fake_raw_dev))
         result = {'path': result_path, 'multipath_id': result_mpath_id}
         expected_result = {'path': fake_multipath_dev,
                            'multipath_id': FAKE_SCSI_WWN}
