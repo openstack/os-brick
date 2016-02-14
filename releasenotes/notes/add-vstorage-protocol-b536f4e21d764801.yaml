@@ -1,0 +1,3 @@
+---
+features:
+  - Added vStorage protocol support for RemoteFS connections.
