@@ -53,6 +53,7 @@ from os_brick.initiator import host_driver
 from os_brick.initiator import linuxfc
 from os_brick.initiator import linuxrbd
 from os_brick.initiator import linuxscsi
+from os_brick.initiator import linuxsheepdog
 from os_brick.remotefs import remotefs
 from os_brick.i18n import _, _LE, _LI, _LW
 
@@ -80,6 +81,7 @@ SCALITY = "SCALITY"
 QUOBYTE = "QUOBYTE"
 DISCO = "DISCO"
 VZSTORAGE = "VZSTORAGE"
+SHEEPDOG = "SHEEPDOG"
 
 
 def _check_multipathd_running(root_helper, enforce_multipath):
@@ -265,6 +267,12 @@ class InitiatorConnector(executor.Executor):
                 device_scan_attempts=device_scan_attempts,
                 *args, **kwargs
             )
+        elif protocol == SHEEPDOG:
+            return SheepdogConnector(root_helper=root_helper,
+                                     driver=driver,
+                                     execute=execute,
+                                     device_scan_attempts=device_scan_attempts,
+                                     *args, **kwargs)
         else:
             msg = (_("Invalid InitiatorConnector protocol "
                      "specified %(protocol)s") %
@@ -465,6 +473,13 @@ class InitiatorConnector(executor.Executor):
                 return glob.glob(file_filter)
         else:
             return []
+
+    def check_IO_handle_valid(self, handle, data_type, protocol):
+        """Check IO handle has correct data type."""
+        if (handle and not isinstance(handle, data_type)):
+            raise exception.InvalidIOHandleObject(
+                protocol=protocol,
+                actual_type=type(handle))
 
 
 class FakeConnector(InitiatorConnector):
@@ -2988,4 +3003,100 @@ class DISCOConnector(InitiatorConnector):
         return None
 
     def extend_volume(self, connection_properties):
+        raise NotImplementedError
+
+
+class SheepdogConnector(InitiatorConnector):
+    """"Connector class to attach/detach sheepdog volumes."""
+
+    def __init__(self, root_helper, driver=None,
+                 execute=putils.execute, use_multipath=False,
+                 device_scan_attempts=DEVICE_SCAN_ATTEMPTS_DEFAULT,
+                 *args, **kwargs):
+
+        super(SheepdogConnector, self).__init__(root_helper, driver=driver,
+                                                execute=execute,
+                                                device_scan_attempts=
+                                                device_scan_attempts,
+                                                *args, **kwargs)
+
+    def get_volume_paths(self, connection_properties):
+        # TODO(lixiaoy1): don't know where the connector
+        # looks for sheepdog volumes.
+        return []
+
+    def get_search_path(self):
+        # TODO(lixiaoy1): don't know where the connector
+        # looks for sheepdog volumes.
+        return None
+
+    def get_all_available_volumes(self, connection_properties=None):
+        # TODO(lixiaoy1): not sure what to return here for sheepdog
+        return []
+
+    def _get_sheepdog_handle(self, connection_properties):
+        try:
+            host = connection_properties['hosts'][0]
+            name = connection_properties['name']
+            port = connection_properties['ports'][0]
+        except IndexError:
+            msg = _("Connect volume failed, malformed connection properties")
+            raise exception.BrickException(msg=msg)
+
+        sheepdog_handle = linuxsheepdog.SheepdogVolumeIOWrapper(
+            host, port, name)
+        return sheepdog_handle
+
+    def connect_volume(self, connection_properties):
+        """Connect to a volume.
+
+        :param connection_properties: The dictionary that describes all
+                                      of the target volume attributes.
+        :type connection_properties: dict
+        :returns: dict
+        """
+
+        sheepdog_handle = self._get_sheepdog_handle(connection_properties)
+        return {'path': sheepdog_handle}
+
+    def disconnect_volume(self, connection_properties, device_info):
+        """Disconnect a volume.
+
+        :param connection_properties: The dictionary that describes all
+                                      of the target volume attributes.
+        :type connection_properties: dict
+        :param device_info: historical difference, but same as connection_props
+        :type device_info: dict
+        """
+        if device_info:
+            sheepdog_handle = device_info.get('path', None)
+            self.check_IO_handle_valid(sheepdog_handle,
+                                       linuxsheepdog.SheepdogVolumeIOWrapper,
+                                       'Sheepdog')
+            if sheepdog_handle is not None:
+                sheepdog_handle.close()
+
+    def check_valid_device(self, path, run_as_root=True):
+        """Verify an existing sheepdog handle is connected and valid."""
+        sheepdog_handle = path
+
+        if sheepdog_handle is None:
+            return False
+
+        original_offset = sheepdog_handle.tell()
+
+        try:
+            sheepdog_handle.read(4096)
+        except Exception as e:
+            LOG.error(_LE("Failed to access sheepdog device "
+                          "handle: %(error)s"),
+                      {"error": e})
+            return False
+        finally:
+            sheepdog_handle.seek(original_offset, 0)
+
+        return True
+
+    def extend_volume(self, connection_properties):
+        # TODO(lixiaoy1): is this possible?
         raise NotImplementedError

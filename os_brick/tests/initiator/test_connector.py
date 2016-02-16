@@ -35,6 +35,7 @@ from os_brick.initiator import host_driver
 from os_brick.initiator import linuxfc
 from os_brick.initiator import linuxrbd
 from os_brick.initiator import linuxscsi
+from os_brick.initiator import linuxsheepdog
 from os_brick.remotefs import remotefs
 from os_brick.tests import base
 
@@ -2600,3 +2601,63 @@ class DISCOConnectorTestCase(ConnectorTestCase):
         self.assertRaises(NotImplementedError,
                           self.connector.extend_volume,
                           self.fake_connection_properties)
+
+
+class SheepdogConnectorTestCase(ConnectorTestCase):
+
+    def setUp(self):
+        super(SheepdogConnectorTestCase, self).setUp()
+
+        self.hosts = ['fake_hosts']
+        self.ports = ['fake_ports']
+        self.volume = 'fake_volume'
+
+        self.connection_properties = {
+            'hosts': self.hosts,
+            'name': self.volume,
+            'ports': self.ports,
+        }
+
+    def test_get_search_path(self):
+        sheepdog = connector.SheepdogConnector(None)
+        path = sheepdog.get_search_path()
+        self.assertIsNone(path)
+
+    def test_get_volume_paths(self):
+        sheepdog = connector.SheepdogConnector(None)
+        expected = []
+        actual = sheepdog.get_volume_paths(self.connection_properties)
+        self.assertEqual(expected, actual)
+
+    def test_connect_volume(self):
+        """Test the connect volume case."""
+        sheepdog = connector.SheepdogConnector(None)
+        device_info = sheepdog.connect_volume(self.connection_properties)
+
+        # Ensure expected object is returned correctly
+        self.assertTrue(isinstance(device_info['path'],
+                                   linuxsheepdog.SheepdogVolumeIOWrapper))
+
+    @mock.patch.object(linuxsheepdog.SheepdogVolumeIOWrapper, 'close')
+    def test_disconnect_volume(self, volume_close):
+        """Test the disconnect volume case."""
+        sheepdog = connector.SheepdogConnector(None)
+        device_info = sheepdog.connect_volume(self.connection_properties)
+        sheepdog.disconnect_volume(self.connection_properties, device_info)
+
+        self.assertEqual(1, volume_close.call_count)
+
+    def test_disconnect_volume_with_invalid_handle(self):
+        """Test the disconnect volume case with invalid handle."""
+        sheepdog = connector.SheepdogConnector(None)
+        device_info = {'path': 'fake_handle'}
+        self.assertRaises(exception.InvalidIOHandleObject,
+                          sheepdog.disconnect_volume,
+                          self.connection_properties,
+                          device_info)
+
+    def test_extend_volume(self):
+        sheepdog = connector.SheepdogConnector(None)
+        self.assertRaises(NotImplementedError,
+                          sheepdog.extend_volume,
+                          self.connection_properties)
