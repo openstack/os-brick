@@ -297,8 +297,8 @@ class InitiatorConnector(executor.Executor):
             return False
         return True
 
-    def _discover_mpath_device(self, device_wwn,
-                               connection_properties):
+    def _discover_mpath_device(self, device_wwn, connection_properties,
+                               device_name):
         """This method discovers a multipath device.
 
         Discover a multipath device based on a defined connection_property
@@ -312,7 +312,7 @@ class InitiatorConnector(executor.Executor):
 
         if path is None:
             mpath_info = self._linuxscsi.find_multipath_device(
-                self.device_name)
+                device_name)
             if mpath_info:
                 device_path = mpath_info['device']
                 multipath_id = device_wwn
@@ -888,7 +888,7 @@ class ISCSIConnector(InitiatorConnector):
         if self.use_multipath:
             (host_device, multipath_id) = (super(
                 ISCSIConnector, self)._discover_mpath_device(
-                device_wwn, connection_properties))
+                device_wwn, connection_properties, host_device))
             if multipath_id:
                 device_info['multipath_id'] = multipath_id
 
@@ -1434,7 +1434,7 @@ class FibreChannelConnector(InitiatorConnector):
         if self.use_multipath:
             (device_path, multipath_id) = (super(
                 FibreChannelConnector, self)._discover_mpath_device(
-                device_wwn, connection_properties))
+                device_wwn, connection_properties, self.device_name))
             if multipath_id:
                 device_info['multipath_id'] = multipath_id
 
