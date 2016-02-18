@@ -1252,7 +1252,8 @@ class ISCSIConnector(InitiatorConnector):
                 mpath_map['/dev/' + m[1].split(" ")[0]] = mpath_dev
 
         if mpath_line and not mpath_map:
-            LOG.warning(_LW("Failed to parse the output of multipath -ll."))
+            LOG.warning(_LW("Failed to parse the output of multipath -ll. "
+                            "stdout: %s"), out)
         return mpath_map
 
     def _run_iscsi_session(self):
