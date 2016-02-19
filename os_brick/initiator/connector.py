@@ -1437,10 +1437,8 @@ class FibreChannelConnector(InitiatorConnector):
                 FibreChannelConnector, self)._discover_mpath_device(
                 device_wwn, connection_properties, self.device_name))
             if multipath_id:
+                # only set the multipath_id if we found one
                 device_info['multipath_id'] = multipath_id
-
-            if device_path and device_info['multipath_id'] is None:
-                device_info['multipath_id'] = device_wwn
 
         else:
             device_path = self.host_device
