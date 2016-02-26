@@ -193,10 +193,8 @@ class RemoteFsClientTestCase(base.TestCase):
         # starts with "smbfs_"
         self.assertEqual('/fake', client._mount_base)
 
-    def test_init_nfs_calls_check_nfs_options(self):
-        to_patch = remotefs.RemoteFsClient._check_nfs_options
-        with mock.patch.object(to_patch) as mock_check_nfs_options:
-            remotefs.RemoteFsClient("nfs", root_helper='true',
-                                    nfs_mount_point_base='/fake')
-
+    @mock.patch('os_brick.remotefs.remotefs.RemoteFsClient._check_nfs_options')
+    def test_init_nfs_calls_check_nfs_options(self, mock_check_nfs_options):
+        remotefs.RemoteFsClient("nfs", root_helper='true',
+                                nfs_mount_point_base='/fake')
         mock_check_nfs_options.assert_called_once_with()
