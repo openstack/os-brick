@@ -174,9 +174,6 @@ class RemoteFsClientTestCase(base.TestCase):
     def test_no_mount_point_vzstorage(self):
         self._test_no_mount_point('vzstorage')
 
-    def test_no_mount_point_scality(self):
-        self._test_no_mount_point('scality')
-
     def test_no_mount_point_quobyte(self):
         self._test_no_mount_point('quobyte')
 
@@ -198,3 +195,32 @@ class RemoteFsClientTestCase(base.TestCase):
         remotefs.RemoteFsClient("nfs", root_helper='true',
                                 nfs_mount_point_base='/fake')
         mock_check_nfs_options.assert_called_once_with()
+
+
+class ScalityRemoteFsClientTestCase(base.TestCase):
+
+    def setUp(self):
+        super(ScalityRemoteFsClientTestCase, self).setUp()
+
+    def test_no_mount_point_scality(self):
+        self.assertRaises(exception.InvalidParameterValue,
+                          remotefs.ScalityRemoteFsClient,
+                          'scality', root_helper='true')
+
+    def test_get_mount_point(self):
+        fsclient = remotefs.ScalityRemoteFsClient(
+            'scality', root_helper='true', scality_mount_point_base='/fake')
+        self.assertEqual('/fake/path/00', fsclient.get_mount_point('path'))
+
+    @mock.patch('oslo_concurrency.processutils.execute')
+    @mock.patch('os_brick.remotefs.remotefs.RemoteFsClient._do_mount')
+    def test_mount(self, mock_do_mount, mock_execute):
+        fsclient = remotefs.ScalityRemoteFsClient(
+            'scality', root_helper='true', scality_mount_point_base='/fake')
+        with mock.patch.object(fsclient, '_read_mounts', return_value={}):
+            fsclient.mount('fake')
+
+        mock_execute.assert_called_once_with(
+            'mkdir', '-p', '/fake', check_exit_code=0)
+        mock_do_mount.assert_called_once_with(
+            'sofs', '/etc/sfused.conf', '/fake')
