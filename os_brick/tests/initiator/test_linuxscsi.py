@@ -73,7 +73,8 @@ class LinuxSCSITestCase(base.TestCase):
             ('tee -a /sys/block/sdc/device/delete')]
         self.assertEqual(expected_commands, self.cmds)
 
-    def test_wait_for_volume_removal(self):
+    @mock.patch('time.sleep')
+    def test_wait_for_volume_removal(self, sleep_mock):
         fake_path = '/dev/disk/by-path/fake-iscsi-iqn-lun-0'
         exists_mock = mock.Mock()
         exists_mock.return_value = True
@@ -88,6 +89,7 @@ class LinuxSCSITestCase(base.TestCase):
         self.linuxscsi.wait_for_volume_removal(fake_path)
         expected_commands = []
         self.assertEqual(expected_commands, self.cmds)
+        self.assertTrue(sleep_mock.called)
 
     def test_flush_multipath_device(self):
         self.linuxscsi.flush_multipath_device('/dev/dm-9')
@@ -117,8 +119,9 @@ class LinuxSCSITestCase(base.TestCase):
         expected_path = '/dev/disk/by-id/dm-uuid-mpath-%s' % fake_wwn
         self.assertEqual(expected_path, found_path)
 
+    @mock.patch('time.sleep')
     @mock.patch.object(os.path, 'exists')
-    def test_find_multipath_device_path_mapper(self, exists_mock):
+    def test_find_multipath_device_path_mapper(self, exists_mock, sleep_mock):
         # the wait loop tries 3 times before it gives up
         # we want to test failing to find the
         # /dev/disk/by-id/dm-uuid-mpath-<WWN> path
@@ -129,6 +132,7 @@ class LinuxSCSITestCase(base.TestCase):
         found_path = self.linuxscsi.find_multipath_device_path(fake_wwn)
         expected_path = '/dev/mapper/%s' % fake_wwn
         self.assertEqual(expected_path, found_path)
+        self.assertTrue(sleep_mock.called)
 
     @mock.patch.object(os.path, 'exists', return_value=False)
     @mock.patch.object(time, 'sleep')

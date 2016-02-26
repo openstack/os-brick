@@ -2474,12 +2474,14 @@ class ScaleIOConnectorTestCase(ConnectorTestCase):
 
         self.assertRaises(exception.BrickException, self.test_connect_volume)
 
-    def test_error_path_not_found(self):
+    @mock.patch('time.sleep')
+    def test_error_path_not_found(self, sleep_mock):
         """Timeout waiting for volume to map to local file system"""
         mock.patch.object(
             os, 'listdir', return_value=["emc-vol-no-volume"]
         ).start()
         self.assertRaises(exception.BrickException, self.test_connect_volume)
+        self.assertTrue(sleep_mock.called)
 
     def test_map_volume_already_mapped(self):
         """Ignore REST API failure for volume already mapped"""
