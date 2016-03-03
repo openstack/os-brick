@@ -132,3 +132,12 @@ class VolumeGroupCreationFailed(BrickException):
 
 class CommandExecutionFailed(BrickException):
     message = _("Failed to execute command %(cmd)s")
+
+
+class VolumeDriverException(BrickException):
+    message = _('An error occurred while IO to volume %(name)s.')
+
+
+class InvalidIOHandleObject(BrickException):
+    message = _('IO handle of %(protocol)s has wrong object '
+                'type %(actual_type)s.')
