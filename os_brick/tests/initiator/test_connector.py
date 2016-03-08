@@ -160,7 +160,7 @@ class ConnectorTestCase(base.TestCase):
         self.assertEqual(obj.__class__.__name__, "RemoteFsConnector")
 
         obj = connector.InitiatorConnector.factory(
-            'scality', None, scality_sofs_mount_point_base='/mnt/test')
+            'scality', None, scality_mount_point_base='/mnt/test')
         self.assertEqual(obj.__class__.__name__, "RemoteFsConnector")
 
         obj = connector.InitiatorConnector.factory('local', None)
@@ -1665,6 +1665,11 @@ class RemoteFsConnectorTestCase(ConnectorTestCase):
             'nfs', root_helper='sudo',
             nfs_mount_point_base=self.TEST_BASE,
             nfs_mount_options='vers=3')
+
+    @mock.patch('os_brick.remotefs.remotefs.ScalityRemoteFsClient')
+    def test_init_with_scality(self, mock_scality_remotefs_client):
+        connector.RemoteFsConnector('scality', root_helper='sudo')
+        self.assertEqual(1, mock_scality_remotefs_client.call_count)
 
     def test_get_search_path(self):
         expected = self.TEST_BASE

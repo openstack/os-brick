@@ -1777,9 +1777,9 @@ class RemoteFsConnector(InitiatorConnector):
                  *args, **kwargs):
         kwargs = kwargs or {}
         conn = kwargs.get('conn')
+        mount_type_lower = mount_type.lower()
         if conn:
             mount_point_base = conn.get('mount_point_base')
-            mount_type_lower = mount_type.lower()
             if mount_type_lower in ('nfs', 'glusterfs', 'scality',
                                     'quobyte', 'vzstorage'):
                 kwargs[mount_type_lower + '_mount_point_base'] = (
@@ -1788,9 +1788,14 @@ class RemoteFsConnector(InitiatorConnector):
         else:
             LOG.warning(_LW("Connection details not present."
                             " RemoteFsClient may not initialize properly."))
-        self._remotefsclient = remotefs.RemoteFsClient(mount_type, root_helper,
-                                                       execute=execute,
-                                                       *args, **kwargs)
+
+        if mount_type_lower == 'scality':
+            cls = remotefs.ScalityRemoteFsClient
+        else:
+            cls = remotefs.RemoteFsClient
+        self._remotefsclient = cls(mount_type, root_helper, execute=execute,
+                                   *args, **kwargs)
+
         super(RemoteFsConnector, self).__init__(
             root_helper, driver=driver,
             execute=execute,

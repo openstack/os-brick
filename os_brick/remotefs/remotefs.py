@@ -40,7 +40,6 @@ class RemoteFsClient(object):
             'cifs': 'smbfs',
             'glusterfs': 'glusterfs',
             'vzstorage': 'vzstorage',
-            'scality': 'scality_sofs',
             'quobyte': 'quobyte'
         }
 
@@ -230,3 +229,36 @@ class RemoteFsClient(object):
         opt = '%s=%s' % (option, value) if value else option
         opts.append(opt)
         return ",".join(opts) if len(opts) > 1 else opts[0]
+
+
+class ScalityRemoteFsClient(RemoteFsClient):
+    def __init__(self, mount_type, root_helper,
+                 execute=None, *args, **kwargs):
+        self._mount_type = mount_type
+        self._mount_base = kwargs.get(
+            'scality_mount_point_base', "").rstrip('/')
+        if not self._mount_base:
+            raise exception.InvalidParameterValue(
+                err=_('scality_mount_point_base required'))
+        self.root_helper = root_helper
+        self.set_execute(execute or putils.execute)
+        self._mount_options = None
+
+    def get_mount_point(self, device_name):
+        return os.path.join(self._mount_base,
+                            device_name,
+                            "00")
+
+    def mount(self, share, flags=None):
+        """Mount the Scality ScaleOut FS.
+
+        The `share` argument is ignored because you can't mount several
+        SOFS at the same type on a single server. But we want to keep the
+        same method signature for class inheritance purpose.
+        """
+        if self._mount_base in self._read_mounts():
+            LOG.info(_LI('Already mounted: %s'), self._mount_base)
+            return
+        self._execute('mkdir', '-p', self._mount_base, check_exit_code=0)
+        super(ScalityRemoteFsClient, self)._do_mount(
+            'sofs', '/etc/sfused.conf', self._mount_base)
