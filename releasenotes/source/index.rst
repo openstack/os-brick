@@ -1,5 +1,9 @@
-=============
-Release Notes
-=============
+========================
+ os-brick Release Notes
+========================
 
-.. release-notes::
+.. toctree::
+   :maxdepth: 1
+
+   unreleased
+   mitaka
