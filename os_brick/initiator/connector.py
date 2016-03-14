@@ -935,7 +935,10 @@ class ISCSIConnector(InitiatorConnector):
             for dev in host_devices:
                 if os.path.exists(dev):
                     host_device = dev
-                    multipath_device = self._get_multipath_device_name(dev)
+                    device_wwn = self._linuxscsi.get_scsi_wwn(dev)
+                    (multipath_device, multipath_id) = (super(
+                        ISCSIConnector, self)._discover_mpath_device(
+                            device_wwn, connection_properties, dev))
                     if multipath_device:
                         break
             if not host_device:
@@ -1207,18 +1210,6 @@ class ISCSIConnector(InitiatorConnector):
                            check_exit_code=[0, 21, 255],
                            attempts=5,
                            delay_on_retry=True)
-
-    def _get_multipath_device_name(self, single_path_device):
-        device = os.path.realpath(single_path_device)
-        out = self._run_multipath(['-ll',
-                                  device],
-                                  check_exit_code=[0, 1])[0]
-        mpath_line = [line for line in out.splitlines()
-                      if not re.match(MULTIPATH_ERROR_REGEX, line)]
-        if len(mpath_line) > 0 and len(mpath_line[0]) > 0:
-            return "/dev/mapper/%s" % mpath_line[0].split(" ")[0]
-
-        return None
 
     def _get_iscsi_devices(self):
         try:
