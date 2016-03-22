@@ -29,6 +29,7 @@ nosetests.xml
 .venv
 tools/lintstack.head.py
 tools/pylint_exceptions
+cover
 
 # Translations
 *.mo
