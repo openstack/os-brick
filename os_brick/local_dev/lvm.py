@@ -492,7 +492,7 @@ class LVM(executor.Executor):
 
         """
 
-        if not self.supports_thin_provisioning(self._root_helper):
+        if not LVM.supports_thin_provisioning(self._root_helper):
             LOG.error(_LE('Requested to setup thin provisioning, '
                           'however current LVM version does not '
                           'support it.'))
