@@ -1102,6 +1102,13 @@ Setting up iSCSI targets: unused
         new_size = self.connector.extend_volume(connection_info['data'])
         self.assertEqual(fake_new_size, new_size)
 
+    @mock.patch.object(os.path, 'isdir')
+    def test_get_all_available_volumes_path_not_dir(self, mock_isdir):
+        mock_isdir.return_value = False
+        expected = []
+        actual = self.connector.get_all_available_volumes()
+        self.assertItemsEqual(expected, actual)
+
 
 class FibreChannelConnectorTestCase(ConnectorTestCase):
     def setUp(self):
@@ -1452,6 +1459,13 @@ class FibreChannelConnectorTestCase(ConnectorTestCase):
                                                     wwn)
         new_size = self.connector.extend_volume(connection_info['data'])
         self.assertEqual(fake_new_size, new_size)
+
+    @mock.patch.object(os.path, 'isdir')
+    def test_get_all_available_volumes_path_not_dir(self, mock_isdir):
+        mock_isdir.return_value = False
+        expected = []
+        actual = self.connector.get_all_available_volumes()
+        self.assertItemsEqual(expected, actual)
 
 
 class FibreChannelConnectorS390XTestCase(ConnectorTestCase):

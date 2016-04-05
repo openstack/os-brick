@@ -464,15 +464,16 @@ class InitiatorConnector(executor.Executor):
                                       of the target volume attributes.
         :type connection_properties: dict
         """
+        volumes = []
         path = self.get_search_path()
         if path:
             # now find all entries in the search path
             if os.path.isdir(path):
                 path_items = [path, '/*']
                 file_filter = ''.join(path_items)
-                return glob.glob(file_filter)
-        else:
-            return []
+                volumes = glob.glob(file_filter)
+
+        return volumes
 
     def check_IO_handle_valid(self, handle, data_type, protocol):
         """Check IO handle has correct data type."""
