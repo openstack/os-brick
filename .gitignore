@@ -27,6 +27,8 @@ pip-log.txt
 nosetests.xml
 .testrepository
 .venv
+tools/lintstack.head.py
+tools/pylint_exceptions
 
 # Translations
 *.mo
