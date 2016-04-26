@@ -259,6 +259,19 @@ class LVM(executor.Executor):
 
         return self._supports_lvchange_ignoreskipactivation
 
+    @property
+    def supports_full_pool_create(self):
+        """Property indicating whether 100% pool creation is supported.
+
+        Check for LVM version >= 2.02.115.
+        Ref: https://bugzilla.redhat.com/show_bug.cgi?id=998347
+        """
+
+        if self.get_lvm_version(self._root_helper) >= (2, 2, 115):
+            return True
+        else:
+            return False
+
     @staticmethod
     def get_lv_info(root_helper, vg_name=None, lv_name=None):
         """Retrieve info about LVs (all, in a VG, or a single LV).
@@ -478,10 +491,13 @@ class LVM(executor.Executor):
         # make sure volume group information is current
         self.update_volume_group_info()
 
-        # leave 5% free for metadata
-        return "%sg" % (self.vg_free_space * 0.95)
+        if LVM.supports_full_pool_create:
+            return ["-l", "100%FREE"]
 
-    def create_thin_pool(self, name=None, size_str=None):
+        # leave 5% free for metadata
+        return ["-L", "%sg" % (self.vg_free_space * 0.95)]
+
+    def create_thin_pool(self, name=None):
         """Creates a thin provisioning pool for this VG.
 
         The syntax here is slightly different than the default
@@ -489,7 +505,6 @@ class LVM(executor.Executor):
         and do it.
 
         :param name: Name to use for pool, default is "<vg-name>-pool"
-        :param size_str: Size to allocate for pool, default is entire VG
         :returns: The size string passed to the lvcreate command
 
         """
@@ -505,14 +520,15 @@ class LVM(executor.Executor):
 
         vg_pool_name = '%s/%s' % (self.vg_name, name)
 
-        if not size_str:
-            size_str = self._calculate_thin_pool_size()
+        size_args = self._calculate_thin_pool_size()
 
-        cmd = LVM.LVM_CMD_PREFIX + ['lvcreate', '-T', '-L', size_str,
-                                    vg_pool_name]
+        cmd = LVM.LVM_CMD_PREFIX + ['lvcreate', '-T']
+        cmd.extend(size_args)
+        cmd.append(vg_pool_name)
+
         LOG.debug("Creating thin pool '%(pool)s' with size %(size)s of "
                   "total %(free)sg", {'pool': vg_pool_name,
-                                      'size': size_str,
+                                      'size': size_args,
                                       'free': self.vg_free_space})
 
         self._execute(*cmd,
@@ -520,7 +536,8 @@ class LVM(executor.Executor):
                       run_as_root=True)
 
         self.vg_thin_pool = name
-        return size_str
+
+        return
 
     def create_volume(self, name, size_str, lv_type='default', mirror_count=0):
         """Creates a logical volume on the object's VG.

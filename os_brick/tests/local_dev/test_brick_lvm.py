@@ -50,7 +50,11 @@ class BrickLvmTestCase(base.TestCase):
     def fake_customised_lvm_version(obj, *cmd, **kwargs):
         return ("  LVM version:     2.02.100(2)-RHEL6 (2013-09-12)\n", "")
 
+    def fake_f23_lvm_version(obj, *cmd, **kwargs):
+        return ("  LVM version:     2.02.132(2) (2015-09-22)\n", "")
+
     def fake_execute(obj, *cmd, **kwargs):
+        # TODO(eharney): remove this and move to per-test mocked execute calls
         cmd_string = ', '.join(cmd)
         data = "\n"
 
@@ -132,6 +136,8 @@ class BrickLvmTestCase(base.TestCase):
             else:
                 data = "  9:12\n"
         elif 'lvcreate, -T, -L, ' in cmd_string:
+            pass
+        elif 'lvcreate, -T, -l, 100%FREE' in cmd_string:
             pass
         elif 'lvcreate, -T, -V, ' in cmd_string:
             pass
@@ -277,22 +283,16 @@ class BrickLvmTestCase(base.TestCase):
 
         self.vg._supports_lvchange_ignoreskipactivation = None
 
-    def test_thin_pool_creation(self):
-
+    def test_thin_pool_creation_manual(self):
         # The size of fake-vg volume group is 10g, so the calculated thin
         # pool size should be 9.5g (95% of 10g).
-        self.assertEqual("9.5g", self.vg.create_thin_pool())
-
-        # Passing a size parameter should result in a thin pool of that exact
-        # size.
-        for size in ("1g", "1.2g", "1.75g"):
-            self.assertEqual(size, self.vg.create_thin_pool(size_str=size))
+        self.vg.create_thin_pool()
 
     def test_thin_pool_provisioned_capacity(self):
         self.vg.vg_thin_pool = "test-prov-cap-pool-unit"
         self.vg.vg_name = 'test-prov-cap-vg-unit'
         self.assertEqual(
-            "9.5g",
+            None,
             self.vg.create_thin_pool(name=self.vg.vg_thin_pool))
         self.assertEqual("9.50", self.vg.vg_thin_pool_size)
         self.assertEqual(7.6, self.vg.vg_thin_pool_free_space)
@@ -301,7 +301,7 @@ class BrickLvmTestCase(base.TestCase):
         self.vg.vg_thin_pool = "test-prov-cap-pool-no-unit"
         self.vg.vg_name = 'test-prov-cap-vg-no-unit'
         self.assertEqual(
-            "9.5g",
+            None,
             self.vg.create_thin_pool(name=self.vg.vg_thin_pool))
         self.assertEqual("9.50", self.vg.vg_thin_pool_size)
         self.assertEqual(7.6, self.vg.vg_thin_pool_free_space)
@@ -328,7 +328,7 @@ class BrickLvmTestCase(base.TestCase):
             self.assertEqual(pool_path, cmd[-1])
 
         self.vg._executor = executor
-        self.vg.create_thin_pool(pool_name, "1G")
+        self.vg.create_thin_pool(pool_name)
         self.vg.create_volume("test", "1G", lv_type='thin')
 
         self.assertEqual(pool_name, self.vg.vg_thin_pool)
