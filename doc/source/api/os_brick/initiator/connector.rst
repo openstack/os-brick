@@ -13,11 +13,6 @@
       .. automethod:: connect_volume
       .. automethod:: disconnect_volume
 
-   .. autoclass:: os_brick.initiator.connector.ISERConnector
-
-      .. automethod:: connect_volume
-      .. automethod:: disconnect_volume
-
    .. autoclass:: os_brick.initiator.connector.FibreChannelConnector
 
       .. automethod:: connect_volume
