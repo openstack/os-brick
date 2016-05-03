@@ -615,8 +615,14 @@ class ISCSIConnector(InitiatorConnector):
             try:
                 ips_iqns = self._discover_iscsi_portals(connection_properties)
             except Exception:
-                raise exception.TargetPortalNotFound(
-                    target_portal=connection_properties['target_portal'])
+                if 'target_portals' in connection_properties:
+                    raise exception.TargetPortalsNotFound(
+                        target_portal=connection_properties['target_portals'])
+                elif 'target_portal' in connection_properties:
+                    raise exception.TargetPortalNotFound(
+                        target_portal=connection_properties['target_portal'])
+                else:
+                    raise
 
             if not connection_properties.get('target_iqns'):
                 # There are two types of iSCSI multipath devices. One which

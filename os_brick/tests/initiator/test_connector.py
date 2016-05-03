@@ -1110,6 +1110,30 @@ Setting up iSCSI targets: unused
         actual = self.connector.get_all_available_volumes()
         self.assertItemsEqual(expected, actual)
 
+    @mock.patch.object(connector.ISCSIConnector, '_discover_iscsi_portals')
+    def test_get_potential_paths_failure_mpath_single_target(self,
+                                                             mock_discover):
+        connection_properties = {
+            'target_portal': '10.0.2.15:3260'
+        }
+        self.connector.use_multipath = True
+        mock_discover.side_effect = exception.BrickException()
+        self.assertRaises(exception.TargetPortalNotFound,
+                          self.connector._get_potential_volume_paths,
+                          connection_properties)
+
+    @mock.patch.object(connector.ISCSIConnector, '_discover_iscsi_portals')
+    def test_get_potential_paths_failure_mpath_multi_target(self,
+                                                            mock_discover):
+        connection_properties = {
+            'target_portals': ['10.0.2.15:3260', '10.0.3.15:3260']
+        }
+        self.connector.use_multipath = True
+        mock_discover.side_effect = exception.BrickException()
+        self.assertRaises(exception.TargetPortalsNotFound,
+                          self.connector._get_potential_volume_paths,
+                          connection_properties)
+
 
 class FibreChannelConnectorTestCase(ConnectorTestCase):
     def setUp(self):
