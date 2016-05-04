@@ -25,8 +25,10 @@ from oslo_log import log as logging
 
 from os_brick import exception
 from os_brick import executor
+from os_brick.i18n import _LE
 from os_brick.i18n import _LI
 from os_brick.i18n import _LW
+from os_brick.privileged import rootwrap as priv_rootwrap
 from os_brick import utils
 
 LOG = logging.getLogger(__name__)
@@ -109,6 +111,21 @@ class LinuxSCSI(executor.Executor):
                                     run_as_root=True,
                                     root_helper=self._root_helper)
         return out.strip()
+
+    @staticmethod
+    def is_multipath_running(enforce_multipath, root_helper):
+        try:
+            priv_rootwrap.execute('multipathd', 'show', 'status',
+                                  run_as_root=True,
+                                  root_helper=root_helper)
+        except putils.ProcessExecutionError as err:
+            LOG.error(_LE('multipathd is not running: exit code %(err)s'),
+                      {'err': err.exit_code})
+            if enforce_multipath:
+                raise
+            return False
+
+        return True
 
     def remove_multipath_device(self, device):
         """This removes LUNs associated with a multipath device

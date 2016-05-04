@@ -14,6 +14,7 @@
 
 import os.path
 import platform
+import sys
 import tempfile
 import time
 
@@ -77,6 +78,29 @@ class ConnectorUtilsTestCase(base.TestCase):
                  'platform': platform}
         self.assertEqual(props, props_actual)
 
+    def test_brick_get_connector_properties_connectors_called(self):
+        """Make sure every connector is called."""
+
+        mock_list = []
+        # Make sure every connector is called
+        for item in connector.connector_list:
+            patched = mock.MagicMock()
+            patched.platform = platform.machine()
+            patched.os_type = sys.platform
+            patched.__name__ = item
+            patched.get_connector_properties.return_value = {}
+            patcher = mock.patch(item, new=patched)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+            mock_list.append(patched)
+
+        connector.get_connector_properties('sudo',
+                                           MY_IP,
+                                           True, True)
+
+        for item in mock_list:
+            assert item.get_connector_properties.called
+
     def test_brick_get_connector_properties(self):
         self._test_brick_get_connector_properties(False, False, False)
 
@@ -137,6 +161,37 @@ class ConnectorTestCase(base.TestCase):
 
     def test_disconnect_volume(self):
         self.connector = connector.FakeConnector(None)
+
+    def test_get_connector_properties(self):
+        with mock.patch.object(priv_rootwrap, 'execute') as mock_exec:
+            mock_exec.return_value = True
+            multipath = True
+            enforce_multipath = True
+            props = connector.InitiatorConnector.get_connector_properties(
+                'sudo', multipath=multipath,
+                enforce_multipath=enforce_multipath)
+
+            expected_props = {'multipath': True}
+            self.assertEqual(expected_props, props)
+
+            multipath = False
+            enforce_multipath = True
+            props = connector.InitiatorConnector.get_connector_properties(
+                'sudo', multipath=multipath,
+                enforce_multipath=enforce_multipath)
+
+            expected_props = {'multipath': False}
+            self.assertEqual(expected_props, props)
+
+        with mock.patch.object(priv_rootwrap, 'execute',
+                               side_effect=putils.ProcessExecutionError):
+            multipath = True
+            enforce_multipath = True
+            self.assertRaises(
+                putils.ProcessExecutionError,
+                connector.InitiatorConnector.get_connector_properties,
+                'sudo', multipath=multipath,
+                enforce_multipath=enforce_multipath)
 
     def test_factory(self):
         obj = connector.InitiatorConnector.factory('iscsi', None)
@@ -217,6 +272,7 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
         mock.patch.object(self.connector._linuxscsi, 'get_name_from_path',
                           return_value="/dev/sdb").start()
         self.addCleanup(mock.patch.stopall)
+        self._fake_iqn = 'iqn.1234-56.foo.bar:01:23456789abc'
 
     def generate_device(self, location, iqn, transport=None, lun=1):
         dev_format = "ip-%s-iscsi-%s-lun-%s" % (location, iqn, lun)
@@ -267,29 +323,41 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
             }
         }
 
+    def _initiator_get_text(self, *arg, **kwargs):
+        text = ('## DO NOT EDIT OR REMOVE THIS FILE!\n'
+                '## If you remove this file, the iSCSI daemon '
+                'will not start.\n'
+                '## If you change the InitiatorName, existing '
+                'access control lists\n'
+                '## may reject this initiator.  The InitiatorName must '
+                'be unique\n'
+                '## for each iSCSI initiator.  Do NOT duplicate iSCSI '
+                'InitiatorNames.\n'
+                'InitiatorName=%s' % self._fake_iqn)
+        return text, None
+
     def test_get_initiator(self):
         def initiator_no_file(*args, **kwargs):
             raise putils.ProcessExecutionError('No file')
 
-        def initiator_get_text(*arg, **kwargs):
-            text = ('## DO NOT EDIT OR REMOVE THIS FILE!\n'
-                    '## If you remove this file, the iSCSI daemon '
-                    'will not start.\n'
-                    '## If you change the InitiatorName, existing '
-                    'access control lists\n'
-                    '## may reject this initiator.  The InitiatorName must '
-                    'be unique\n'
-                    '## for each iSCSI initiator.  Do NOT duplicate iSCSI '
-                    'InitiatorNames.\n'
-                    'InitiatorName=iqn.1234-56.foo.bar:01:23456789abc')
-            return text, None
-
         self.connector._execute = initiator_no_file
         initiator = self.connector.get_initiator()
         self.assertIsNone(initiator)
-        self.connector._execute = initiator_get_text
+        self.connector._execute = self._initiator_get_text
         initiator = self.connector.get_initiator()
-        self.assertEqual(initiator, 'iqn.1234-56.foo.bar:01:23456789abc')
+        self.assertEqual(initiator, self._fake_iqn)
+
+    def test_get_connector_properties(self):
+        with mock.patch.object(priv_rootwrap, 'execute') as mock_exec:
+            mock_exec.return_value = self._initiator_get_text()
+            multipath = True
+            enforce_multipath = True
+            props = connector.ISCSIConnector.get_connector_properties(
+                'sudo', multipath=multipath,
+                enforce_multipath=enforce_multipath)
+
+            expected_props = {'initiator': self._fake_iqn}
+            self.assertEqual(expected_props, props)
 
     @mock.patch.object(connector.ISCSIConnector, '_run_iscsiadm_bare')
     def test_brick_iscsi_validate_transport(self, mock_iscsiadm):
@@ -1185,6 +1253,20 @@ class FibreChannelConnectorTestCase(ConnectorTestCase):
                     'target_lun': 1,
                 }}
 
+    @mock.patch.object(linuxfc.LinuxFibreChannel, 'get_fc_hbas')
+    def test_get_connector_properties(self, mock_hbas):
+        mock_hbas.return_value = self.fake_get_fc_hbas()
+        multipath = True
+        enforce_multipath = True
+        props = connector.FibreChannelConnector.get_connector_properties(
+            'sudo', multipath=multipath,
+            enforce_multipath=enforce_multipath)
+
+        hbas = self.fake_get_fc_hbas()
+        expected_props = {'wwpns': [hbas[0]['port_name'].replace('0x', '')],
+                          'wwnns': [hbas[0]['node_name'].replace('0x', '')]}
+        self.assertEqual(expected_props, props)
+
     def test_get_search_path(self):
         search_path = self.connector.get_search_path()
         expected = "/dev/disk/by-path"
@@ -1592,6 +1674,13 @@ class AoEConnectorTestCase(ConnectorTestCase):
         paths = self.connector.get_volume_paths(self.connection_properties)
         self.assertEqual(expected, paths)
 
+    def test_get_connector_properties(self):
+        props = connector.AoEConnector.get_connector_properties(
+            'sudo', multipath=True, enforce_multipath=True)
+
+        expected_props = {}
+        self.assertEqual(expected_props, props)
+
     @mock.patch.object(os.path, 'exists', side_effect=[True, True])
     def test_connect_volume(self, exists_mock):
         """Ensure that if path exist aoe-revalidate was called."""
@@ -1669,6 +1758,13 @@ class RemoteFsConnectorTestCase(ConnectorTestCase):
         connector.RemoteFsConnector('scality', root_helper='sudo')
         self.assertEqual(1, mock_scality_remotefs_client.call_count)
 
+    def test_get_connector_properties(self):
+        props = connector.RemoteFsConnector.get_connector_properties(
+            'sudo', multipath=True, enforce_multipath=True)
+
+        expected_props = {}
+        self.assertEqual(expected_props, props)
+
     def test_get_search_path(self):
         expected = self.TEST_BASE
         actual = self.connector.get_search_path()
@@ -1706,6 +1802,13 @@ class LocalConnectorTestCase(ConnectorTestCase):
         self.connection_properties = {'name': 'foo',
                                       'device_path': '/tmp/bar'}
         self.connector = connector.LocalConnector(None)
+
+    def test_get_connector_properties(self):
+        props = connector.LocalConnector.get_connector_properties(
+            'sudo', multipath=True, enforce_multipath=True)
+
+        expected_props = {}
+        self.assertEqual(expected_props, props)
 
     def test_get_search_path(self):
         actual = self.connector.get_search_path()
@@ -1801,6 +1904,13 @@ class HuaweiStorHyperConnectorTestCase(ConnectorTestCase):
         if 'detach' == method:
             HuaweiStorHyperConnectorTestCase.attached = True
             return 'ret_code=330155007', None
+
+    def test_get_connector_properties(self):
+        props = connector.HuaweiStorHyperConnector.get_connector_properties(
+            'sudo', multipath=True, enforce_multipath=True)
+
+        expected_props = {}
+        self.assertEqual(expected_props, props)
 
     def test_get_search_path(self):
         actual = self.connector.get_search_path()
@@ -2054,6 +2164,13 @@ Request Succeeded
         self.assertEqual('space', dev_info['device'])
         self.assertEqual('/dev/space', dev_info['path'])
 
+    def test_get_connector_properties(self):
+        props = connector.HGSTConnector.get_connector_properties(
+            'sudo', multipath=True, enforce_multipath=True)
+
+        expected_props = {}
+        self.assertEqual(expected_props, props)
+
     def test_connect_volume_nohost_fail(self):
         """This host should not be found, connect should fail."""
         self._fail_set_apphosts = False
@@ -2169,6 +2286,13 @@ class RBDConnectorTestCase(ConnectorTestCase):
         actual = rbd.get_volume_paths(self.connection_properties)
         self.assertEqual(expected, actual)
 
+    def test_get_connector_properties(self):
+        props = connector.RBDConnector.get_connector_properties(
+            'sudo', multipath=True, enforce_multipath=True)
+
+        expected_props = {}
+        self.assertEqual(expected_props, props)
+
     @mock.patch('os_brick.initiator.linuxrbd.rbd')
     @mock.patch('os_brick.initiator.linuxrbd.rados')
     def test_connect_volume(self, mock_rados, mock_rbd):
@@ -2239,6 +2363,13 @@ class DRBDConnectorTestCase(ConnectorTestCase):
 
         # out, err
         return ('', '')
+
+    def test_get_connector_properties(self):
+        props = connector.DRBDConnector.get_connector_properties(
+            'sudo', multipath=True, enforce_multipath=True)
+
+        expected_props = {}
+        self.assertEqual(expected_props, props)
 
     def test_connect_volume(self):
         """Test connect_volume."""
@@ -2417,6 +2548,13 @@ class ScaleIOConnectorTestCase(ConnectorTestCase):
             self.fake_connection_properties)
         self.assertEqual(expected, actual)
 
+    def test_get_connector_properties(self):
+        props = connector.ScaleIOConnector.get_connector_properties(
+            'sudo', multipath=True, enforce_multipath=True)
+
+        expected_props = {}
+        self.assertEqual(expected_props, props)
+
     def test_connect_volume(self):
         """Successful connect to volume"""
         self.connector.connect_volume(self.fake_connection_properties)
@@ -2584,6 +2722,13 @@ class DISCOConnectorTestCase(ConnectorTestCase):
         volume_path = ''.join(volume_items)
         return [volume_path]
 
+    def test_get_connector_properties(self):
+        props = connector.DISCOConnector.get_connector_properties(
+            'sudo', multipath=True, enforce_multipath=True)
+
+        expected_props = {}
+        self.assertEqual(expected_props, props)
+
     def test_get_search_path(self):
         """DISCO volumes should be under /dev."""
         expected = "/dev"
@@ -2664,6 +2809,13 @@ class SheepdogConnectorTestCase(ConnectorTestCase):
             'name': self.volume,
             'ports': self.ports,
         }
+
+    def test_get_connector_properties(self):
+        props = connector.SheepdogConnector.get_connector_properties(
+            'sudo', multipath=True, enforce_multipath=True)
+
+        expected_props = {}
+        self.assertEqual(expected_props, props)
 
     def test_get_search_path(self):
         sheepdog = connector.SheepdogConnector(None)
