@@ -167,7 +167,7 @@ class ConnectorTestCase(base.TestCase):
             mock_exec.return_value = True
             multipath = True
             enforce_multipath = True
-            props = connector.InitiatorConnector.get_connector_properties(
+            props = connector.BaseLinuxConnector.get_connector_properties(
                 'sudo', multipath=multipath,
                 enforce_multipath=enforce_multipath)
 
@@ -176,7 +176,7 @@ class ConnectorTestCase(base.TestCase):
 
             multipath = False
             enforce_multipath = True
-            props = connector.InitiatorConnector.get_connector_properties(
+            props = connector.BaseLinuxConnector.get_connector_properties(
                 'sudo', multipath=multipath,
                 enforce_multipath=enforce_multipath)
 
@@ -189,7 +189,7 @@ class ConnectorTestCase(base.TestCase):
             enforce_multipath = True
             self.assertRaises(
                 putils.ProcessExecutionError,
-                connector.InitiatorConnector.get_connector_properties,
+                connector.BaseLinuxConnector.get_connector_properties,
                 'sudo', multipath=multipath,
                 enforce_multipath=enforce_multipath)
 
@@ -609,7 +609,7 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
     @mock.patch.object(connector.ISCSIConnector, '_rescan_iscsi')
     @mock.patch.object(connector.ISCSIConnector, '_rescan_multipath')
     @mock.patch.object(os.path, 'exists', return_value=True)
-    @mock.patch.object(connector.InitiatorConnector, '_discover_mpath_device')
+    @mock.patch.object(connector.BaseLinuxConnector, '_discover_mpath_device')
     def test_connect_volume_with_multipath(
             self, mock_discover_mpath_device, exists_mock,
             rescan_multipath_mock, rescan_iscsi_mock, connect_to_mock,
@@ -690,7 +690,7 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
     @mock.patch.object(connector.ISCSIConnector, '_get_iscsi_devices')
     @mock.patch.object(connector.ISCSIConnector, '_run_multipath')
     @mock.patch.object(connector.ISCSIConnector, '_get_multipath_iqns')
-    @mock.patch.object(connector.InitiatorConnector, '_discover_mpath_device')
+    @mock.patch.object(connector.BaseLinuxConnector, '_discover_mpath_device')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'process_lun_id')
     def test_connect_volume_with_multiple_portals(
             self, mock_process_lun_id, mock_discover_mpath_device,
@@ -747,7 +747,7 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
     @mock.patch.object(connector.ISCSIConnector, '_run_multipath')
     @mock.patch.object(connector.ISCSIConnector, '_get_multipath_iqns')
     @mock.patch.object(connector.ISCSIConnector, '_run_iscsiadm')
-    @mock.patch.object(connector.InitiatorConnector, '_discover_mpath_device')
+    @mock.patch.object(connector.BaseLinuxConnector, '_discover_mpath_device')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'process_lun_id')
     def test_connect_volume_with_multiple_portals_primary_error(
             self, mock_process_lun_id, mock_discover_mpath_device,
@@ -826,7 +826,7 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
     @mock.patch.object(connector.ISCSIConnector, '_get_iscsi_devices')
     @mock.patch.object(connector.ISCSIConnector, '_rescan_multipath')
     @mock.patch.object(connector.ISCSIConnector, '_run_multipath')
-    @mock.patch.object(connector.InitiatorConnector, '_discover_mpath_device')
+    @mock.patch.object(connector.BaseLinuxConnector, '_discover_mpath_device')
     def test_connect_volume_with_multipath_connecting(
             self, mock_discover_mpath_device, mock_run_multipath,
             mock_rescan_multipath, mock_iscsi_devices, mock_devices,
@@ -1508,7 +1508,7 @@ class FibreChannelConnectorTestCase(ConnectorTestCase):
                                             'ro',
                                             False)
 
-    @mock.patch.object(connector.InitiatorConnector, '_discover_mpath_device')
+    @mock.patch.object(connector.BaseLinuxConnector, '_discover_mpath_device')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'find_multipath_device')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'wait_for_rw')
     @mock.patch.object(os.path, 'exists', return_value=True)
