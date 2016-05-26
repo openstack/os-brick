@@ -91,7 +91,7 @@ VZSTORAGE = "VZSTORAGE"
 SHEEPDOG = "SHEEPDOG"
 
 connector_list = [
-    'os_brick.initiator.connector.InitiatorConnector',
+    'os_brick.initiator.connector.BaseLinuxConnector',
     'os_brick.initiator.connector.ISCSIConnector',
     'os_brick.initiator.connector.FibreChannelConnector',
     'os_brick.initiator.connector.FibreChannelConnectorS390X',
@@ -160,37 +160,23 @@ class InitiatorConnector(executor.Executor):
     platform = PLATFORM_ALL
 
     # This object can be used on any os type (linux, windows)
-    # TODO(walter-boring) This class stil has a reliance on
-    # linuxscsi object, making it specific to linux.  Need to fix that.
-    os_type = OS_TYPE_LINUX
+    os_type = OS_TYPE_ALL
 
     def __init__(self, root_helper, driver=None, execute=None,
                  device_scan_attempts=DEVICE_SCAN_ATTEMPTS_DEFAULT,
                  *args, **kwargs):
         super(InitiatorConnector, self).__init__(root_helper, execute=execute,
                                                  *args, **kwargs)
-        if not driver:
-            driver = host_driver.HostDriver()
-        self.set_driver(driver)
         self.device_scan_attempts = device_scan_attempts
-        self._linuxscsi = linuxscsi.LinuxSCSI(root_helper, execute=execute)
 
     def set_driver(self, driver):
         """The driver is used to find used LUNs."""
         self.driver = driver
 
-    @staticmethod
+    @abc.abstractmethod
     def get_connector_properties(root_helper, *args, **kwargs):
         """The generic connector properties."""
-        multipath = kwargs['multipath']
-        enforce_multipath = kwargs['enforce_multipath']
-        props = {}
-        # TODO(walter-boring) move this into platform specific lib
-        props['multipath'] = (multipath and
-                              linuxscsi.LinuxSCSI.is_multipath_running(
-                                  enforce_multipath, root_helper))
-
-        return props
+        pass
 
     @staticmethod
     def factory(protocol, root_helper, driver=None,
@@ -293,6 +279,7 @@ class InitiatorConnector(executor.Executor):
                    dict(protocol=protocol))
             raise ValueError(msg)
 
+    @abc.abstractmethod
     def check_valid_device(self, path, run_as_root=True):
         """Test to see if the device path is a real device.
 
@@ -302,61 +289,7 @@ class InitiatorConnector(executor.Executor):
         :type run_as_root: bool
         :returns: bool
         """
-        cmd = ('dd', 'if=%(path)s' % {"path": path},
-               'of=/dev/null', 'count=1')
-        out, info = None, None
-        try:
-            out, info = self._execute(*cmd, run_as_root=run_as_root,
-                                      root_helper=self._root_helper)
-        except putils.ProcessExecutionError as e:
-            LOG.error(_LE("Failed to access the device on the path "
-                          "%(path)s: %(error)s %(info)s."),
-                      {"path": path, "error": e.stderr,
-                       "info": info})
-            return False
-        # If the info is none, the path does not exist.
-        if info is None:
-            return False
-        return True
-
-    def _discover_mpath_device(self, device_wwn, connection_properties,
-                               device_name):
-        """This method discovers a multipath device.
-
-        Discover a multipath device based on a defined connection_property
-        and a device_wwn and return the multipath_id and path of the multipath
-        enabled device if there is one.
-        """
-
-        path = self._linuxscsi.find_multipath_device_path(device_wwn)
-        device_path = None
-        multipath_id = None
-
-        if path is None:
-            mpath_info = self._linuxscsi.find_multipath_device(
-                device_name)
-            if mpath_info:
-                device_path = mpath_info['device']
-                multipath_id = device_wwn
-            else:
-                # we didn't find a multipath device.
-                # so we assume the kernel only sees 1 device
-                device_path = self.host_device
-                LOG.debug("Unable to find multipath device name for "
-                          "volume. Using path %(device)s for volume.",
-                          {'device': self.host_device})
-        else:
-            device_path = path
-            multipath_id = device_wwn
-        if connection_properties.get('access_mode', '') != 'ro':
-            try:
-                # Sometimes the multipath devices will show up as read only
-                # initially and need additional time/rescans to get to RW.
-                self._linuxscsi.wait_for_rw(device_wwn, device_path)
-            except exception.BlockDeviceReadOnly:
-                LOG.warning(_LW('Block device %s is still read-only. '
-                                'Continuing anyway.'), device_path)
-        return device_path, multipath_id
+        pass
 
     @abc.abstractmethod
     def connect_volume(self, connection_properties):
@@ -462,6 +395,7 @@ class InitiatorConnector(executor.Executor):
         """
         pass
 
+    @abc.abstractmethod
     def get_all_available_volumes(self, connection_properties=None):
         """Return all volumes that exist in the search directory.
 
@@ -478,6 +412,62 @@ class InitiatorConnector(executor.Executor):
                                       of the target volume attributes.
         :type connection_properties: dict
         """
+        pass
+
+    def check_IO_handle_valid(self, handle, data_type, protocol):
+        """Check IO handle has correct data type."""
+        if (handle and not isinstance(handle, data_type)):
+            raise exception.InvalidIOHandleObject(
+                protocol=protocol,
+                actual_type=type(handle))
+
+
+class BaseLinuxConnector(InitiatorConnector):
+    os_type = OS_TYPE_LINUX
+
+    def __init__(self, root_helper, driver=None, execute=None,
+                 *args, **kwargs):
+        self._linuxscsi = linuxscsi.LinuxSCSI(root_helper, execute=execute)
+
+        if not driver:
+            driver = host_driver.HostDriver()
+        self.set_driver(driver)
+
+        super(BaseLinuxConnector, self).__init__(root_helper, execute=execute,
+                                                 *args, **kwargs)
+
+    @staticmethod
+    def get_connector_properties(root_helper, *args, **kwargs):
+        """The generic connector properties."""
+        multipath = kwargs['multipath']
+        enforce_multipath = kwargs['enforce_multipath']
+        props = {}
+
+        props['multipath'] = (multipath and
+                              linuxscsi.LinuxSCSI.is_multipath_running(
+                                  enforce_multipath, root_helper))
+
+        return props
+
+    def check_valid_device(self, path, run_as_root=True):
+        cmd = ('dd', 'if=%(path)s' % {"path": path},
+               'of=/dev/null', 'count=1')
+        out, info = None, None
+        try:
+            out, info = self._execute(*cmd, run_as_root=run_as_root,
+                                      root_helper=self._root_helper)
+        except putils.ProcessExecutionError as e:
+            LOG.error(_LE("Failed to access the device on the path "
+                          "%(path)s: %(error)s %(info)s."),
+                      {"path": path, "error": e.stderr,
+                       "info": info})
+            return False
+        # If the info is none, the path does not exist.
+        if info is None:
+            return False
+        return True
+
+    def get_all_available_volumes(self, connection_properties=None):
         volumes = []
         path = self.get_search_path()
         if path:
@@ -489,15 +479,47 @@ class InitiatorConnector(executor.Executor):
 
         return volumes
 
-    def check_IO_handle_valid(self, handle, data_type, protocol):
-        """Check IO handle has correct data type."""
-        if (handle and not isinstance(handle, data_type)):
-            raise exception.InvalidIOHandleObject(
-                protocol=protocol,
-                actual_type=type(handle))
+    def _discover_mpath_device(self, device_wwn, connection_properties,
+                               device_name):
+        """This method discovers a multipath device.
+
+        Discover a multipath device based on a defined connection_property
+        and a device_wwn and return the multipath_id and path of the multipath
+        enabled device if there is one.
+        """
+
+        path = self._linuxscsi.find_multipath_device_path(device_wwn)
+        device_path = None
+        multipath_id = None
+
+        if path is None:
+            mpath_info = self._linuxscsi.find_multipath_device(
+                device_name)
+            if mpath_info:
+                device_path = mpath_info['device']
+                multipath_id = device_wwn
+            else:
+                # we didn't find a multipath device.
+                # so we assume the kernel only sees 1 device
+                device_path = self.host_device
+                LOG.debug("Unable to find multipath device name for "
+                          "volume. Using path %(device)s for volume.",
+                          {'device': self.host_device})
+        else:
+            device_path = path
+            multipath_id = device_wwn
+        if connection_properties.get('access_mode', '') != 'ro':
+            try:
+                # Sometimes the multipath devices will show up as read only
+                # initially and need additional time/rescans to get to RW.
+                self._linuxscsi.wait_for_rw(device_wwn, device_path)
+            except exception.BlockDeviceReadOnly:
+                LOG.warning(_LW('Block device %s is still read-only. '
+                                'Continuing anyway.'), device_path)
+        return device_path, multipath_id
 
 
-class FakeConnector(InitiatorConnector):
+class FakeConnector(BaseLinuxConnector):
 
     fake_path = '/dev/vdFAKE'
 
@@ -523,7 +545,7 @@ class FakeConnector(InitiatorConnector):
                 '/dev/disk/by-path/fake-volume-X']
 
 
-class ISCSIConnector(InitiatorConnector):
+class ISCSIConnector(BaseLinuxConnector):
     """Connector class to attach/detach iSCSI volumes."""
     supported_transports = ['be2iscsi', 'bnx2i', 'cxgb3i', 'default',
                             'cxgb4i', 'qla4xxx', 'ocs', 'iser']
@@ -532,7 +554,6 @@ class ISCSIConnector(InitiatorConnector):
                  execute=None, use_multipath=False,
                  device_scan_attempts=DEVICE_SCAN_ATTEMPTS_DEFAULT,
                  transport='default', *args, **kwargs):
-        self._linuxscsi = linuxscsi.LinuxSCSI(root_helper, execute)
         super(ISCSIConnector, self).__init__(
             root_helper, driver=driver,
             execute=execute,
@@ -1335,14 +1356,13 @@ class ISCSIConnector(InitiatorConnector):
         self._run_multipath(['-r'], check_exit_code=[0, 1, 21])
 
 
-class FibreChannelConnector(InitiatorConnector):
+class FibreChannelConnector(BaseLinuxConnector):
     """Connector class to attach/detach Fibre Channel volumes."""
 
     def __init__(self, root_helper, driver=None,
                  execute=None, use_multipath=False,
                  device_scan_attempts=DEVICE_SCAN_ATTEMPTS_DEFAULT,
                  *args, **kwargs):
-        self._linuxscsi = linuxscsi.LinuxSCSI(root_helper, execute)
         self._linuxfc = linuxfc.LinuxFibreChannel(root_helper, execute)
         super(FibreChannelConnector, self).__init__(
             root_helper, driver=driver,
@@ -1616,7 +1636,6 @@ class FibreChannelConnectorS390X(FibreChannelConnector):
             device_scan_attempts=device_scan_attempts,
             *args, **kwargs)
         LOG.debug("Initializing Fibre Channel connector for S390")
-        self._linuxscsi = linuxscsi.LinuxSCSI(root_helper, execute)
         self._linuxfc = linuxfc.LinuxFibreChannelS390X(root_helper, execute)
         self.use_multipath = use_multipath
 
@@ -1665,7 +1684,7 @@ class FibreChannelConnectorS390X(FibreChannelConnector):
                                                   target_lun)
 
 
-class AoEConnector(InitiatorConnector):
+class AoEConnector(BaseLinuxConnector):
     """Connector class to attach/detach AoE volumes."""
 
     def __init__(self, root_helper, driver=None,
@@ -1811,7 +1830,7 @@ class AoEConnector(InitiatorConnector):
         raise NotImplementedError
 
 
-class RemoteFsConnector(InitiatorConnector):
+class RemoteFsConnector(BaseLinuxConnector):
     """Connector class to attach/detach NFS and GlusterFS volumes."""
 
     def __init__(self, mount_type, root_helper, driver=None,
@@ -1905,7 +1924,7 @@ class RemoteFsConnector(InitiatorConnector):
         raise NotImplementedError
 
 
-class RBDConnector(InitiatorConnector):
+class RBDConnector(BaseLinuxConnector):
     """"Connector class to attach/detach RBD volumes."""
 
     def __init__(self, root_helper, driver=None, use_multipath=False,
@@ -2000,7 +2019,7 @@ class RBDConnector(InitiatorConnector):
         raise NotImplementedError
 
 
-class LocalConnector(InitiatorConnector):
+class LocalConnector(BaseLinuxConnector):
     """"Connector class to attach/detach File System backed volumes."""
 
     def __init__(self, root_helper, driver=None,
@@ -2059,7 +2078,7 @@ class LocalConnector(InitiatorConnector):
         raise NotImplementedError
 
 
-class DRBDConnector(InitiatorConnector):
+class DRBDConnector(BaseLinuxConnector):
     """"Connector class to attach/detach DRBD resources."""
 
     def __init__(self, root_helper, driver=None,
@@ -2145,7 +2164,7 @@ class DRBDConnector(InitiatorConnector):
         raise NotImplementedError
 
 
-class HuaweiStorHyperConnector(InitiatorConnector):
+class HuaweiStorHyperConnector(BaseLinuxConnector):
     """"Connector class to attach/detach SDSHypervisor volumes."""
 
     attached_success_code = 0
@@ -2309,7 +2328,7 @@ class HuaweiStorHyperConnector(InitiatorConnector):
         raise NotImplementedError
 
 
-class HGSTConnector(InitiatorConnector):
+class HGSTConnector(BaseLinuxConnector):
     """Connector class to attach/detach HGST volumes."""
 
     VGCCLUSTER = 'vgc-cluster'
@@ -2462,7 +2481,7 @@ class HGSTConnector(InitiatorConnector):
         raise NotImplementedError
 
 
-class ScaleIOConnector(InitiatorConnector):
+class ScaleIOConnector(BaseLinuxConnector):
     """Class implements the connector driver for ScaleIO."""
 
     OK_STATUS_CODE = 200
@@ -2917,7 +2936,7 @@ class ScaleIOConnector(InitiatorConnector):
         raise NotImplementedError
 
 
-class DISCOConnector(InitiatorConnector):
+class DISCOConnector(BaseLinuxConnector):
     """Class implements the connector driver for DISCO."""
 
     DISCO_PREFIX = 'dms'
@@ -3090,7 +3109,7 @@ class DISCOConnector(InitiatorConnector):
         raise NotImplementedError
 
 
-class SheepdogConnector(InitiatorConnector):
+class SheepdogConnector(BaseLinuxConnector):
     """"Connector class to attach/detach sheepdog volumes."""
 
     def __init__(self, root_helper, driver=None, use_multipath=False,
