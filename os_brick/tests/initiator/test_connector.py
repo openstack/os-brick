@@ -434,6 +434,7 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
                            'multipath_id': FAKE_SCSI_WWN}
         self.assertEqual(expected_result, result)
 
+    @mock.patch('time.sleep', mock.Mock())
     def _test_connect_volume(self, extra_props, additional_commands,
                              transport=None, disconnect_mock=None):
         # for making sure the /dev/disk/by-path is gone
