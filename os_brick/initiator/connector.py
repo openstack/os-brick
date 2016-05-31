@@ -1137,8 +1137,9 @@ class ISCSIConnector(BaseLinuxConnector):
                 if "/mapper/" in dev:
                     devices.append(dev)
                 else:
-                    mpdev = mpath_map.get(dev)
-                    if mpdev:
+                    dev_name = self._linuxscsi.get_name_from_path(dev)
+                    mpdev = mpath_map.get(dev_name)
+                    if mpdev and mpdev not in devices:
                         devices.append(mpdev)
 
         # Do a discovery to find all targets.
