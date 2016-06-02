@@ -657,3 +657,11 @@ loop0                                     0"""
         result = self.linuxscsi.process_lun_id(lun_id)
         expected = 13
         self.assertEqual(expected, result)
+
+    @mock.patch('os_brick.privileged.rootwrap')
+    def test_is_multipath_running_default_executor(self, mock_rootwrap):
+        self.assertTrue(
+            linuxscsi.LinuxSCSI.is_multipath_running(
+                False, None, mock_rootwrap.execute))
+        mock_rootwrap.execute.assert_called_once_with(
+            'multipathd', 'show', 'status', run_as_root=True, root_helper=None)

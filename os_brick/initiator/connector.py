@@ -108,7 +108,7 @@ connector_list = [
 
 
 def get_connector_properties(root_helper, my_ip, multipath, enforce_multipath,
-                             host=None):
+                             host=None, execute=None):
     """Get the connection properties for all protocols.
 
     When the connector wants to use multipath, multipath=True should be
@@ -129,6 +129,8 @@ def get_connector_properties(root_helper, my_ip, multipath, enforce_multipath,
                               running?  If the daemon isn't running then the
                               return dict will have multipath as False.
     :type enforce_multipath: bool
+    :param host: hostname.
+    :param execute: execute helper.
     :returns: dict containing all of the collected initiator values.
     """
     props = {}
@@ -148,7 +150,8 @@ def get_connector_properties(root_helper, my_ip, multipath, enforce_multipath,
                                          root_helper,
                                          host=host,
                                          multipath=multipath,
-                                         enforce_multipath=enforce_multipath))
+                                         enforce_multipath=enforce_multipath,
+                                         execute=execute))
 
     return props
 
@@ -445,7 +448,8 @@ class BaseLinuxConnector(InitiatorConnector):
 
         props['multipath'] = (multipath and
                               linuxscsi.LinuxSCSI.is_multipath_running(
-                                  enforce_multipath, root_helper))
+                                  enforce_multipath, root_helper,
+                                  execute=kwargs.get('execute')))
 
         return props
 
@@ -566,7 +570,8 @@ class ISCSIConnector(BaseLinuxConnector):
     def get_connector_properties(root_helper, *args, **kwargs):
         """The iSCSI connector properties."""
         props = {}
-        iscsi = ISCSIConnector(root_helper=root_helper)
+        iscsi = ISCSIConnector(root_helper=root_helper,
+                               execute=kwargs.get('execute'))
         initiator = iscsi.get_initiator()
         if initiator:
             props['initiator'] = initiator
@@ -1380,7 +1385,8 @@ class FibreChannelConnector(BaseLinuxConnector):
     def get_connector_properties(root_helper, *args, **kwargs):
         """The Fibre Channel connector properties."""
         props = {}
-        fc = linuxfc.LinuxFibreChannel(root_helper)
+        fc = linuxfc.LinuxFibreChannel(root_helper,
+                                       execute=kwargs.get('execute'))
 
         wwpns = fc.get_fc_wwpns()
         if wwpns:
