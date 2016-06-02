@@ -311,18 +311,20 @@ class InitiatorConnector(executor.Executor):
         multipath_id = None
 
         if path is None:
+            # find_multipath_device only accept realpath not symbolic path
+            device_realpath = os.path.realpath(device_name)
             mpath_info = self._linuxscsi.find_multipath_device(
-                device_name)
+                device_realpath)
             if mpath_info:
                 device_path = mpath_info['device']
                 multipath_id = device_wwn
             else:
                 # we didn't find a multipath device.
                 # so we assume the kernel only sees 1 device
-                device_path = self.host_device
+                device_path = device_name
                 LOG.debug("Unable to find multipath device name for "
                           "volume. Using path %(device)s for volume.",
-                          {'device': self.host_device})
+                          {'device': device_path})
         else:
             device_path = path
             multipath_id = device_wwn
