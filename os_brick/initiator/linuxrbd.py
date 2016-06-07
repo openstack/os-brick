@@ -54,6 +54,8 @@ class RBDClient(object):
                 err=_('rbd module required'))
 
         self.rbd_conf = kwargs.get('conffile', '/etc/ceph/ceph.conf')
+        self.rbd_cluster_name = kwargs.get('rbd_cluster_name', 'ceph')
+        self.rados_connect_timeout = kwargs.get('rados_connect_timeout', -1)
 
         self.client, self.ioctx = self.connect()
 
@@ -64,11 +66,18 @@ class RBDClient(object):
         self.disconnect()
 
     def connect(self):
+        LOG.debug("opening connection to ceph cluster (timeout=%s).",
+                  self.rados_connect_timeout)
         client = self.rados.Rados(rados_id=self.rbd_user,
+                                  clustername=self.rbd_cluster_name,
                                   conffile=self.rbd_conf)
 
         try:
-            client.connect()
+            if self.rados_connect_timeout >= 0:
+                client.connect(
+                    timeout=self.configuration.rados_connect_timeout)
+            else:
+                client.connect()
             ioctx = client.open_ioctx(self.rbd_pool)
             return client, ioctx
         except self.rados.Error:
@@ -116,6 +125,15 @@ class RBDVolume(object):
         return getattr(self.image, attrib)
 
 
+class RBDImageMetadata(object):
+    """RBD image metadata to be used with RBDVolumeIOWrapper."""
+    def __init__(self, image, pool, user, conf):
+        self.image = image
+        self.pool = encodeutils.safe_encode(pool or '')
+        self.user = encodeutils.safe_encode(user or '')
+        self.conf = encodeutils.safe_encode(conf or '')
+
+
 class RBDVolumeIOWrapper(io.RawIOBase):
     """Enables LibRBD.Image objects to be treated as Python IO objects.
 
@@ -130,6 +148,22 @@ class RBDVolumeIOWrapper(io.RawIOBase):
     def _inc_offset(self, length):
         self._offset += length
 
+    @property
+    def rbd_image(self):
+        return self._rbd_volume.image
+
+    @property
+    def rbd_user(self):
+        return self._rbd_volume.user
+
+    @property
+    def rbd_pool(self):
+        return self._rbd_volume.pool
+
+    @property
+    def rbd_conf(self):
+        return self._rbd_volume.conf
+
     def read(self, length=None):
         offset = self._offset
         total = self._rbd_volume.image.size()
@@ -138,7 +172,7 @@ class RBDVolumeIOWrapper(io.RawIOBase):
         # length (they just return nothing) but rbd images do so we need to
         # return empty string if we have reached the end of the image.
         if (offset >= total):
-            return ''
+            return b''
 
         if length is None:
             length = total
