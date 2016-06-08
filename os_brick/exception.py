@@ -145,3 +145,8 @@ class VolumeDriverException(BrickException):
 class InvalidIOHandleObject(BrickException):
     message = _('IO handle of %(protocol)s has wrong object '
                 'type %(actual_type)s.')
+
+
+class VolumeEncryptionNotSupported(Invalid):
+    message = _("Volume encryption is not supported for %(volume_type)s "
+                "volume %(volume_id)s.")
