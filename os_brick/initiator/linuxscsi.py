@@ -113,11 +113,12 @@ class LinuxSCSI(executor.Executor):
         return out.strip()
 
     @staticmethod
-    def is_multipath_running(enforce_multipath, root_helper):
+    def is_multipath_running(enforce_multipath, root_helper, execute=None):
         try:
-            priv_rootwrap.execute('multipathd', 'show', 'status',
-                                  run_as_root=True,
-                                  root_helper=root_helper)
+            if execute is None:
+                execute = priv_rootwrap.execute
+            execute('multipathd', 'show', 'status',
+                    run_as_root=True, root_helper=root_helper)
         except putils.ProcessExecutionError as err:
             LOG.error(_LE('multipathd is not running: exit code %(err)s'),
                       {'err': err.exit_code})
