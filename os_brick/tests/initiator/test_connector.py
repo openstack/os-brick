@@ -75,7 +75,8 @@ class ConnectorUtilsTestCase(base.TestCase):
                  'ip': MY_IP,
                  'multipath': multipath_result,
                  'os_type': os_type,
-                 'platform': platform}
+                 'platform': platform,
+                 'do_local_attach': False}
         self.assertEqual(props, props_actual)
 
     def test_brick_get_connector_properties_connectors_called(self):
@@ -2395,7 +2396,7 @@ class RBDConnectorTestCase(ConnectorTestCase):
         props = connector.RBDConnector.get_connector_properties(
             'sudo', multipath=True, enforce_multipath=True)
 
-        expected_props = {}
+        expected_props = {'do_local_attach': False}
         self.assertEqual(expected_props, props)
 
     @mock.patch('os_brick.initiator.linuxrbd.rbd')
@@ -2426,6 +2427,19 @@ class RBDConnectorTestCase(ConnectorTestCase):
         self.assertTrue(isinstance(device_info['path'],
                                    linuxrbd.RBDVolumeIOWrapper))
 
+    @mock.patch.object(priv_rootwrap, 'execute')
+    def test_connect_local_volume(self, mock_execute):
+        rbd = connector.RBDConnector(None, do_local_attach=True)
+        conn = {'name': 'pool/image'}
+        device_info = rbd.connect_volume(conn)
+        execute_call1 = mock.call('which', 'rbd')
+        cmd = ['rbd', 'map', 'image', '--pool', 'pool']
+        execute_call2 = mock.call(*cmd, root_helper=None, run_as_root=True)
+        mock_execute.assert_has_calls([execute_call1, execute_call2])
+        expected_info = {'path': '/dev/rbd/pool/image',
+                         'type': 'block'}
+        self.assertEqual(expected_info, device_info)
+
     @mock.patch('os_brick.initiator.linuxrbd.rbd')
     @mock.patch('os_brick.initiator.linuxrbd.rados')
     @mock.patch.object(linuxrbd.RBDVolumeIOWrapper, 'close')
@@ -2436,6 +2450,17 @@ class RBDConnectorTestCase(ConnectorTestCase):
         rbd.disconnect_volume(self.connection_properties, device_info)
 
         self.assertEqual(1, volume_close.call_count)
+
+    @mock.patch.object(priv_rootwrap, 'execute')
+    def test_disconnect_local_volume(self, mock_execute):
+        rbd = connector.RBDConnector(None, do_local_attach=True)
+        conn = {'name': 'pool/image'}
+        rbd.disconnect_volume(conn, None)
+
+        dev_name = '/dev/rbd/pool/image'
+        cmd = ['rbd', 'unmap', dev_name]
+        mock_execute.assert_called_once_with(*cmd, root_helper=None,
+                                             run_as_root=True)
 
     def test_extend_volume(self):
         rbd = connector.RBDConnector(None)
