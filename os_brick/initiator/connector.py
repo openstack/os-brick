@@ -1965,13 +1965,15 @@ class RBDConnector(BaseLinuxConnector):
         try:
             user = connection_properties['auth_username']
             pool, volume = connection_properties['name'].split('/')
+            conf = connection_properties.get('conffile')
         except IndexError:
             msg = _("Connect volume failed, malformed connection properties")
             raise exception.BrickException(msg=msg)
 
         rbd_client = linuxrbd.RBDClient(user, pool)
         rbd_volume = linuxrbd.RBDVolume(rbd_client, volume)
-        rbd_handle = linuxrbd.RBDVolumeIOWrapper(rbd_volume)
+        rbd_handle = linuxrbd.RBDVolumeIOWrapper(
+            linuxrbd.RBDImageMetadata(rbd_volume, pool, user, conf))
         return rbd_handle
 
     def connect_volume(self, connection_properties):

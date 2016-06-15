@@ -36,6 +36,7 @@ class RBDClientTestCase(base.TestCase):
 
             # Assert connect is called with correct paramaters
             mock_rados.Rados.assert_called_once_with(
+                clustername='ceph',
                 rados_id=encodeutils.safe_encode('test_user'),
                 conffile='/etc/ceph/ceph.conf')
 
@@ -80,7 +81,7 @@ class RBDVolumeIOWrapperTestCase(base.TestCase):
         self.assertEqual(self.full_data, data)
 
         data = self.mock_volume_wrapper.read()
-        self.assertEqual('', data)
+        self.assertEqual(b'', data)
 
         self.mock_volume_wrapper.seek(0)
         data = self.mock_volume_wrapper.read()

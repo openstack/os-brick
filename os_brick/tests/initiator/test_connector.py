@@ -2303,6 +2303,7 @@ class RBDConnectorTestCase(ConnectorTestCase):
 
         # Ensure rados is instantiated correctly
         mock_rados.Rados.assert_called_once_with(
+            clustername='ceph',
             rados_id=encodeutils.safe_encode(self.user),
             conffile='/etc/ceph/ceph.conf')
 
