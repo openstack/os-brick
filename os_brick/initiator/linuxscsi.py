@@ -19,6 +19,7 @@
 import os
 import re
 import six
+import time
 
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
@@ -157,6 +158,7 @@ class LinuxSCSI(executor.Executor):
             LOG.debug("Flush multipath device %s", device)
             self._execute('multipath', '-f', device, run_as_root=True,
                           root_helper=self._root_helper)
+            time.sleep(1)
         except putils.ProcessExecutionError as exc:
             LOG.warning(_LW("multipath call failed exit %(code)s"),
                         {'code': exc.exit_code})
