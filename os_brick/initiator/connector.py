@@ -1067,11 +1067,13 @@ class ISCSIConnector(BaseLinuxConnector):
                     self._get_all_targets(connection_properties)]
         else:
             # we are looking for paths in the format :
-            # /dev/disk/by-path/pci-XXXX:XX:XX.X-ip-PORTAL:PORT-iscsi-IQN-lun-LUN_ID
+            # /dev/disk/by-path/
+            # pci-XXXX:XX:XX.X-ip-PORTAL:PORT-iscsi-IQN-lun-LUN_ID
             device_list = []
             for x in self._get_all_targets(connection_properties):
-                look_for_device = glob.glob('/dev/disk/by-path/*ip-%s-iscsi-%s-lun-%s'  # noqa
-                                            % self._munge_portal(x))
+                look_for_device = glob.glob(
+                    '/dev/disk/by-path/*ip-%s-iscsi-%s-lun-%s' %
+                    self._munge_portal(x))
                 if look_for_device:
                     device_list.extend(look_for_device)
             return device_list
