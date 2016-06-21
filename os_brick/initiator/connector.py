@@ -796,9 +796,9 @@ class ISCSIConnector(BaseLinuxConnector):
         return self.transport
 
     def _iterate_all_targets(self, connection_properties):
-        for ip, iqn, lun in self._get_all_targets(connection_properties):
+        for portal, iqn, lun in self._get_all_targets(connection_properties):
             props = copy.deepcopy(connection_properties)
-            props['target_portal'] = ip
+            props['target_portal'] = portal
             props['target_iqn'] = iqn
             props['target_lun'] = lun
             for key in ('target_portals', 'target_iqns', 'target_luns'):
