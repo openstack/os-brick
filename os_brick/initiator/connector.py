@@ -52,6 +52,7 @@ from os_brick.initiator import linuxfc
 from os_brick.initiator import linuxrbd
 from os_brick.initiator import linuxscsi
 from os_brick.initiator import linuxsheepdog
+from os_brick.initiator import windows as windows_connector
 from os_brick.remotefs import remotefs
 from os_brick.i18n import _, _LE, _LI, _LW
 
@@ -68,6 +69,7 @@ PLATFORM_x86 = 'X86'
 PLATFORM_S390 = 'S390'
 OS_TYPE_ALL = 'ALL'
 OS_TYPE_LINUX = 'LINUX'
+OS_TYPE_WINDOWS = 'WIN'
 
 S390X = "s390x"
 S390 = "s390"
@@ -104,6 +106,8 @@ connector_list = [
     'os_brick.initiator.connector.HGSTConnector',
     'os_brick.initiator.connector.ScaleIOConnector',
     'os_brick.initiator.connector.DISCOConnector',
+    'os_brick.initiator.windows.base.BaseWindowsConnector',
+    'os_brick.initiator.windows.iscsi.WindowsISCSIConnector',
 ]
 
 
@@ -188,6 +192,13 @@ class InitiatorConnector(executor.Executor):
                 arch=None,
                 *args, **kwargs):
         """Build a Connector object based upon protocol and architecture."""
+
+        if sys.platform == 'win32':
+            return windows_connector.factory(
+                protocol,
+                use_multipath=use_multipath,
+                device_scan_attempts=device_scan_attempts,
+                *args, **kwargs)
 
         # We do this instead of assigning it in the definition
         # to help mocking for unit tests
@@ -549,7 +560,35 @@ class FakeConnector(BaseLinuxConnector):
                 '/dev/disk/by-path/fake-volume-X']
 
 
-class ISCSIConnector(BaseLinuxConnector):
+class BaseISCSIConnector(InitiatorConnector):
+    def _iterate_all_targets(self, connection_properties):
+        for portal, iqn, lun in self._get_all_targets(connection_properties):
+            props = copy.deepcopy(connection_properties)
+            props['target_portal'] = portal
+            props['target_iqn'] = iqn
+            props['target_lun'] = lun
+            for key in ('target_portals', 'target_iqns', 'target_luns'):
+                props.pop(key, None)
+            yield props
+
+    def _get_all_targets(self, connection_properties):
+        if all([key in connection_properties for key in ('target_portals',
+                                                         'target_iqns',
+                                                         'target_luns')]):
+            return zip(connection_properties['target_portals'],
+                       connection_properties['target_iqns'],
+                       connection_properties['target_luns'])
+
+        return [(connection_properties['target_portal'],
+                 connection_properties['target_iqn'],
+                 connection_properties.get('target_lun', 0))]
+
+
+class FakeBaseISCSIConnector(FakeConnector, BaseISCSIConnector):
+    pass
+
+
+class ISCSIConnector(BaseLinuxConnector, BaseISCSIConnector):
     """Connector class to attach/detach iSCSI volumes."""
     supported_transports = ['be2iscsi', 'bnx2i', 'cxgb3i', 'default',
                             'cxgb4i', 'qla4xxx', 'ocs', 'iser']
@@ -794,28 +833,6 @@ class ISCSIConnector(BaseLinuxConnector):
 
     def _get_transport(self):
         return self.transport
-
-    def _iterate_all_targets(self, connection_properties):
-        for portal, iqn, lun in self._get_all_targets(connection_properties):
-            props = copy.deepcopy(connection_properties)
-            props['target_portal'] = portal
-            props['target_iqn'] = iqn
-            props['target_lun'] = lun
-            for key in ('target_portals', 'target_iqns', 'target_luns'):
-                props.pop(key, None)
-            yield props
-
-    def _get_all_targets(self, connection_properties):
-        if all([key in connection_properties for key in ('target_portals',
-                                                         'target_iqns',
-                                                         'target_luns')]):
-            return zip(connection_properties['target_portals'],
-                       connection_properties['target_iqns'],
-                       connection_properties['target_luns'])
-
-        return [(connection_properties['target_portal'],
-                 connection_properties['target_iqn'],
-                 connection_properties.get('target_lun', 0))]
 
     def _discover_iscsi_portals(self, connection_properties):
         if all([key in connection_properties for key in ('target_portals',
