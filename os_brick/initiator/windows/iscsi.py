@@ -21,6 +21,7 @@ from os_brick import exception
 from os_brick.i18n import _, _LE, _LI, _LW
 from os_brick.initiator import connector
 from os_brick.initiator.windows import base as win_conn_base
+from os_brick import utils
 
 LOG = logging.getLogger(__name__)
 
@@ -76,6 +77,7 @@ class WindowsISCSIConnector(win_conn_base.BaseWindowsConnector,
                  for initiator_name in initiator_list]
         return paths
 
+    @utils.trace
     def connect_volume(self, connection_properties):
         volume_connected = False
         for (initiator_name,
@@ -125,6 +127,7 @@ class WindowsISCSIConnector(win_conn_base.BaseWindowsConnector,
                        'scsi_wwn': scsi_wwn}
         return device_info
 
+    @utils.trace
     def disconnect_volume(self, connection_properties):
         # We want to refresh the cached information first.
         self._diskutils.rescan_disks()
@@ -138,6 +141,7 @@ class WindowsISCSIConnector(win_conn_base.BaseWindowsConnector,
             if not luns or luns == [target_lun]:
                 self._iscsi_utils.logout_storage_target(target_iqn)
 
+    @utils.trace
     def get_volume_paths(self, connection_properties):
         device_paths = set()
 

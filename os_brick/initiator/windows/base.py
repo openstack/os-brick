@@ -19,6 +19,7 @@ from oslo_log import log as logging
 from os_brick import exception
 from os_brick.i18n import _, _LE
 from os_brick.initiator import connector
+from os_brick import utils
 
 LOG = logging.getLogger(__name__)
 
@@ -93,6 +94,7 @@ class BaseWindowsConnector(connector.InitiatorConnector):
                         "it can lead to data corruption.")
             raise exception.BrickException(err_msg % device_paths)
 
+    @utils.trace
     def extend_volume(self, connection_properties):
         volume_paths = self.get_volume_paths(connection_properties)
         if not volume_paths:

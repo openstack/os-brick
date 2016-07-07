@@ -111,6 +111,7 @@ connector_list = [
 ]
 
 
+@utils.trace
 def get_connector_properties(root_helper, my_ip, multipath, enforce_multipath,
                              host=None, execute=None):
     """Get the connection properties for all protocols.
@@ -148,7 +149,6 @@ def get_connector_properties(root_helper, my_ip, multipath, enforce_multipath,
 
         if (utils.platform_matches(props['platform'], connector.platform) and
            utils.os_matches(props['os_type'], connector.os_type)):
-            LOG.debug("Fetching connector for %s", connector.__name__)
             props = utils.merge_dict(props,
                                      connector.get_connector_properties(
                                          root_helper,
@@ -621,6 +621,7 @@ class ISCSIConnector(BaseLinuxConnector, BaseISCSIConnector):
         """Where do we look for iSCSI based volumes."""
         return '/dev/disk/by-path'
 
+    @utils.trace
     def get_volume_paths(self, connection_properties):
         """Get the list of existing paths for a volume.
 
@@ -895,6 +896,7 @@ class ISCSIConnector(BaseLinuxConnector, BaseISCSIConnector):
             run_as_root=True,
             root_helper=self._root_helper)
 
+    @utils.trace
     @synchronized('extend_volume')
     def extend_volume(self, connection_properties):
         """Update the local kernel's size information.
@@ -914,6 +916,7 @@ class ISCSIConnector(BaseLinuxConnector, BaseISCSIConnector):
                         {'props': connection_properties})
             raise exception.VolumePathsNotFound()
 
+    @utils.trace
     @synchronized('connect_volume')
     def connect_volume(self, connection_properties):
         """Attach the volume to instance_name.
@@ -983,10 +986,9 @@ class ISCSIConnector(BaseLinuxConnector, BaseISCSIConnector):
                 device_info['multipath_id'] = multipath_id
 
         device_info['path'] = host_device
-
-        LOG.debug("connect_volume returning %s", device_info)
         return device_info
 
+    @utils.trace
     @synchronized('connect_volume')
     def disconnect_volume(self, connection_properties, device_info):
         """Detach the volume from instance_name.
@@ -1429,6 +1431,7 @@ class FibreChannelConnector(BaseLinuxConnector):
         host_paths = self._get_host_devices(possible_devs, lun)
         return host_paths
 
+    @utils.trace
     def get_volume_paths(self, connection_properties):
         volume_paths = []
         # first fetch all of the potential paths that might exist
@@ -1443,6 +1446,7 @@ class FibreChannelConnector(BaseLinuxConnector):
 
         return volume_paths
 
+    @utils.trace
     @synchronized('extend_volume')
     def extend_volume(self, connection_properties):
         """Update the local kernel's size information.
@@ -1459,6 +1463,7 @@ class FibreChannelConnector(BaseLinuxConnector):
                         {'props': connection_properties})
             raise exception.VolumePathsNotFound()
 
+    @utils.trace
     @synchronized('connect_volume')
     def connect_volume(self, connection_properties):
         """Attach the volume to instance_name.
@@ -1543,7 +1548,6 @@ class FibreChannelConnector(BaseLinuxConnector):
             device_path = self.host_device
 
         device_info['path'] = device_path
-        LOG.debug("connect_volume returning %s", device_info)
         return device_info
 
     def _get_host_devices(self, possible_devs, lun):
@@ -1590,6 +1594,7 @@ class FibreChannelConnector(BaseLinuxConnector):
                     raw_devices.append((pci_num, target_wwn))
         return raw_devices
 
+    @utils.trace
     @synchronized('connect_volume')
     def disconnect_volume(self, connection_properties, device_info):
         """Detach the volume from instance_name.
@@ -1730,6 +1735,7 @@ class AoEConnector(BaseLinuxConnector):
     def get_search_path(self):
         return '/dev/etherd'
 
+    @utils.trace
     def get_volume_paths(self, connection_properties):
         aoe_device, aoe_path = self._get_aoe_info(connection_properties)
         volume_paths = []
@@ -1748,6 +1754,7 @@ class AoEConnector(BaseLinuxConnector):
                                             'device': aoe_device}
         return aoe_device, aoe_path
 
+    @utils.trace
     @lockutils.synchronized('aoe_control', 'aoe-')
     def connect_volume(self, connection_properties):
         """Discover and attach the volume.
@@ -1804,6 +1811,7 @@ class AoEConnector(BaseLinuxConnector):
 
         return device_info
 
+    @utils.trace
     @lockutils.synchronized('aoe_control', 'aoe-')
     def disconnect_volume(self, connection_properties, device_info):
         """Detach and flush the volume.
@@ -1913,10 +1921,12 @@ class RemoteFsConnector(BaseLinuxConnector):
         path = mount_point + '/' + connection_properties['name']
         return path
 
+    @utils.trace
     def get_volume_paths(self, connection_properties):
         path = self._get_volume_path(connection_properties)
         return [path]
 
+    @utils.trace
     def connect_volume(self, connection_properties):
         """Ensure that the filesystem containing the volume is mounted.
 
@@ -1935,6 +1945,7 @@ class RemoteFsConnector(BaseLinuxConnector):
         path = self._get_volume_path(connection_properties)
         return {'path': path}
 
+    @utils.trace
     def disconnect_volume(self, connection_properties, device_info):
         """No need to do anything to disconnect a volume in a filesystem.
 
@@ -1996,6 +2007,7 @@ class RBDConnector(BaseLinuxConnector):
             linuxrbd.RBDImageMetadata(rbd_volume, pool, user, conf))
         return rbd_handle
 
+    @utils.trace
     def connect_volume(self, connection_properties):
         """Connect to a volume.
 
@@ -2008,6 +2020,7 @@ class RBDConnector(BaseLinuxConnector):
         rbd_handle = self._get_rbd_handle(connection_properties)
         return {'path': rbd_handle}
 
+    @utils.trace
     def disconnect_volume(self, connection_properties, device_info):
         """Disconnect a volume.
 
@@ -2071,6 +2084,7 @@ class LocalConnector(BaseLinuxConnector):
         # TODO(walter-boring): not sure what to return here.
         return []
 
+    @utils.trace
     def connect_volume(self, connection_properties):
         """Connect to a volume.
 
@@ -2090,6 +2104,7 @@ class LocalConnector(BaseLinuxConnector):
                        'path': connection_properties['device_path']}
         return device_info
 
+    @utils.trace
     def disconnect_volume(self, connection_properties, device_info):
         """Disconnect a volume from the local host.
 
@@ -2130,6 +2145,7 @@ class DRBDConnector(BaseLinuxConnector):
 
         return super(DRBDConnector, self).check_valid_device(path, run_as_root)
 
+    @utils.trace
     def get_all_available_volumes(self, connection_properties=None):
 
         base = "/dev/"
@@ -2160,6 +2176,7 @@ class DRBDConnector(BaseLinuxConnector):
 
         return (out, err)
 
+    @utils.trace
     def connect_volume(self, connection_properties):
         """Attach the volume."""
 
@@ -2173,12 +2190,14 @@ class DRBDConnector(BaseLinuxConnector):
 
         return device_info
 
+    @utils.trace
     def disconnect_volume(self, connection_properties, device_info):
         """Detach the volume."""
 
         self._drbdadm_command("down", connection_properties,
                               connection_properties['provider_auth'])
 
+    @utils.trace
     def get_volume_paths(self, connection_properties):
         path = connection_properties['device']
         return [path]
@@ -2227,10 +2246,12 @@ class HuaweiStorHyperConnector(BaseLinuxConnector):
         # look for Huawei volumes to show up?
         return None
 
+    @utils.trace
     def get_all_available_volumes(self, connection_properties=None):
         # TODO(walter-boring): what to return here for all Huawei volumes ?
         return []
 
+    @utils.trace
     def get_volume_paths(self, connection_properties):
         volume_path = None
         try:
@@ -2250,6 +2271,7 @@ class HuaweiStorHyperConnector(BaseLinuxConnector):
             raise exception.BrickException(message=msg)
         return out['dev_addr']
 
+    @utils.trace
     @synchronized('connect_volume')
     def connect_volume(self, connection_properties):
         """Connect to a volume.
@@ -2280,6 +2302,7 @@ class HuaweiStorHyperConnector(BaseLinuxConnector):
                        'path': volume_path}
         return device_info
 
+    @utils.trace
     @synchronized('connect_volume')
     def disconnect_volume(self, connection_properties, device_info):
         """Disconnect a volume from the local host.
@@ -2290,7 +2313,6 @@ class HuaweiStorHyperConnector(BaseLinuxConnector):
         :param device_info: historical difference, but same as connection_props
         :type device_info: dict
         """
-        LOG.debug("Disconnect_volume: %s.", connection_properties)
         out = self._detach_volume(connection_properties['volume_id'])
         if not out or int(out['ret_code']) not in (self.attached_success_code,
                                                    self.vbs_unnormal_code,
@@ -2424,6 +2446,7 @@ class HGSTConnector(BaseLinuxConnector):
     def get_search_path(self):
         return "/dev"
 
+    @utils.trace
     def get_volume_paths(self, connection_properties):
         path = ("%(path)s/%(name)s" %
                 {'path': self.get_search_path(),
@@ -2433,6 +2456,7 @@ class HGSTConnector(BaseLinuxConnector):
             volume_path = path
         return [volume_path]
 
+    @utils.trace
     def connect_volume(self, connection_properties):
         """Attach a Space volume to running host.
 
@@ -2469,6 +2493,7 @@ class HGSTConnector(BaseLinuxConnector):
 
         return device_info
 
+    @utils.trace
     def disconnect_volume(self, connection_properties, device_info):
         """Detach and flush the volume.
 
@@ -2547,6 +2572,7 @@ class ScaleIOConnector(BaseLinuxConnector):
     def get_search_path(self):
         return "/dev/disk/by-id"
 
+    @utils.trace
     def get_volume_paths(self, connection_properties):
         self.get_config(connection_properties)
         volume_paths = []
@@ -2753,6 +2779,7 @@ class ScaleIOConnector(BaseLinuxConnector):
                        'path': self.volume_path}
         return device_info
 
+    @utils.trace
     @lockutils.synchronized('scaleio', 'scaleio-')
     def connect_volume(self, connection_properties):
         """Connect the volume.
@@ -2882,6 +2909,7 @@ class ScaleIOConnector(BaseLinuxConnector):
 
         return device_info
 
+    @utils.trace
     @lockutils.synchronized('scaleio', 'scaleio-')
     def disconnect_volume(self, connection_properties, device_info):
         """Disconnect the ScaleIO volume.
@@ -2993,6 +3021,7 @@ class DISCOConnector(BaseLinuxConnector):
         """Get directory path where to get DISCO volumes."""
         return "/dev"
 
+    @utils.trace
     def get_volume_paths(self, connection_properties):
         """Get config for DISCO volume driver."""
         self.get_config(connection_properties)
@@ -3005,6 +3034,7 @@ class DISCOConnector(BaseLinuxConnector):
                 volume_paths.append(path)
         return volume_paths
 
+    @utils.trace
     def get_all_available_volumes(self, connection_properties=None):
         """Return all DISCO volumes that exist in the search directory."""
         path = self.get_search_path()
@@ -3029,10 +3059,10 @@ class DISCOConnector(BaseLinuxConnector):
                        'path': disco_dev}
         return device_info
 
+    @utils.trace
     @synchronized('connect_volume')
     def connect_volume(self, connection_properties):
         """Connect the volume. Returns xml for libvirt."""
-        LOG.debug("Enter in DISCO connect_volume")
         device_info = self.get_config(connection_properties)
         LOG.debug("Device info : %s.", device_info)
         disco_id = connection_properties['disco_id']
@@ -3042,6 +3072,7 @@ class DISCOConnector(BaseLinuxConnector):
         self._mount_disco_volume(disco_dev, disco_id)
         return device_info
 
+    @utils.trace
     @synchronized('connect_volume')
     def disconnect_volume(self, connection_properties, device_info):
         """Detach the volume from instance."""
@@ -3181,6 +3212,7 @@ class SheepdogConnector(BaseLinuxConnector):
             host, port, name)
         return sheepdog_handle
 
+    @utils.trace
     def connect_volume(self, connection_properties):
         """Connect to a volume.
 
@@ -3193,6 +3225,7 @@ class SheepdogConnector(BaseLinuxConnector):
         sheepdog_handle = self._get_sheepdog_handle(connection_properties)
         return {'path': sheepdog_handle}
 
+    @utils.trace
     def disconnect_volume(self, connection_properties, device_info):
         """Disconnect a volume.
 

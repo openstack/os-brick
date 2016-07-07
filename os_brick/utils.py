@@ -12,6 +12,11 @@
 #
 """Utilities and helper functions."""
 
+import functools
+import inspect
+import logging as py_logging
+import time
+
 from oslo_log import log as logging
 import retrying
 import six
@@ -95,3 +100,59 @@ def merge_dict(dict1, dict2):
     dict3 = dict1.copy()
     dict3.update(dict2)
     return dict3
+
+
+def trace(f):
+    """Trace calls to the decorated function.
+
+    This decorator should always be defined as the outermost decorator so it
+    is defined last. This is important so it does not interfere
+    with other decorators.
+
+    Using this decorator on a function will cause its execution to be logged at
+    `DEBUG` level with arguments, return values, and exceptions.
+
+    :returns: a function decorator
+    """
+
+    func_name = f.__name__
+
+    @functools.wraps(f)
+    def trace_logging_wrapper(*args, **kwargs):
+        if len(args) > 0:
+            maybe_self = args[0]
+        else:
+            maybe_self = kwargs.get('self', None)
+
+        if maybe_self and hasattr(maybe_self, '__module__'):
+            logger = logging.getLogger(maybe_self.__module__)
+        else:
+            logger = LOG
+
+        # NOTE(ameade): Don't bother going any further if DEBUG log level
+        # is not enabled for the logger.
+        if not logger.isEnabledFor(py_logging.DEBUG):
+            return f(*args, **kwargs)
+
+        all_args = inspect.getcallargs(f, *args, **kwargs)
+        logger.debug('==> %(func)s: call %(all_args)r',
+                     {'func': func_name, 'all_args': all_args})
+
+        start_time = time.time() * 1000
+        try:
+            result = f(*args, **kwargs)
+        except Exception as exc:
+            total_time = int(round(time.time() * 1000)) - start_time
+            logger.debug('<== %(func)s: exception (%(time)dms) %(exc)r',
+                         {'func': func_name,
+                          'time': total_time,
+                          'exc': exc})
+            raise
+        total_time = int(round(time.time() * 1000)) - start_time
+
+        logger.debug('<== %(func)s: return (%(time)dms) %(result)r',
+                     {'func': func_name,
+                      'time': total_time,
+                      'result': result})
+        return result
+    return trace_logging_wrapper
