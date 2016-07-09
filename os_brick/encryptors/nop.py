@@ -15,10 +15,6 @@
 
 from os_brick.encryptors import base
 
-from oslo_log import log as logging
-
-LOG = logging.getLogger(__name__)
-
 
 class NoOpEncryptor(base.VolumeEncryptor):
     """A VolumeEncryptor that does nothing.

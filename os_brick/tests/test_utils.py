@@ -15,14 +15,10 @@
 import time
 
 import mock
-from oslo_log import log as logging
 
 from os_brick import exception
 from os_brick.tests import base
 from os_brick import utils
-
-
-LOG = logging.getLogger(__name__)
 
 
 class WrongException(exception.BrickException):

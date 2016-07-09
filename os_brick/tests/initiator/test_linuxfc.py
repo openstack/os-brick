@@ -15,12 +15,9 @@
 import os.path
 
 import mock
-from oslo_log import log as logging
 
 from os_brick.initiator import linuxfc
 from os_brick.tests import base
-
-LOG = logging.getLogger(__name__)
 
 
 class LinuxFCTestCase(base.TestCase):

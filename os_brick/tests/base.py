@@ -21,11 +21,7 @@ import testtools
 
 import fixtures
 import mock
-from oslo_log import log as oslo_logging
 from oslo_utils import strutils
-
-
-LOG = oslo_logging.getLogger(__name__)
 
 
 class TestCase(testtools.TestCase):
