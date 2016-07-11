@@ -17,16 +17,17 @@ from os_win import utilsfactory
 from oslo_log import log as logging
 
 from os_brick import exception
+from os_brick import initiator
 from os_brick.i18n import _, _LE
-from os_brick.initiator import connector
+from os_brick.initiator import initiator_connector
 from os_brick import utils
 
 LOG = logging.getLogger(__name__)
 
 
-class BaseWindowsConnector(connector.InitiatorConnector):
-    platform = connector.PLATFORM_ALL
-    os_type = connector.OS_TYPE_WINDOWS
+class BaseWindowsConnector(initiator_connector.InitiatorConnector):
+    platform = initiator.PLATFORM_ALL
+    os_type = initiator.OS_TYPE_WINDOWS
 
     def __init__(self, root_helper=None, *args, **kwargs):
         super(BaseWindowsConnector, self).__init__(root_helper,

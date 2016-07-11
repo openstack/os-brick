@@ -19,3 +19,39 @@ The initator module contains the capabilities for discovering the initiator
 information as well as discovering and removing volumes from a host.
 
 """
+
+import re
+
+
+DEVICE_SCAN_ATTEMPTS_DEFAULT = 3
+MULTIPATH_ERROR_REGEX = re.compile("\w{3} \d+ \d\d:\d\d:\d\d \|.*$")
+MULTIPATH_DEV_CHECK_REGEX = re.compile("\s+dm-\d+\s+")
+MULTIPATH_PATH_CHECK_REGEX = re.compile("\s+\d+:\d+:\d+:\d+\s+")
+
+PLATFORM_ALL = 'ALL'
+PLATFORM_x86 = 'X86'
+PLATFORM_S390 = 'S390'
+OS_TYPE_ALL = 'ALL'
+OS_TYPE_LINUX = 'LINUX'
+OS_TYPE_WINDOWS = 'WIN'
+
+S390X = "s390x"
+S390 = "s390"
+
+ISCSI = "ISCSI"
+ISER = "ISER"
+FIBRE_CHANNEL = "FIBRE_CHANNEL"
+AOE = "AOE"
+DRBD = "DRBD"
+NFS = "NFS"
+GLUSTERFS = "GLUSTERFS"
+LOCAL = "LOCAL"
+HUAWEISDSHYPERVISOR = "HUAWEISDSHYPERVISOR"
+HGST = "HGST"
+RBD = "RBD"
+SCALEIO = "SCALEIO"
+SCALITY = "SCALITY"
+QUOBYTE = "QUOBYTE"
+DISCO = "DISCO"
+VZSTORAGE = "VZSTORAGE"
+SHEEPDOG = "SHEEPDOG"

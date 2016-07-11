@@ -19,7 +19,7 @@ from oslo_log import log as logging
 
 from os_brick import exception
 from os_brick.i18n import _, _LE, _LI, _LW
-from os_brick.initiator import connector
+from os_brick.initiator.connectors import base_iscsi
 from os_brick.initiator.windows import base as win_conn_base
 from os_brick import utils
 
@@ -27,7 +27,7 @@ LOG = logging.getLogger(__name__)
 
 
 class WindowsISCSIConnector(win_conn_base.BaseWindowsConnector,
-                            connector.BaseISCSIConnector):
+                            base_iscsi.BaseISCSIConnector):
     def __init__(self, *args, **kwargs):
         super(WindowsISCSIConnector, self).__init__(*args, **kwargs)
         self.use_multipath = kwargs.pop('use_multipath', False)
