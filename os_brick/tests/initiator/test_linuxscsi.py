@@ -508,7 +508,7 @@ loop0                                     0"""
         size = 'junk'
         mock_execute.return_value = (size, None)
         ret_size = self.linuxscsi.get_device_size('/dev/fake')
-        self.assertEqual(None, ret_size)
+        self.assertIsNone(ret_size)
 
         size_bad = '1024\n'
         size_good = 1024
