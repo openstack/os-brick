@@ -148,7 +148,7 @@ def get_connector_properties(root_helper, my_ip, multipath, enforce_multipath,
 
         if (utils.platform_matches(props['platform'], connector.platform) and
            utils.os_matches(props['os_type'], connector.os_type)):
-            LOG.debug("Fetching connector for %s" % connector.__name__)
+            LOG.debug("Fetching connector for %s", connector.__name__)
             props = utils.merge_dict(props,
                                      connector.get_connector_properties(
                                          root_helper,
@@ -3063,7 +3063,7 @@ class DISCOConnector(BaseLinuxConnector):
     def _mount_disco_volume(self, path, volume_id):
         """Send request to mount volume on physical host."""
         LOG.debug("Enter in mount disco volume %(port)s "
-                  "and %(ip)s." %
+                  "and %(ip)s.",
                   {'port': self.server_port,
                    'ip': self.server_ip})
 
