@@ -477,7 +477,7 @@ loop0                                     0"""
 
         self.linuxscsi._execute = fake_execute
         info = self.linuxscsi.find_multipath_device('/dev/sdd')
-        LOG.error("Device info: %s" % info)
+        LOG.error("Device info: %s", info)
 
         self.assertEqual('36005076303ffc48e0000000000000101', info['id'])
         self.assertEqual('36005076303ffc48e0000000000000101', info['name'])

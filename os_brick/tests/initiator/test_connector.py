@@ -2010,8 +2010,8 @@ class HuaweiStorHyperConnectorTestCase(ConnectorTestCase):
                              ' -v volume-b2911673-863c-4380-a5f2-e1729eecfe3f',
                              self.fake_sdscli_file + ' -c querydev'
                              ' -v volume-b2911673-863c-4380-a5f2-e1729eecfe3f']
-        LOG.debug("self.cmds = %s." % self.cmds)
-        LOG.debug("expected = %s." % expected_commands)
+        LOG.debug("self.cmds = %s.", self.cmds)
+        LOG.debug("expected = %s.", expected_commands)
 
         self.assertEqual(expected_commands, self.cmds)
 
@@ -2030,8 +2030,8 @@ class HuaweiStorHyperConnectorTestCase(ConnectorTestCase):
                              self.fake_sdscli_file + ' -c detach'
                              ' -v volume-b2911673-863c-4380-a5f2-e1729eecfe3f']
 
-        LOG.debug("self.cmds = %s." % self.cmds)
-        LOG.debug("expected = %s." % expected_commands)
+        LOG.debug("self.cmds = %s.", self.cmds)
+        LOG.debug("expected = %s.", expected_commands)
 
         self.assertEqual(expected_commands, self.cmds)
 
@@ -2062,8 +2062,8 @@ class HuaweiStorHyperConnectorTestCase(ConnectorTestCase):
                              self.fake_sdscli_file + ' -c querydev'
                              ' -v volume-b2911673-863c-4380-a5f2-e1729eecfe3f']
 
-        LOG.debug("self.cmds = %s." % self.cmds)
-        LOG.debug("expected = %s." % expected_commands)
+        LOG.debug("self.cmds = %s.", self.cmds)
+        LOG.debug("expected = %s.", expected_commands)
 
         self.assertEqual(expected_commands, self.cmds)
 
@@ -2082,8 +2082,8 @@ class HuaweiStorHyperConnectorTestCase(ConnectorTestCase):
                           self.connection_properties)
         expected_commands = [self.fake_sdscli_file + ' -c attach'
                              ' -v volume-b2911673-863c-4380-a5f2-e1729eecfe3f']
-        LOG.debug("self.cmds = %s." % self.cmds)
-        LOG.debug("expected = %s." % expected_commands)
+        LOG.debug("self.cmds = %s.", self.cmds)
+        LOG.debug("expected = %s.", expected_commands)
         self.assertEqual(expected_commands, self.cmds)
 
     def test_disconnect_volume_fail(self):
@@ -2102,8 +2102,8 @@ class HuaweiStorHyperConnectorTestCase(ConnectorTestCase):
                              self.fake_sdscli_file + ' -c detach'
                              ' -v volume-b2911673-863c-4380-a5f2-e1729eecfe3f']
 
-        LOG.debug("self.cmds = %s." % self.cmds)
-        LOG.debug("expected = %s." % expected_commands)
+        LOG.debug("self.cmds = %s.", self.cmds)
+        LOG.debug("expected = %s.", expected_commands)
 
         self.assertEqual(expected_commands, self.cmds)
 
@@ -2126,8 +2126,8 @@ class HuaweiStorHyperConnectorTestCase(ConnectorTestCase):
                              self.fake_sdscli_file + ' -c querydev'
                              ' -v volume-b2911673-863c-4380-a5f2-e1729eecfe3f']
 
-        LOG.debug("self.cmds = %s." % self.cmds)
-        LOG.debug("expected = %s." % expected_commands)
+        LOG.debug("self.cmds = %s.", self.cmds)
+        LOG.debug("expected = %s.", expected_commands)
 
     def test_extend_volume(self):
         self.assertRaises(NotImplementedError,
