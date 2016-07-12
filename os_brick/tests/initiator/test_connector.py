@@ -195,42 +195,42 @@ class ConnectorTestCase(base.TestCase):
 
     def test_factory(self):
         obj = connector.InitiatorConnector.factory('iscsi', None)
-        self.assertEqual(obj.__class__.__name__, "ISCSIConnector")
+        self.assertEqual("ISCSIConnector", obj.__class__.__name__)
 
         obj = connector.InitiatorConnector.factory('fibre_channel', None)
-        self.assertEqual(obj.__class__.__name__, "FibreChannelConnector")
+        self.assertEqual("FibreChannelConnector", obj.__class__.__name__)
 
         obj = connector.InitiatorConnector.factory('fibre_channel', None,
                                                    arch='s390x')
-        self.assertEqual(obj.__class__.__name__, "FibreChannelConnectorS390X")
+        self.assertEqual("FibreChannelConnectorS390X", obj.__class__.__name__)
 
         obj = connector.InitiatorConnector.factory('aoe', None)
-        self.assertEqual(obj.__class__.__name__, "AoEConnector")
+        self.assertEqual("AoEConnector", obj.__class__.__name__)
 
         obj = connector.InitiatorConnector.factory(
             'nfs', None, nfs_mount_point_base='/mnt/test')
-        self.assertEqual(obj.__class__.__name__, "RemoteFsConnector")
+        self.assertEqual("RemoteFsConnector", obj.__class__.__name__)
 
         obj = connector.InitiatorConnector.factory(
             'glusterfs', None, glusterfs_mount_point_base='/mnt/test')
-        self.assertEqual(obj.__class__.__name__, "RemoteFsConnector")
+        self.assertEqual("RemoteFsConnector", obj.__class__.__name__)
 
         obj = connector.InitiatorConnector.factory(
             'scality', None, scality_mount_point_base='/mnt/test')
-        self.assertEqual(obj.__class__.__name__, "RemoteFsConnector")
+        self.assertEqual("RemoteFsConnector", obj.__class__.__name__)
 
         obj = connector.InitiatorConnector.factory('local', None)
-        self.assertEqual(obj.__class__.__name__, "LocalConnector")
+        self.assertEqual("LocalConnector", obj.__class__.__name__)
 
         obj = connector.InitiatorConnector.factory('huaweisdshypervisor', None)
-        self.assertEqual(obj.__class__.__name__, "HuaweiStorHyperConnector")
+        self.assertEqual("HuaweiStorHyperConnector", obj.__class__.__name__)
 
         obj = connector.InitiatorConnector.factory("scaleio", None)
         self.assertEqual("ScaleIOConnector", obj.__class__.__name__)
 
         obj = connector.InitiatorConnector.factory(
             'quobyte', None, quobyte_mount_point_base='/mnt/test')
-        self.assertEqual(obj.__class__.__name__, "RemoteFsConnector")
+        self.assertEqual("RemoteFsConnector", obj.__class__.__name__)
 
         obj = connector.InitiatorConnector.factory("disco", None)
         self.assertEqual("DISCOConnector", obj.__class__.__name__)
@@ -404,7 +404,7 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
         self.assertIsNone(initiator)
         self.connector._execute = self._initiator_get_text
         initiator = self.connector.get_initiator()
-        self.assertEqual(initiator, self._fake_iqn)
+        self.assertEqual(self._fake_iqn, initiator)
 
     def test_get_connector_properties(self):
         with mock.patch.object(priv_rootwrap, 'execute') as mock_exec:
@@ -516,8 +516,8 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
             device = self.connector.connect_volume(connection_info['data'])
 
         dev_str = self.generate_device(location, iqn, transport)
-        self.assertEqual(device['type'], 'block')
-        self.assertEqual(device['path'], dev_str)
+        self.assertEqual('block', device['type'])
+        self.assertEqual(dev_str, device['path'])
 
         self.count = 0
 
@@ -998,11 +998,11 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
         paths = [('ip-10.0.0.1:3260-iscsi-iqn.2013-01.ro.'
                  'com.netapp:node.netapp02-lun-0')]
         walk_mock.return_value = [(['.'], ['by-path'], paths)]
-        self.assertEqual(self.connector._get_iscsi_devices(), paths)
+        self.assertEqual(paths, self.connector._get_iscsi_devices())
 
     @mock.patch.object(os, 'walk', return_value=[])
     def test_get_iscsi_devices_with_empty_dir(self, walk_mock):
-        self.assertEqual(self.connector._get_iscsi_devices(), [])
+        self.assertEqual([], self.connector._get_iscsi_devices())
 
     @mock.patch.object(os.path, 'realpath')
     @mock.patch.object(connector.ISCSIConnector, '_get_iscsi_devices')
@@ -1013,9 +1013,9 @@ class ISCSIConnectorTestCase(ConnectorTestCase):
         realpath_mock.return_value = devpath
         get_iscsi_mock.return_value = paths
         mpath_map = {devpath: paths[0]}
-        self.assertEqual(self.connector._get_multipath_iqns([paths[0]],
-                                                            mpath_map),
-                         ['iqn.2013-01.ro.com.netapp:node.netapp02'])
+        self.assertEqual(['iqn.2013-01.ro.com.netapp:node.netapp02'],
+                         self.connector._get_multipath_iqns([paths[0]],
+                                                            mpath_map))
 
     @mock.patch.object(connector.ISCSIConnector, '_run_multipath')
     def test_get_multipath_device_map(self, multipath_mock):
@@ -1194,7 +1194,7 @@ Setting up iSCSI targets: unused
 """ % (targets[0][0], targets[0][1], targets[1][0], targets[1][1])
         out = self.connector.\
             _get_target_portals_from_iscsiadm_output(sample_input)
-        self.assertEqual(out, targets)
+        self.assertEqual(targets, out)
 
     def test_sanitize_log_run_iscsiadm(self):
         # Tests that the parameters to the _run_iscsiadm function
@@ -1424,8 +1424,8 @@ class FibreChannelConnectorTestCase(ConnectorTestCase):
             exp_wwn = wwn[0] if isinstance(wwn, list) else wwn
             dev_str = ('/dev/disk/by-path/pci-0000:05:00.2-fc-0x%s-lun-1' %
                        exp_wwn)
-            self.assertEqual(dev_info['type'], 'block')
-            self.assertEqual(dev_info['path'], dev_str)
+            self.assertEqual('block', dev_info['type'])
+            self.assertEqual(dev_str, dev_info['path'])
             self.assertTrue('multipath_id' not in dev_info)
             self.assertTrue('devices' not in dev_info)
 
@@ -1656,8 +1656,8 @@ class FibreChannelConnectorS390XTestCase(ConnectorTestCase):
             None, execute=self.fake_execute, use_multipath=False)
         self.assertIsNotNone(self.connector)
         self.assertIsNotNone(self.connector._linuxfc)
-        self.assertEqual(self.connector._linuxfc.__class__.__name__,
-                         "LinuxFibreChannelS390X")
+        self.assertEqual("LinuxFibreChannelS390X",
+                         self.connector._linuxfc.__class__.__name__)
         self.assertIsNotNone(self.connector._linuxscsi)
 
     @mock.patch.object(linuxfc.LinuxFibreChannelS390X, 'configure_scsi_device')
@@ -1669,21 +1669,21 @@ class FibreChannelConnectorS390XTestCase(ConnectorTestCase):
                                                       "0x0002000000000000")
         self.assertEqual(1, len(devices))
         device_path = "/dev/disk/by-path/ccw-3-zfcp-5:0x0002000000000000"
-        self.assertEqual(devices[0], device_path)
+        self.assertEqual(device_path, devices[0])
 
     def test_get_lun_string(self):
         lun = 1
         lunstring = self.connector._get_lun_string(lun)
-        self.assertEqual(lunstring, "0x0001000000000000")
+        self.assertEqual("0x0001000000000000", lunstring)
         lun = 0xff
         lunstring = self.connector._get_lun_string(lun)
-        self.assertEqual(lunstring, "0x00ff000000000000")
+        self.assertEqual("0x00ff000000000000", lunstring)
         lun = 0x101
         lunstring = self.connector._get_lun_string(lun)
-        self.assertEqual(lunstring, "0x0101000000000000")
+        self.assertEqual("0x0101000000000000", lunstring)
         lun = 0x4020400a
         lunstring = self.connector._get_lun_string(lun)
-        self.assertEqual(lunstring, "0x4020400a00000000")
+        self.assertEqual("0x4020400a00000000", lunstring)
 
     @mock.patch.object(connector.FibreChannelConnectorS390X,
                        '_get_possible_devices', return_value=[(3, 5), ])
@@ -1896,8 +1896,8 @@ class LocalConnectorTestCase(ConnectorTestCase):
     def test_connect_volume(self):
         cprops = self.connection_properties
         dev_info = self.connector.connect_volume(cprops)
-        self.assertEqual(dev_info['type'], 'local')
-        self.assertEqual(dev_info['path'], cprops['device_path'])
+        self.assertEqual('local', dev_info['type'])
+        self.assertEqual(cprops['device_path'], dev_info['path'])
 
     def test_connect_volume_with_invalid_connection_data(self):
         cprops = {}

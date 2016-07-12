@@ -66,9 +66,9 @@ class LinuxFCTestCase(base.TestCase):
         hbas = self.lfc.get_fc_hbas()
         self.assertEqual(2, len(hbas))
         hba1 = hbas[0]
-        self.assertEqual(hba1["ClassDevice"], "host0")
+        self.assertEqual("host0", hba1["ClassDevice"])
         hba2 = hbas[1]
-        self.assertEqual(hba2["ClassDevice"], "host2")
+        self.assertEqual("host2", hba2["ClassDevice"])
 
     def test_get_fc_hbas_info(self):
         def fake_exec(a, b, c, d, run_as_root=True, root_helper='sudo'):
