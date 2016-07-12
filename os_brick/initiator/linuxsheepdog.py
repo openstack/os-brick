@@ -17,13 +17,9 @@ Generic SheepDog Connection Utilities.
 import eventlet
 import io
 from oslo_concurrency import processutils
-from oslo_log import log as logging
 
 from os_brick import exception
 from os_brick.i18n import _
-
-
-LOG = logging.getLogger(__name__)
 
 
 class SheepdogVolumeIOWrapper(io.RawIOBase):

@@ -17,10 +17,7 @@
 import abc
 
 from os_brick import executor
-from oslo_log import log as logging
 import six
-
-LOG = logging.getLogger(__name__)
 
 
 @six.add_metaclass(abc.ABCMeta)
