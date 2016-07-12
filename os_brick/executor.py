@@ -18,6 +18,9 @@
    and root_helper settings, so this provides that hook.
 """
 
+from oslo_concurrency import processutils as putils
+from oslo_utils import encodeutils
+
 from os_brick.privileged import rootwrap as priv_rootwrap
 
 
@@ -29,8 +32,31 @@ class Executor(object):
         self.set_execute(execute)
         self.set_root_helper(root_helper)
 
+    @staticmethod
+    def safe_decode(string):
+        return string and encodeutils.safe_decode(string, errors='ignore')
+
+    @classmethod
+    def make_putils_error_safe(cls, exc):
+        """Converts ProcessExecutionError string attributes to unicode."""
+        for field in ('stderr', 'stdout', 'cmd', 'description'):
+            value = getattr(exc, field, None)
+            if value:
+                setattr(exc, field, cls.safe_decode(value))
+
+    def _execute(self, *args, **kwargs):
+        try:
+            result = self.__execute(*args, **kwargs)
+            if result:
+                result = (self.safe_decode(result[0]),
+                          self.safe_decode(result[1]))
+            return result
+        except putils.ProcessExecutionError as e:
+            self.make_putils_error_safe(e)
+            raise
+
     def set_execute(self, execute):
-        self._execute = execute
+        self.__execute = execute
 
     def set_root_helper(self, helper):
         self._root_helper = helper

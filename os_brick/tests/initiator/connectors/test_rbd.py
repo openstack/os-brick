@@ -126,7 +126,7 @@ class RBDConnectorTestCase(test_connector.ConnectorTestCase):
         self.assertEqual(conf_path, tmpfile)
         mock_mkstemp.assert_called_once_with()
 
-    @mock.patch.object(priv_rootwrap, 'execute')
+    @mock.patch.object(priv_rootwrap, 'execute', return_value=None)
     def test_connect_local_volume(self, mock_execute):
         rbd_connector = rbd.RBDConnector(None, do_local_attach=True)
         conn = {'name': 'pool/image'}
@@ -151,7 +151,7 @@ class RBDConnectorTestCase(test_connector.ConnectorTestCase):
 
         self.assertEqual(1, volume_close.call_count)
 
-    @mock.patch.object(priv_rootwrap, 'execute')
+    @mock.patch.object(priv_rootwrap, 'execute', return_value=None)
     def test_disconnect_local_volume(self, mock_execute):
         rbd_connector = rbd.RBDConnector(None, do_local_attach=True)
         conn = {'name': 'pool/image'}
