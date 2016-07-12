@@ -29,7 +29,8 @@ class RemoteFsClientTestCase(base.TestCase):
 
     def setUp(self):
         super(RemoteFsClientTestCase, self).setUp()
-        self.mock_execute = self.mock_object(priv_rootwrap, 'execute')
+        self.mock_execute = self.mock_object(priv_rootwrap, 'execute',
+                                             return_value=None)
 
     @mock.patch.object(remotefs.RemoteFsClient, '_read_mounts',
                        return_value=[])
@@ -217,7 +218,7 @@ class ScalityRemoteFsClientTestCase(base.TestCase):
             'scality', root_helper='true', scality_mount_point_base='/fake')
         self.assertEqual('/fake/path/00', fsclient.get_mount_point('path'))
 
-    @mock.patch('oslo_concurrency.processutils.execute')
+    @mock.patch('oslo_concurrency.processutils.execute', return_value=None)
     @mock.patch('os_brick.remotefs.remotefs.RemoteFsClient._do_mount')
     def test_mount(self, mock_do_mount, mock_execute):
         fsclient = remotefs.ScalityRemoteFsClient(

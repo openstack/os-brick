@@ -21,6 +21,8 @@ from os_brick.tests.encryptors import test_cryptsetup
 from oslo_concurrency import processutils as putils
 
 
+@mock.patch('os_brick.executor.encodeutils.safe_decode',
+            lambda x, errors=None: x)
 class LuksEncryptorTestCase(test_cryptsetup.CryptsetupEncryptorTestCase):
     def _create(self, root_helper, connection_info, keymgr, execute):
         return luks.LuksEncryptor(root_helper=root_helper,
@@ -31,12 +33,11 @@ class LuksEncryptorTestCase(test_cryptsetup.CryptsetupEncryptorTestCase):
     def test_is_luks(self):
         luks.is_luks(self.root_helper, self.dev_path)
 
-        self.mock_execute.assert_has_calls([
+        self.assert_exec_has_calls([
             mock.call('cryptsetup', 'isLuks', '--verbose', self.dev_path,
                       run_as_root=True, root_helper=self.root_helper,
                       check_exit_code=True),
         ], any_order=False)
-        self.assertEqual(1, self.mock_execute.call_count)
 
     @mock.patch('os_brick.encryptors.luks.LOG')
     def test_is_luks_with_error(self, mock_log):
@@ -47,46 +48,43 @@ class LuksEncryptorTestCase(test_cryptsetup.CryptsetupEncryptorTestCase):
 
         luks.is_luks(self.root_helper, self.dev_path)
 
-        self.mock_execute.assert_has_calls([
+        self.assert_exec_has_calls([
             mock.call('cryptsetup', 'isLuks', '--verbose', self.dev_path,
                       run_as_root=True, root_helper=self.root_helper,
                       check_exit_code=True),
         ])
-        self.assertEqual(1, self.mock_execute.call_count)
 
         self.assertEqual(1, mock_log.warning.call_count)  # warning logged
 
     def test_is_luks_with_execute(self):
         mock_execute = mock.Mock()
         luks.is_luks(self.root_helper, self.dev_path, execute=mock_execute)
-        mock_execute.assert_has_calls([
-            mock.call('cryptsetup', 'isLuks', '--verbose', self.dev_path,
-                      run_as_root=True, root_helper=self.root_helper,
-                      check_exit_code=True),
-        ])
+        self.assertListEqual(
+            [mock.call('cryptsetup', 'isLuks', '--verbose', self.dev_path,
+                       run_as_root=True, root_helper=self.root_helper,
+                       check_exit_code=True)],
+            mock_execute.call_args_list)
 
     def test__format_volume(self):
         self.encryptor._format_volume("passphrase")
 
-        self.mock_execute.assert_has_calls([
+        self.assert_exec_has_calls([
             mock.call('cryptsetup', '--batch-mode', 'luksFormat',
                       '--key-file=-', self.dev_path,
                       process_input='passphrase',
                       root_helper=self.root_helper,
                       run_as_root=True, check_exit_code=True, attempts=3),
         ])
-        self.assertEqual(1, self.mock_execute.call_count)
 
     def test__open_volume(self):
         self.encryptor._open_volume("passphrase")
 
-        self.mock_execute.assert_has_calls([
+        self.assert_exec_has_calls([
             mock.call('cryptsetup', 'luksOpen', '--key-file=-', self.dev_path,
                       self.dev_name, process_input='passphrase',
                       root_helper=self.root_helper,
                       run_as_root=True, check_exit_code=True),
         ])
-        self.assertEqual(1, self.mock_execute.call_count)
 
     def test_attach_volume(self):
         self.encryptor._get_key = mock.MagicMock()
@@ -95,7 +93,7 @@ class LuksEncryptorTestCase(test_cryptsetup.CryptsetupEncryptorTestCase):
 
         self.encryptor.attach_volume(None)
 
-        self.mock_execute.assert_has_calls([
+        self.assert_exec_has_calls([
             mock.call('cryptsetup', 'luksOpen', '--key-file=-', self.dev_path,
                       self.dev_name, process_input='0' * 32,
                       root_helper=self.root_helper,
@@ -105,7 +103,6 @@ class LuksEncryptorTestCase(test_cryptsetup.CryptsetupEncryptorTestCase):
                       root_helper=self.root_helper,
                       run_as_root=True, check_exit_code=True),
         ])
-        self.assertEqual(2, self.mock_execute.call_count)
 
     def test_attach_volume_not_formatted(self):
         self.encryptor._get_key = mock.MagicMock()
@@ -122,7 +119,7 @@ class LuksEncryptorTestCase(test_cryptsetup.CryptsetupEncryptorTestCase):
 
         self.encryptor.attach_volume(None)
 
-        self.mock_execute.assert_has_calls([
+        self.assert_exec_has_calls([
             mock.call('cryptsetup', 'luksOpen', '--key-file=-', self.dev_path,
                       self.dev_name, process_input='0' * 32,
                       root_helper=self.root_helper,
@@ -143,7 +140,6 @@ class LuksEncryptorTestCase(test_cryptsetup.CryptsetupEncryptorTestCase):
                       root_helper=self.root_helper,
                       run_as_root=True, check_exit_code=True),
         ], any_order=False)
-        self.assertEqual(5, self.mock_execute.call_count)
 
     def test_attach_volume_fail(self):
         self.encryptor._get_key = mock.MagicMock()
@@ -158,7 +154,7 @@ class LuksEncryptorTestCase(test_cryptsetup.CryptsetupEncryptorTestCase):
         self.assertRaises(putils.ProcessExecutionError,
                           self.encryptor.attach_volume, None)
 
-        self.mock_execute.assert_has_calls([
+        self.assert_exec_has_calls([
             mock.call('cryptsetup', 'luksOpen', '--key-file=-', self.dev_path,
                       self.dev_name, process_input='0' * 32,
                       root_helper=self.root_helper,
@@ -167,24 +163,21 @@ class LuksEncryptorTestCase(test_cryptsetup.CryptsetupEncryptorTestCase):
                       root_helper=self.root_helper,
                       run_as_root=True, check_exit_code=True),
         ], any_order=False)
-        self.assertEqual(2, self.mock_execute.call_count)
 
     def test__close_volume(self):
         self.encryptor.detach_volume()
 
-        self.mock_execute.assert_has_calls([
+        self.assert_exec_has_calls([
             mock.call('cryptsetup', 'luksClose', self.dev_name,
                       root_helper=self.root_helper,
                       attempts=3, run_as_root=True, check_exit_code=True),
         ])
-        self.assertEqual(1, self.mock_execute.call_count)
 
     def test_detach_volume(self):
         self.encryptor.detach_volume()
 
-        self.mock_execute.assert_has_calls([
+        self.assert_exec_has_calls([
             mock.call('cryptsetup', 'luksClose', self.dev_name,
                       root_helper=self.root_helper,
                       attempts=3, run_as_root=True, check_exit_code=True),
         ])
-        self.assertEqual(1, self.mock_execute.call_count)

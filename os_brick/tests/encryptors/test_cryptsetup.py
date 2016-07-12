@@ -33,6 +33,8 @@ def fake__get_key(context):
     return symmetric_key
 
 
+@mock.patch('os_brick.executor.encodeutils.safe_decode',
+            lambda x, errors=None: x)
 class CryptsetupEncryptorTestCase(test_base.VolumeEncryptorTestCase):
     @mock.patch('os.path.exists', return_value=False)
     def _create(self, mock_exists, root_helper,
@@ -53,14 +55,13 @@ class CryptsetupEncryptorTestCase(test_base.VolumeEncryptorTestCase):
     def test__open_volume(self):
         self.encryptor._open_volume("passphrase")
 
-        self.mock_execute.assert_has_calls([
+        self.assert_exec_has_calls([
             mock.call('cryptsetup', 'create', '--key-file=-', self.dev_name,
                       self.dev_path, process_input='passphrase',
                       run_as_root=True,
                       root_helper=self.root_helper,
                       check_exit_code=True),
         ])
-        self.assertEqual(1, self.mock_execute.call_count)
 
     def test_attach_volume(self):
         self.encryptor._get_key = mock.MagicMock()
@@ -68,7 +69,7 @@ class CryptsetupEncryptorTestCase(test_base.VolumeEncryptorTestCase):
 
         self.encryptor.attach_volume(None)
 
-        self.mock_execute.assert_has_calls([
+        self.assert_exec_has_calls([
             mock.call('cryptsetup', 'create', '--key-file=-', self.dev_name,
                       self.dev_path, process_input='0' * 32,
                       root_helper=self.root_helper,
@@ -78,27 +79,24 @@ class CryptsetupEncryptorTestCase(test_base.VolumeEncryptorTestCase):
                       root_helper=self.root_helper,
                       run_as_root=True, check_exit_code=True),
         ])
-        self.assertEqual(2, self.mock_execute.call_count)
 
     def test__close_volume(self):
         self.encryptor.detach_volume()
 
-        self.mock_execute.assert_has_calls([
+        self.assert_exec_has_calls([
             mock.call('cryptsetup', 'remove', self.dev_name,
                       root_helper=self.root_helper,
                       run_as_root=True, check_exit_code=True),
         ])
-        self.assertEqual(1, self.mock_execute.call_count)
 
     def test_detach_volume(self):
         self.encryptor.detach_volume()
 
-        self.mock_execute.assert_has_calls([
+        self.assert_exec_has_calls([
             mock.call('cryptsetup', 'remove', self.dev_name,
                       root_helper=self.root_helper,
                       run_as_root=True, check_exit_code=True),
         ])
-        self.assertEqual(1, self.mock_execute.call_count)
 
     def test_init_volume_encryption_not_supported(self):
         # Tests that creating a CryptsetupEncryptor fails if there is no
