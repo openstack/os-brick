@@ -90,6 +90,7 @@ connector_list = [
     'os_brick.initiator.connectors.hgst.HGSTConnector',
     'os_brick.initiator.connectors.scaleio.ScaleIOConnector',
     'os_brick.initiator.connectors.disco.DISCOConnector',
+    'os_brick.initiator.connectors.vmware.VmdkConnector',
     'os_brick.initiator.windows.base.BaseWindowsConnector',
     'os_brick.initiator.windows.iscsi.WindowsISCSIConnector',
     'os_brick.initiator.windows.fibre_channel.WindowsFCConnector',
@@ -135,6 +136,8 @@ _connector_mapping_linux = {
         'os_brick.initiator.connectors.disco.DISCOConnector',
     initiator.SHEEPDOG:
         'os_brick.initiator.connectors.sheepdog.SheepdogConnector',
+    initiator.VMDK:
+        'os_brick.initiator.connectors.vmware.VmdkConnector',
 }
 
 # Mapping for the S390X platform
