@@ -2768,6 +2768,7 @@ class ScaleIOConnector(BaseLinuxConnector):
     def get_config(self, connection_properties):
         self.local_sdc_ip = connection_properties['hostIP']
         self.volume_name = connection_properties['scaleIO_volname']
+        self.volume_id = connection_properties['scaleIO_volume_id']
         self.server_ip = connection_properties['serverIP']
         self.server_port = connection_properties['serverPort']
         self.server_username = connection_properties['serverUsername']
@@ -2799,6 +2800,7 @@ class ScaleIOConnector(BaseLinuxConnector):
                 "bandwidth limit: %(bandwidth_limit)s."
             ), {
                 'volume_name': self.volume_name,
+                'volume_id': self.volume_id,
                 'sdc_ip': self.local_sdc_ip,
                 'server_ip': self.server_ip,
                 'username': self.server_username,
@@ -2826,7 +2828,7 @@ class ScaleIOConnector(BaseLinuxConnector):
         guid = out
         LOG.info(_LI("Current sdc guid: %(guid)s"), {'guid': guid})
         params = {'guid': guid, 'allowMultipleMappings': 'TRUE'}
-        self.volume_id = self._get_volume_id()
+        self.volume_id = self.volume_id or self._get_volume_id()
 
         headers = {'content-type': 'application/json'}
         request = (
@@ -2921,7 +2923,7 @@ class ScaleIOConnector(BaseLinuxConnector):
         :type device_info: dict
         """
         self.get_config(connection_properties)
-        self.volume_id = self._get_volume_id()
+        self.volume_id = self.volume_id or self._get_volume_id()
         LOG.info(_LI(
             "ScaleIO disconnect volume in ScaleIO brick volume driver."
         ))
