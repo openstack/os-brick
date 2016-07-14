@@ -94,6 +94,10 @@ class NoFibreChannelVolumeDeviceFound(BrickException):
     message = _("Unable to find a Fibre Channel volume device.")
 
 
+class VolumeNotDeactivated(BrickException):
+    message = _('Volume %(name)s was not deactivated in time.')
+
+
 class VolumeDeviceNotFound(BrickException):
     message = _("Volume device not found at %(device)s.")
 
