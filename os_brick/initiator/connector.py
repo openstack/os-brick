@@ -473,9 +473,8 @@ class BaseLinuxConnector(InitiatorConnector):
                                       root_helper=self._root_helper)
         except putils.ProcessExecutionError as e:
             LOG.error(_LE("Failed to access the device on the path "
-                          "%(path)s: %(error)s %(info)s."),
-                      {"path": path, "error": e.stderr,
-                       "info": info})
+                          "%(path)s: %(error)s."),
+                      {"path": path, "error": e.stderr})
             return False
         # If the info is none, the path does not exist.
         if info is None:
