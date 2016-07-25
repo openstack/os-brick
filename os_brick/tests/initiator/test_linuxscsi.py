@@ -275,7 +275,7 @@ class LinuxSCSITestCase(base.TestCase):
 
     def test_find_multipath_device_with_error(self):
         def fake_execute(*cmd, **kwargs):
-            out = ("Oct 13 10:24:01 | /lib/udev/scsi_id exitted with 1\n"
+            out = ("Oct 13 10:24:01 | /lib/udev/scsi_id exited with 1\n"
                    "36005076303ffc48e0000000000000101 dm-2 IBM,2107900\n"
                    "size=1.0G features='1 queue_if_no_path' hwhandler='0'"
                    " wp=rw\n"

@@ -39,13 +39,13 @@ class WindowsISCSIConnector(win_conn_base.BaseWindowsConnector,
 
     def validate_initiators(self):
         """Validates the list of requested initiator HBAs to be used
-        when estabilishing iSCSI sessions.
+        when establishing iSCSI sessions.
         """
         valid_initiator_list = True
         if not self.initiator_list:
             LOG.info(_LI("No iSCSI initiator was explicitly requested. "
                          "The Microsoft iSCSI initiator will choose the "
-                         "initiator when estabilishing sessions."))
+                         "initiator when establishing sessions."))
         else:
             available_initiators = self._iscsi_utils.get_iscsi_initiators()
             for initiator in self.initiator_list:
@@ -87,7 +87,7 @@ class WindowsISCSIConnector(win_conn_base.BaseWindowsConnector,
             try:
                 msg = _LI("Attempting to establish an iSCSI session to "
                           "target %(target_iqn)s on portal %(target_portal)s "
-                          "acessing LUN %(target_lun)s using initiator "
+                          "accessing LUN %(target_lun)s using initiator "
                           "%(initiator_name)s.")
                 LOG.info(msg, dict(target_portal=target_portal,
                                    target_iqn=target_iqn,
@@ -113,7 +113,7 @@ class WindowsISCSIConnector(win_conn_base.BaseWindowsConnector,
                 if not self.use_multipath:
                     break
             except os_win_exc.OSWinException:
-                LOG.exception(_LE("Could not estabilish the iSCSI session."))
+                LOG.exception(_LE("Could not establish the iSCSI session."))
 
         if not volume_connected:
             raise exception.BrickException(
