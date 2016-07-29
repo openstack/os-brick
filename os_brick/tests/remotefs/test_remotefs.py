@@ -16,6 +16,8 @@ import mock
 import os
 import tempfile
 
+import six
+
 from os_brick import exception
 from os_brick.privileged import rootwrap as priv_rootwrap
 from os_brick.remotefs import remotefs
@@ -87,13 +89,22 @@ class RemoteFsClientTestCase(base.TestCase):
         mount_point = client.get_mount_point(share)
         vz_conf_dir = os.path.join('/etc/pstorage/clusters/', cluster_name)
 
-        tmp_dir = tempfile.mkdtemp()
+        tmp_dir = '/tmp/fake_dir/'
+
         with mock.patch.object(tempfile, 'mkdtemp',
                                return_value=tmp_dir):
-            client.mount(share)
+            mock_open = mock.mock_open()
+            with mock.patch.object(six.moves.builtins, "open",
+                                   mock_open, create=True):
+                client.mount(share)
 
-        saved_mds_list = open(os.path.join(tmp_dir, 'bs_list')).read().split()
-        self.assertEqual(set(mds_list), set(saved_mds_list))
+                write_calls = [mock.call(tmp_dir + 'bs_list', 'w'),
+                               mock.call().__enter__(),
+                               mock.call().write('10.0.0.1\n'),
+                               mock.call().write('10.0.0.2\n'),
+                               mock.call().__exit__(None, None, None)]
+
+                mock_open.assert_has_calls(write_calls)
         calls = [mock.call('mkdir', '-p', mount_point, check_exit_code=0),
                  mock.call('cp', '-rf', tmp_dir, vz_conf_dir,
                            run_as_root=True, root_helper='true'),
