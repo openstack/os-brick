@@ -1,0 +1,5 @@
+---
+features:
+  - Local attach feature in RBD connector.
+    We use RBD kernel module to attach and detach volumes locally without
+    Nova.
