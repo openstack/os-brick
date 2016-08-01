@@ -2547,7 +2547,8 @@ class ScaleIOConnectorTestCase(ConnectorTestCase):
     # Fake volume information
     vol = {
         'id': 'vol1',
-        'name': 'test_volume'
+        'name': 'test_volume',
+        'provider_id': 'vol1'
     }
 
     # Fake SDC GUID
@@ -2560,6 +2561,7 @@ class ScaleIOConnectorTestCase(ConnectorTestCase):
             'hostIP': MY_IP,
             'serverIP': MY_IP,
             'scaleIO_volname': self.vol['name'],
+            'scaleIO_volume_id': self.vol['provider_id'],
             'serverPort': 443,
             'serverUsername': 'test',
             'serverPassword': 'fake',
@@ -2712,6 +2714,7 @@ class ScaleIOConnectorTestCase(ConnectorTestCase):
 
     def test_error_id(self):
         """Fail to connect with bad volume name"""
+        self.fake_connection_properties['scaleIO_volume_id'] = 'bad_id'
         self.mock_calls[self.get_volume_api] = self.MockHTTPSResponse(
             dict(errorCode='404', message='Test volume not found'), 404)
 
@@ -2719,6 +2722,7 @@ class ScaleIOConnectorTestCase(ConnectorTestCase):
 
     def test_error_no_volume_id(self):
         """Faile to connect with no volume id"""
+        self.fake_connection_properties['scaleIO_volume_id'] = None
         self.mock_calls[self.get_volume_api] = self.MockHTTPSResponse(
             'null', 200)
 
@@ -2728,9 +2732,9 @@ class ScaleIOConnectorTestCase(ConnectorTestCase):
         """Fail to connect with bad authentication"""
         self.mock_calls[self.get_volume_api] = self.MockHTTPSResponse(
             'null', 401)
-
-        self.mock_calls['login'] = self.MockHTTPSResponse('null', 401)
-
+        self.mock_calls[self.action_format.format(
+            'addMappedSdc')] = self.MockHTTPSResponse(
+            dict(errorCode=401, message='bad login'), 401)
         self.assertRaises(exception.BrickException, self.test_connect_volume)
 
     def test_error_bad_drv_cfg(self):
