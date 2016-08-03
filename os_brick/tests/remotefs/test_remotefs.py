@@ -28,7 +28,7 @@ class RemoteFsClientTestCase(base.TestCase):
 
     def setUp(self):
         super(RemoteFsClientTestCase, self).setUp()
-        self.mock_execute = mock.patch.object(priv_rootwrap, 'execute').start()
+        self.mock_execute = self.mock_object(priv_rootwrap, 'execute')
 
     @mock.patch.object(remotefs.RemoteFsClient, '_read_mounts',
                        return_value=[])

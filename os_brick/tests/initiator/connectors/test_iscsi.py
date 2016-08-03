@@ -37,9 +37,8 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
         self.connector_with_multipath = iscsi.ISCSIConnector(
             None, execute=self.fake_execute, use_multipath=True)
 
-        mock.patch.object(self.connector._linuxscsi, 'get_name_from_path',
-                          return_value="/dev/sdb").start()
-        self.addCleanup(mock.patch.stopall)
+        self.mock_object(self.connector._linuxscsi, 'get_name_from_path',
+                         return_value="/dev/sdb")
         self._fake_iqn = 'iqn.1234-56.foo.bar:01:23456789abc'
 
     def generate_device(self, location, iqn, transport=None, lun=1):

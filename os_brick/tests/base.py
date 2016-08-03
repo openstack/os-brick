@@ -25,8 +25,9 @@ from oslo_utils import strutils
 
 
 class TestCase(testtools.TestCase):
-
     """Test case base class for all unit tests."""
+
+    SENTINEL = object()
 
     def setUp(self):
         """Run before each test method to initialize test environment."""
@@ -82,18 +83,19 @@ class TestCase(testtools.TestCase):
         log_root = logging.getLogger(None).logger
         log_root.setLevel(level)
 
-    def mock_object(self, obj, attr_name, new_attr=None, **kwargs):
+    def mock_object(self, obj, attr_name, new_attr=SENTINEL, **kwargs):
         """Use python mock to mock an object attribute
 
         Mocks the specified objects attribute with the given value.
         Automatically performs 'addCleanup' for the mock.
-
         """
-        if not new_attr:
-            new_attr = mock.Mock()
-        patcher = mock.patch.object(obj, attr_name, new_attr, **kwargs)
-        patcher.start()
+        args = [obj, attr_name]
+        if new_attr is not self.SENTINEL:
+            args.append(new_attr)
+        patcher = mock.patch.object(*args, **kwargs)
+        mocked = patcher.start()
         self.addCleanup(patcher.stop)
+        return mocked
 
     # Useful assertions
     def assertDictMatch(self, d1, d2, approx_equal=False, tolerance=0.001):

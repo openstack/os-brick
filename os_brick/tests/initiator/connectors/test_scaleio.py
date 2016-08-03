@@ -78,15 +78,11 @@ class ScaleIOConnectorTestCase(test_connector.ConnectorTestCase):
         ), status_code=404)
 
         # Patch the request and os calls to fake versions
-        mock.patch.object(
-            requests, 'get', self.handle_scaleio_request).start()
-        mock.patch.object(
-            requests, 'post', self.handle_scaleio_request).start()
-        mock.patch.object(os.path, 'isdir', return_value=True).start()
-        mock.patch.object(
-            os, 'listdir', return_value=["emc-vol-{}".format(self.vol['id'])]
-        ).start()
-        self.addCleanup(mock.patch.stopall)
+        self.mock_object(requests, 'get', self.handle_scaleio_request)
+        self.mock_object(requests, 'post', self.handle_scaleio_request)
+        self.mock_object(os.path, 'isdir', return_value=True)
+        self.mock_object(os, 'listdir',
+                         return_value=["emc-vol-{}".format(self.vol['id'])])
 
         # The actual ScaleIO connector
         self.connector = scaleio.ScaleIOConnector(
@@ -239,9 +235,7 @@ class ScaleIOConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch('time.sleep')
     def test_error_path_not_found(self, sleep_mock):
         """Timeout waiting for volume to map to local file system"""
-        mock.patch.object(
-            os, 'listdir', return_value=["emc-vol-no-volume"]
-        ).start()
+        self.mock_object(os, 'listdir', return_value=["emc-vol-no-volume"])
         self.assertRaises(exception.BrickException, self.test_connect_volume)
         self.assertTrue(sleep_mock.called)
 

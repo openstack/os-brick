@@ -36,9 +36,9 @@ class VolumeEncryptorTestCase(base.TestCase):
                 ":volume-fake_uuid-lun-1",
             },
         }
-        self.mock_execute = (
-            mock.patch("os_brick.privileged.rootwrap.execute").start())
-        self.addCleanup(self.mock_execute.stop)
+        patcher = mock.patch("os_brick.privileged.rootwrap.execute")
+        self.mock_execute = patcher.start()
+        self.addCleanup(patcher.stop)
         _hex = codecs.getdecoder("hex_codec")('0' * 32)[0]
         self.encryption_key = array.array('B', _hex).tolist()
         self.root_helper = None

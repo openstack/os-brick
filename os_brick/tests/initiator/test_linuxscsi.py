@@ -31,9 +31,8 @@ class LinuxSCSITestCase(base.TestCase):
     def setUp(self):
         super(LinuxSCSITestCase, self).setUp()
         self.cmds = []
-        mock.patch.object(os.path, 'realpath', return_value='/dev/sdc').start()
-        mock.patch.object(os, 'stat', returns=os.stat(__file__)).start()
-        self.addCleanup(mock.patch.stopall)
+        self.mock_object(os.path, 'realpath', return_value='/dev/sdc')
+        self.mock_object(os, 'stat', returns=os.stat(__file__))
         self.linuxscsi = linuxscsi.LinuxSCSI(None, execute=self.fake_execute)
 
     def fake_execute(self, *cmd, **kwargs):

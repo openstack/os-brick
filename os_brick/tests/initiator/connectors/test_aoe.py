@@ -52,9 +52,8 @@ class AoEConnectorTestCase(test_connector.ConnectorTestCase):
         self.connector = aoe.AoEConnector('sudo')
         self.connection_properties = {'target_shelf': 'fake_shelf',
                                       'target_lun': 'fake_lun'}
-        mock.patch.object(loopingcall, 'FixedIntervalLoopingCall',
-                          FakeFixedIntervalLoopingCall).start()
-        self.addCleanup(mock.patch.stopall)
+        self.mock_object(loopingcall, 'FixedIntervalLoopingCall',
+                         FakeFixedIntervalLoopingCall)
 
     def test_get_search_path(self):
         expected = "/dev/etherd"

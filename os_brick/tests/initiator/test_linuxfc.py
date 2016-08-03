@@ -26,8 +26,7 @@ class LinuxFCTestCase(base.TestCase):
         super(LinuxFCTestCase, self).setUp()
         self.cmds = []
 
-        mock.patch.object(os.path, 'exists', return_value=True).start()
-        self.addCleanup(mock.patch.stopall)
+        self.mock_object(os.path, 'exists', return_value=True)
         self.lfc = linuxfc.LinuxFibreChannel(None, execute=self.fake_execute)
 
     def fake_execute(self, *cmd, **kwargs):

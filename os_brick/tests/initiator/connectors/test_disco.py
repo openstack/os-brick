@@ -12,7 +12,6 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 import glob
-import mock
 import os
 
 from os_brick import exception
@@ -54,14 +53,11 @@ class DISCOConnectorTestCase(test_connector.ConnectorTestCase):
         self.request_status = 'success'
 
         # Patch the request and os calls to fake versions
-        mock.patch.object(disco.DISCOConnector,
-                          '_send_disco_vol_cmd',
-                          self.perform_disco_request).start()
-        mock.patch.object(os.path,
-                          'exists', self.is_volume_attached).start()
-        mock.patch.object(glob,
-                          'glob', self.list_disco_volume).start()
-        self.addCleanup(mock.patch.stopall)
+        self.mock_object(disco.DISCOConnector,
+                         '_send_disco_vol_cmd',
+                         self.perform_disco_request)
+        self.mock_object(os.path, 'exists', self.is_volume_attached)
+        self.mock_object(glob, 'glob', self.list_disco_volume)
 
         # The actual DISCO connector
         self.connector = disco.DISCOConnector(
