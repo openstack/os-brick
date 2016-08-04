@@ -12,6 +12,10 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+
+import os
+import tempfile
+
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
 
@@ -56,19 +60,46 @@ class RBDConnector(base.BaseLinuxConnector):
         # TODO(e0ne): Implement this for local volume.
         return []
 
+    def _create_ceph_conf(self, monitor_ips, monitor_ports,
+                          cluster_name, user):
+        try:
+            fd, ceph_conf_path = tempfile.mkstemp()
+            monitors = ["%s:%s" % (ip, port) for ip, port
+                        in zip(monitor_ips, monitor_ports)]
+            mon_hosts = "mon_host = %s" % (','.join(monitors))
+            client_section = "[client.%s]" % user
+            keyring = ("keyring = /etc/ceph/%s.client.%s.keyring" %
+                       (cluster_name, user))
+            with os.fdopen(fd, 'w') as conf_file:
+                conf_file.writelines([mon_hosts, "\n",
+                                      client_section, "\n", keyring])
+            return ceph_conf_path
+        except IOError:
+            msg = (_("Failed to write data to %s.") % (ceph_conf_path))
+            raise exception.BrickException(msg=msg)
+
     def _get_rbd_handle(self, connection_properties):
         try:
             user = connection_properties['auth_username']
             pool, volume = connection_properties['name'].split('/')
-            conf = connection_properties.get('conffile')
+            cluster_name = connection_properties.get('cluster_name')
+            monitor_ips = connection_properties.get('hosts')
+            monitor_ports = connection_properties.get('ports')
         except IndexError:
             msg = _("Connect volume failed, malformed connection properties")
             raise exception.BrickException(msg=msg)
 
-        rbd_client = linuxrbd.RBDClient(user, pool)
+        conf = self._create_ceph_conf(monitor_ips, monitor_ports,
+                                      str(cluster_name), user)
+        rbd_client = linuxrbd.RBDClient(user, pool, conffile=conf,
+                                        rbd_cluster_name=str(cluster_name))
         rbd_volume = linuxrbd.RBDVolume(rbd_client, volume)
         rbd_handle = linuxrbd.RBDVolumeIOWrapper(
             linuxrbd.RBDImageMetadata(rbd_volume, pool, user, conf))
+
+        if os.path.exists(conf):
+            os.remove(conf)
+
         return rbd_handle
 
     @staticmethod
