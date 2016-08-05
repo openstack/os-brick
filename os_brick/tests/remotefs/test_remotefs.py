@@ -16,6 +16,7 @@ import mock
 import os
 import tempfile
 
+from oslo_concurrency import processutils as putils
 import six
 
 from os_brick import exception
@@ -219,7 +220,8 @@ class ScalityRemoteFsClientTestCase(base.TestCase):
     @mock.patch('os_brick.remotefs.remotefs.RemoteFsClient._do_mount')
     def test_mount(self, mock_do_mount, mock_execute):
         fsclient = remotefs.ScalityRemoteFsClient(
-            'scality', root_helper='true', scality_mount_point_base='/fake')
+            'scality', root_helper='true', scality_mount_point_base='/fake',
+            execute=putils.execute)
         with mock.patch.object(fsclient, '_read_mounts', return_value={}):
             fsclient.mount('fake')
 
