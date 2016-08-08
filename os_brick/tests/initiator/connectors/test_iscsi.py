@@ -437,6 +437,49 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
                            'scsi_wwn': test_connector.FAKE_SCSI_WWN}
         self.assertEqual(expected_result, result)
 
+    def test_discover_iscsi_portals(self):
+        location = '10.0.2.15:3260'
+        name = 'volume-00000001'
+        iqn = 'iqn.2010-10.org.openstack:%s' % name
+        vol = {'id': 1, 'name': name}
+        auth_method = 'CHAP'
+        auth_username = 'fake_chap_username'
+        auth_password = 'fake_chap_password'
+        discovery_auth_method = 'CHAP'
+        discovery_auth_username = 'fake_chap_username'
+        discovery_auth_password = 'fake_chap_password'
+        connection_properties = self.iscsi_connection_chap(
+            vol, location, iqn, auth_method, auth_username, auth_password,
+            discovery_auth_method, discovery_auth_username,
+            discovery_auth_password)
+        self.connector_with_multipath = iscsi.ISCSIConnector(
+            None, execute=self.fake_execute, use_multipath=True)
+
+        for transport in ['default', 'iser', 'badTransport']:
+            interface = 'iser' if transport == 'iser' else 'default'
+            self.mock_object(self.connector_with_multipath, '_get_transport',
+                             mock.Mock(return_value=interface))
+
+            self.connector_with_multipath._discover_iscsi_portals(
+                connection_properties['data'])
+
+            expected_cmds = [
+                'iscsiadm -m discoverydb -t sendtargets -I %(iface)s '
+                '-p %(location)s --op update '
+                '-n discovery.sendtargets.auth.authmethod -v %(auth_method)s '
+                '-n discovery.sendtargets.auth.username -v %(username)s '
+                '-n discovery.sendtargets.auth.password -v %(password)s' %
+                {'iface': interface, 'location': location,
+                 'auth_method': discovery_auth_method,
+                 'username': discovery_auth_username,
+                 'password': discovery_auth_password},
+                'iscsiadm -m discoverydb -t sendtargets -I %(iface)s'
+                ' -p %(location)s --discover' % {'iface': interface,
+                                                 'location': location}]
+            self.assertEqual(expected_cmds, self.cmds)
+            # Reset to run with a different transport type
+            self.cmds = list()
+
     @mock.patch.object(iscsi.ISCSIConnector,
                        '_run_iscsiadm_update_discoverydb')
     @mock.patch.object(os.path, 'exists', return_value=True)
@@ -473,10 +516,10 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
         update_discoverydb.assert_called_with(connection_properties['data'])
 
         expected_cmds = [
-            'iscsiadm -m discoverydb -t sendtargets -p %s --op new' %
-            location,
-            'iscsiadm -m discoverydb -t sendtargets -p %s --discover' %
-            location]
+            'iscsiadm -m discoverydb -t sendtargets -p %s -I default'
+            ' --op new' % location,
+            'iscsiadm -m discoverydb -t sendtargets -I default -p %s'
+            ' --discover' % location]
         self.assertEqual(expected_cmds, self.cmds)
 
         self.assertRaises(exception.TargetPortalNotFound,
