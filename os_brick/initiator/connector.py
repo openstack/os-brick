@@ -92,6 +92,7 @@ connector_list = [
     'os_brick.initiator.connectors.disco.DISCOConnector',
     'os_brick.initiator.windows.base.BaseWindowsConnector',
     'os_brick.initiator.windows.iscsi.WindowsISCSIConnector',
+    'os_brick.initiator.windows.smbfs.WindowsSMBFSConnector',
 ]
 
 # Mappings used to determine who to contruct in the factory
@@ -146,6 +147,8 @@ _connector_mapping_linux_s390x = {
 _connector_mapping_windows = {
     initiator.ISCSI:
         'os_brick.initiator.windows.iscsi.WindowsISCSIConnector',
+    initiator.SMBFS:
+        'os_brick.initiator.windows.smbfs.WindowsSMBFSConnector',
 }
 
 
