@@ -549,7 +549,7 @@ loop0                                     0"""
         mock_scsi_wwn.return_value = wwn
         mock_find_mpath_path.return_value = None
 
-        ret_size = self.linuxscsi.extend_volume('/dev/fake')
+        ret_size = self.linuxscsi.extend_volume(['/dev/fake'])
         self.assertEqual(second_size, ret_size)
 
         # because we don't mock out the echo_scsi_command
@@ -565,29 +565,23 @@ loop0                                     0"""
                                       mock_scsi_wwn,
                                       mock_find_mpath_path):
         """Test extending a volume where there is a multipath device."""
-        fake_device = {'host': '0',
-                       'channel': '0',
-                       'id': '0',
-                       'lun': '1'}
-        mock_device_info.return_value = fake_device
+        mock_device_info.side_effect = [{'host': host,
+                                         'channel': '0',
+                                         'id': '0',
+                                         'lun': '1'} for host in ['0', '1']]
 
-        first_size = 1024
-        second_size = 2048
-        third_size = 1024
-        fourth_size = 2048
-
-        mock_device_size.side_effect = [first_size, second_size,
-                                        third_size, fourth_size]
+        mock_device_size.side_effect = [1024, 2048, 1024, 2048, 1024, 2048]
         wwn = '1234567890123456'
         mock_scsi_wwn.return_value = wwn
         mock_find_mpath_path.return_value = ('/dev/mapper/dm-uuid-mpath-%s' %
                                              wwn)
 
-        ret_size = self.linuxscsi.extend_volume('/dev/fake')
-        self.assertEqual(fourth_size, ret_size)
+        ret_size = self.linuxscsi.extend_volume(['/dev/fake1', '/dev/fake2'])
+        self.assertEqual(2048, ret_size)
 
         # because we don't mock out the echo_scsi_command
         expected_cmds = ['tee -a /sys/bus/scsi/drivers/sd/0:0:0:1/rescan',
+                         'tee -a /sys/bus/scsi/drivers/sd/1:0:0:1/rescan',
                          'multipathd reconfigure',
                          'multipathd resize map %s' % wwn]
         self.assertEqual(expected_cmds, self.cmds)
@@ -603,19 +597,12 @@ loop0                                     0"""
                                            mock_find_mpath_path,
                                            mock_mpath_resize_map):
         """Test extending a volume where there is a multipath device fail."""
-        fake_device = {'host': '0',
-                       'channel': '0',
-                       'id': '0',
-                       'lun': '1'}
-        mock_device_info.return_value = fake_device
+        mock_device_info.side_effect = [{'host': host,
+                                         'channel': '0',
+                                         'id': '0',
+                                         'lun': '1'} for host in ['0', '1']]
 
-        first_size = 1024
-        second_size = 2048
-        third_size = 1024
-        fourth_size = 2048
-
-        mock_device_size.side_effect = [first_size, second_size,
-                                        third_size, fourth_size]
+        mock_device_size.side_effect = [1024, 2048, 1024, 2048, 1024, 2048]
         wwn = '1234567890123456'
         mock_scsi_wwn.return_value = wwn
         mock_find_mpath_path.return_value = ('/dev/mapper/dm-uuid-mpath-%s' %
@@ -623,11 +610,12 @@ loop0                                     0"""
 
         mock_mpath_resize_map.return_value = 'fail'
 
-        ret_size = self.linuxscsi.extend_volume('/dev/fake')
+        ret_size = self.linuxscsi.extend_volume(['/dev/fake1', '/dev/fake2'])
         self.assertIsNone(ret_size)
 
         # because we don't mock out the echo_scsi_command
         expected_cmds = ['tee -a /sys/bus/scsi/drivers/sd/0:0:0:1/rescan',
+                         'tee -a /sys/bus/scsi/drivers/sd/1:0:0:1/rescan',
                          'multipathd reconfigure']
         self.assertEqual(expected_cmds, self.cmds)
 
