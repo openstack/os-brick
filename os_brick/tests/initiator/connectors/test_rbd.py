@@ -13,12 +13,11 @@
 #    under the License.
 import mock
 
-from oslo_utils import encodeutils
-
 from os_brick.initiator.connectors import rbd
 from os_brick.initiator import linuxrbd
 from os_brick.privileged import rootwrap as priv_rootwrap
 from os_brick.tests.initiator import test_connector
+from os_brick import utils
 
 
 class RBDConnectorTestCase(test_connector.ConnectorTestCase):
@@ -65,18 +64,18 @@ class RBDConnectorTestCase(test_connector.ConnectorTestCase):
         # Ensure rados is instantiated correctly
         mock_rados.Rados.assert_called_once_with(
             clustername='ceph',
-            rados_id=encodeutils.safe_encode(self.user),
+            rados_id=utils.convert_str(self.user),
             conffile='/etc/ceph/ceph.conf')
 
         # Ensure correct calls to connect to cluster
         self.assertEqual(1, mock_rados.Rados.return_value.connect.call_count)
         mock_rados.Rados.return_value.open_ioctx.assert_called_once_with(
-            encodeutils.safe_encode(self.pool))
+            utils.convert_str(self.pool))
 
         # Ensure rbd image is instantiated correctly
         mock_rbd.Image.assert_called_once_with(
             mock_rados.Rados.return_value.open_ioctx.return_value,
-            encodeutils.safe_encode(self.volume), read_only=False,
+            utils.convert_str(self.volume), read_only=False,
             snapshot=None)
 
         # Ensure expected object is returned correctly
