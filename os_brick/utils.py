@@ -15,12 +15,13 @@
 import functools
 import inspect
 import logging as py_logging
+import retrying
+import six
 import time
 
 from oslo_log import log as logging
 from oslo_utils import encodeutils
-import retrying
-import six
+from oslo_utils import strutils
 
 from os_brick.i18n import _
 
@@ -151,10 +152,17 @@ def trace(f):
             raise
         total_time = int(round(time.time() * 1000)) - start_time
 
+        if isinstance(result, dict):
+            mask_result = strutils.mask_dict_password(result)
+        elif isinstance(result, six.string_types):
+            mask_result = strutils.mask_password(result)
+        else:
+            mask_result = result
+
         logger.debug('<== %(func)s: return (%(time)dms) %(result)r',
                      {'func': func_name,
                       'time': total_time,
-                      'result': result})
+                      'result': mask_result})
         return result
     return trace_logging_wrapper
 
