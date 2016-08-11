@@ -160,7 +160,8 @@ class FibreChannelConnector(base.BaseLinuxConnector):
                             "Will rescan & retry.  Try number: %(tries)s."),
                         {'tries': tries})
 
-            self._linuxfc.rescan_hosts(hbas)
+            self._linuxfc.rescan_hosts(hbas,
+                                       connection_properties['target_lun'])
             self.tries = self.tries + 1
 
         self.host_device = None

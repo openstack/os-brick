@@ -20,17 +20,55 @@ import os
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
 
-from os_brick.i18n import _LW
+from os_brick.i18n import _LE, _LW
 from os_brick.initiator import linuxscsi
 
 LOG = logging.getLogger(__name__)
 
 
 class LinuxFibreChannel(linuxscsi.LinuxSCSI):
-    def rescan_hosts(self, hbas):
+    def _get_hba_channel_scsi_target(self, hba):
+        """Try to get the HBA channel and SCSI target for an HBA.
+
+        This method only works for Fibre Channel targets that implement a
+        single WWNN for all ports, so caller should expect us to return either
+        None or an empty list.
+        """
+        # Leave only the number from the host_device field (ie: host6)
+        host_device = hba['host_device']
+        if host_device and len(host_device) > 4:
+            host_device = host_device[4:]
+
+        path = '/sys/class/fc_transport/target%s:' % host_device
+        cmd = 'grep %(wwnn)s %(path)s*/node_name' % {'wwnn': hba['node_name'],
+                                                     'path': path}
+        try:
+            out, _err = self._execute(cmd)
+            return [line.split('/')[4].split(':')[1:]
+                    for line in out.split('\n') if line.startswith(path)]
+        except Exception as exc:
+            LOG.error(_LE('Could not get HBA channel and SCSI target ID, '
+                          'reason: %s'), exc)
+            return None
+
+    def rescan_hosts(self, hbas, target_lun):
         for hba in hbas:
-            self.echo_scsi_command("/sys/class/scsi_host/%s/scan"
-                                   % hba['host_device'], "- - -")
+            # Try to get HBA channel and SCSI target to use as filters
+            cts = self._get_hba_channel_scsi_target(hba)
+            # If we couldn't get the channel and target use wildcards
+            if not cts:
+                cts = [('-', '-')]
+            for hba_channel, target_id in cts:
+                LOG.debug('Scanning host %(host)s (wwnn: %(wwnn)s, c: '
+                          '%(channel)s, t: %(target)s, l: %(lun)s)',
+                          {'host': hba['host_device'],
+                           'wwnn': hba['node_name'], 'channel': hba_channel,
+                           'target': target_id, 'lun': target_lun})
+                self.echo_scsi_command(
+                    "/sys/class/scsi_host/%s/scan" % hba['host_device'],
+                    "%(c)s %(t)s %(l)s" % {'c': hba_channel,
+                                           't': target_id,
+                                           'l': target_lun})
 
     def get_fc_hbas(self):
         """Get the Fibre Channel HBA information."""

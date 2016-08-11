@@ -34,12 +34,91 @@ class LinuxFCTestCase(base.TestCase):
         return "", None
 
     def test_rescan_hosts(self):
-        hbas = [{'host_device': 'foo'},
-                {'host_device': 'bar'}, ]
-        self.lfc.rescan_hosts(hbas)
-        expected_commands = ['tee -a /sys/class/scsi_host/foo/scan',
-                             'tee -a /sys/class/scsi_host/bar/scan']
-        self.assertEqual(expected_commands, self.cmds)
+        # We check that we try to get the HBA channel and SCSI target
+        execute_results = (
+            ('/sys/class/fc_transport/target10:2:3/node_name:'
+             '0x5006016090203181\n/sys/class/fc_transport/target10:4:5/'
+             'node_name:0x5006016090203181', ''),
+            None,
+            None,
+            ('/sys/class/fc_transport/target11:6:7/node_name:'
+             '0x5006016090203181\n/sys/class/fc_transport/target11:8:9/'
+             'node_name:0x5006016090203181', ''),
+            None,
+            None)
+        hbas = [{'host_device': 'host10', 'node_name': '5006016090203181'},
+                {'host_device': 'host11', 'node_name': '5006016090203181'}]
+        with mock.patch.object(self.lfc, '_execute',
+                               side_effect=execute_results) as execute_mock:
+            self.lfc.rescan_hosts(hbas, 1)
+            expected_commands = [
+                mock.call('grep 5006016090203181 /sys/class/fc_transport/'
+                          'target10:*/node_name'),
+                mock.call('tee', '-a', '/sys/class/scsi_host/host10/scan',
+                          process_input='2 3 1',
+                          root_helper=None, run_as_root=True),
+                mock.call('tee', '-a', '/sys/class/scsi_host/host10/scan',
+                          process_input='4 5 1',
+                          root_helper=None, run_as_root=True),
+                mock.call('grep 5006016090203181 /sys/class/fc_transport/'
+                          'target11:*/node_name'),
+                mock.call('tee', '-a', '/sys/class/scsi_host/host11/scan',
+                          process_input='6 7 1',
+                          root_helper=None, run_as_root=True),
+                mock.call('tee', '-a', '/sys/class/scsi_host/host11/scan',
+                          process_input='8 9 1',
+                          root_helper=None, run_as_root=True)]
+
+            execute_mock.assert_has_calls(expected_commands)
+            self.assertEqual(len(expected_commands), execute_mock.call_count)
+
+    def test_rescan_hosts_wildcard(self):
+        hbas = [{'host_device': 'host10', 'node_name': '5006016090203181'},
+                {'host_device': 'host11', 'node_name': '5006016090203181'}]
+        with mock.patch.object(self.lfc, '_get_hba_channel_scsi_target',
+                               return_value=None), \
+            mock.patch.object(self.lfc, '_execute',
+                              return_value=None) as execute_mock:
+
+            self.lfc.rescan_hosts(hbas, 1)
+
+            expected_commands = [
+                mock.call('tee', '-a', '/sys/class/scsi_host/host10/scan',
+                          process_input='- - 1',
+                          root_helper=None, run_as_root=True),
+                mock.call('tee', '-a', '/sys/class/scsi_host/host11/scan',
+                          process_input='- - 1',
+                          root_helper=None, run_as_root=True)]
+
+            execute_mock.assert_has_calls(expected_commands)
+            self.assertEqual(len(expected_commands), execute_mock.call_count)
+
+    def test_rescan_hosts_wildcard_exception(self):
+        def _execute(cmd, *args, **kwargs):
+            if cmd.startswith('grep'):
+                raise Exception
+
+        hbas = [{'host_device': 'host10', 'node_name': '5006016090203181'},
+                {'host_device': 'host11', 'node_name': '5006016090203181'}]
+        with mock.patch.object(self.lfc, '_execute',
+                               side_effect=_execute) as execute_mock:
+
+            self.lfc.rescan_hosts(hbas, 1)
+
+            expected_commands = [
+                mock.call('grep 5006016090203181 /sys/class/fc_transport/'
+                          'target10:*/node_name'),
+                mock.call('tee', '-a', '/sys/class/scsi_host/host10/scan',
+                          process_input='- - 1',
+                          root_helper=None, run_as_root=True),
+                mock.call('grep 5006016090203181 /sys/class/fc_transport/'
+                          'target11:*/node_name'),
+                mock.call('tee', '-a', '/sys/class/scsi_host/host11/scan',
+                          process_input='- - 1',
+                          root_helper=None, run_as_root=True)]
+
+            execute_mock.assert_has_calls(expected_commands)
+            self.assertEqual(len(expected_commands), execute_mock.call_count)
 
     def test_get_fc_hbas_fail(self):
         def fake_exec1(a, b, c, d, run_as_root=True, root_helper='sudo'):
