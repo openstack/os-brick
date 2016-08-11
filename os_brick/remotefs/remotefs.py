@@ -20,36 +20,30 @@ import os
 import re
 import tempfile
 
-from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
 import six
 
 from os_brick import exception
-from os_brick.privileged import rootwrap as priv_rootwrap
+from os_brick import executor
 from os_brick.i18n import _, _LI
 
 LOG = logging.getLogger(__name__)
 
 
-class RemoteFsClient(object):
+class RemoteFsClient(executor.Executor):
 
     def __init__(self, mount_type, root_helper,
                  execute=None, *args, **kwargs):
-        # For backwards compatibility, `putils.execute` is interpreted
-        # as a sentinel to mean "I want the os-brick default" :-/
-        # This can be burnt as soon as we update all the callsites (in
-        # nova+cinder) to the new default - and then we shall never
-        # speak of it again.
-        # TODO(gus): RemoteFsClient should probably inherit from Executor
-        if execute is None or execute == putils.execute:
-            execute = priv_rootwrap.execute
+        super(RemoteFsClient, self).__init__(root_helper, execute=execute,
+                                             *args, **kwargs)
 
         mount_type_to_option_prefix = {
             'nfs': 'nfs',
             'cifs': 'smbfs',
             'glusterfs': 'glusterfs',
             'vzstorage': 'vzstorage',
-            'quobyte': 'quobyte'
+            'quobyte': 'quobyte',
+            'scality': 'scality'
         }
 
         if mount_type not in mount_type_to_option_prefix:
@@ -68,18 +62,13 @@ class RemoteFsClient(object):
         if mount_type == "nfs":
             self._check_nfs_options()
 
-        self.root_helper = root_helper
-        self.set_execute(execute)
-
-    def set_execute(self, execute):
-        self._execute = execute
-
     def get_mount_base(self):
         return self._mount_base
 
     def _get_hash_str(self, base_str):
         """Return a string that represents hash of base_str
         (in a hex format).
+
         """
         if isinstance(base_str, six.text_type):
             base_str = base_str.encode('utf-8')
@@ -132,7 +121,7 @@ class RemoteFsClient(object):
             mnt_cmd.extend(flags)
         mnt_cmd.extend([share, mount_path])
 
-        self._execute(*mnt_cmd, root_helper=self.root_helper,
+        self._execute(*mnt_cmd, root_helper=self._root_helper,
                       run_as_root=True, check_exit_code=0)
 
     def _mount_nfs(self, nfs_share, mount_path, flags=None):
@@ -168,12 +157,12 @@ class RemoteFsClient(object):
         if os.path.exists(conf_dir):
             bs_path = os.path.join(conf_dir, 'bs_list')
             self._execute('cp', '-f', tmp_bs_path, bs_path,
-                          root_helper=self.root_helper, run_as_root=True)
+                          root_helper=self._root_helper, run_as_root=True)
         else:
             self._execute('cp', '-rf', tmp_dir, conf_dir,
-                          root_helper=self.root_helper, run_as_root=True)
+                          root_helper=self._root_helper, run_as_root=True)
         self._execute('chown', '-R', 'root:root', conf_dir,
-                      root_helper=self.root_helper, run_as_root=True)
+                      root_helper=self._root_helper, run_as_root=True)
 
     def _mount_vzstorage(self, vz_share, mount_path, flags=None):
         m = re.search("(?:(\S+):\/)?([a-zA-Z0-9_-]+)(?::(\S+))?", vz_share)
@@ -194,14 +183,14 @@ class RemoteFsClient(object):
         if passwd:
             self._execute('pstorage', '-c', cluster_name, 'auth-node', '-P',
                           process_input=passwd,
-                          root_helper=self.root_helper, run_as_root=True)
+                          root_helper=self._root_helper, run_as_root=True)
 
         mnt_cmd = ['pstorage-mount', '-c', cluster_name]
         if flags:
             mnt_cmd.extend(flags)
         mnt_cmd.extend([mount_path])
 
-        self._execute(*mnt_cmd, root_helper=self.root_helper,
+        self._execute(*mnt_cmd, root_helper=self._root_helper,
                       run_as_root=True, check_exit_code=0)
 
     def _check_nfs_options(self):
@@ -243,14 +232,15 @@ class RemoteFsClient(object):
 class ScalityRemoteFsClient(RemoteFsClient):
     def __init__(self, mount_type, root_helper,
                  execute=None, *args, **kwargs):
+        super(ScalityRemoteFsClient, self).__init__(mount_type, root_helper,
+                                                    execute=execute,
+                                                    *args, **kwargs)
         self._mount_type = mount_type
         self._mount_base = kwargs.get(
             'scality_mount_point_base', "").rstrip('/')
         if not self._mount_base:
             raise exception.InvalidParameterValue(
                 err=_('scality_mount_point_base required'))
-        self.root_helper = root_helper
-        self.set_execute(execute or putils.execute)
         self._mount_options = None
 
     def get_mount_point(self, device_name):
