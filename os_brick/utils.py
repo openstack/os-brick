@@ -18,6 +18,7 @@ import logging as py_logging
 import time
 
 from oslo_log import log as logging
+from oslo_utils import encodeutils
 import retrying
 import six
 
@@ -156,3 +157,21 @@ def trace(f):
                       'result': result})
         return result
     return trace_logging_wrapper
+
+
+def convert_str(text):
+    """Convert to native string.
+
+    Convert bytes and Unicode strings to native strings:
+
+    * convert to bytes on Python 2:
+      encode Unicode using encodeutils.safe_encode()
+    * convert to Unicode on Python 3: decode bytes from UTF-8
+    """
+    if six.PY2:
+        return encodeutils.to_utf8(text)
+    else:
+        if isinstance(text, bytes):
+            return text.decode('utf-8')
+        else:
+            return text

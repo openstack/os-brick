@@ -14,10 +14,10 @@
 
 import io
 from oslo_log import log as logging
-from oslo_utils import encodeutils
 
 from os_brick import exception
 from os_brick.i18n import _, _LE, _LW
+from os_brick import utils
 
 try:
     import rados
@@ -40,7 +40,7 @@ class RBDClient(object):
         for attr in ['rbd_user', 'rbd_pool']:
             val = getattr(self, attr)
             if val is not None:
-                setattr(self, attr, encodeutils.safe_encode(val))
+                setattr(self, attr, utils.convert_str(val))
 
         # allow these to be overridden for testing
         self.rados = kwargs.get('rados', rados)
@@ -98,11 +98,11 @@ class RBDVolume(object):
 
     def __init__(self, client, name, snapshot=None, read_only=False):
         if snapshot is not None:
-            snapshot = encodeutils.safe_encode(snapshot)
+            snapshot = utils.convert_str(snapshot)
 
         try:
             self.image = client.rbd.Image(client.ioctx,
-                                          encodeutils.safe_encode(name),
+                                          utils.convert_str(name),
                                           snapshot=snapshot,
                                           read_only=read_only)
         except client.rbd.Error:
@@ -129,9 +129,9 @@ class RBDImageMetadata(object):
     """RBD image metadata to be used with RBDVolumeIOWrapper."""
     def __init__(self, image, pool, user, conf):
         self.image = image
-        self.pool = encodeutils.safe_encode(pool or '')
-        self.user = encodeutils.safe_encode(user or '')
-        self.conf = encodeutils.safe_encode(conf or '')
+        self.pool = utils.convert_str(pool or '')
+        self.user = utils.convert_str(user or '')
+        self.conf = utils.convert_str(conf or '')
 
 
 class RBDVolumeIOWrapper(io.RawIOBase):

@@ -14,7 +14,7 @@ import mock
 
 from os_brick.initiator import linuxrbd
 from os_brick.tests import base
-from oslo_utils import encodeutils
+from os_brick import utils
 
 
 class RBDClientTestCase(base.TestCase):
@@ -29,22 +29,20 @@ class RBDClientTestCase(base.TestCase):
 
             # Verify object attributes are assigned as expected
             self.assertEqual('/etc/ceph/ceph.conf', client.rbd_conf)
-            self.assertEqual(encodeutils.safe_encode('test_user'),
-                             client.rbd_user)
-            self.assertEqual(encodeutils.safe_encode('test_pool'),
-                             client.rbd_pool)
+            self.assertEqual(utils.convert_str('test_user'), client.rbd_user)
+            self.assertEqual(utils.convert_str('test_pool'), client.rbd_pool)
 
             # Assert connect is called with correct paramaters
             mock_rados.Rados.assert_called_once_with(
                 clustername='ceph',
-                rados_id=encodeutils.safe_encode('test_user'),
+                rados_id=utils.convert_str('test_user'),
                 conffile='/etc/ceph/ceph.conf')
 
             # Ensure correct calls to connect to cluster
             self.assertEqual(
                 1, mock_rados.Rados.return_value.connect.call_count)
             mock_rados.Rados.return_value.open_ioctx.assert_called_once_with(
-                encodeutils.safe_encode('test_pool'))
+                utils.convert_str('test_pool'))
 
         self.assertEqual(1, mock_rados.Rados.return_value.shutdown.call_count)
 
