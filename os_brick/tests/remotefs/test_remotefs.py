@@ -79,9 +79,10 @@ class RemoteFsClientTestCase(base.TestCase):
                            run_as_root=True)]
         self.mock_execute.assert_has_calls(calls)
 
+    @mock.patch('os.path.exists', return_value=False)
     @mock.patch.object(remotefs.RemoteFsClient, '_read_mounts',
                        return_value=[])
-    def test_vzstorage_with_mds_list(self, mock_read_mounts):
+    def test_vzstorage_with_mds_list(self, mock_read_mounts, mock_exists):
         client = remotefs.RemoteFsClient("vzstorage", root_helper='true',
                                          vzstorage_mount_point_base='/mnt')
         cluster_name = 'qwe'
