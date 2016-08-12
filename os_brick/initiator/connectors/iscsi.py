@@ -291,9 +291,12 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                        connection_properties['target_iqns'])
 
         out = None
+        iscsi_transport = ('iser' if self._get_transport() == 'iser'
+                           else 'default')
         if connection_properties.get('discovery_auth_method'):
             try:
-                self._run_iscsiadm_update_discoverydb(connection_properties)
+                self._run_iscsiadm_update_discoverydb(connection_properties,
+                                                      iscsi_transport)
             except putils.ProcessExecutionError as exception:
                 # iscsiadm returns 6 for "db record not found"
                 if exception.exit_code == 6:
@@ -302,6 +305,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                         ['-m', 'discoverydb',
                          '-t', 'sendtargets',
                          '-p', connection_properties['target_portal'],
+                         '-I', iscsi_transport,
                          '--op', 'new'],
                         check_exit_code=[0, 255])
                     self._run_iscsiadm_update_discoverydb(
@@ -316,6 +320,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
             out = self._run_iscsiadm_bare(
                 ['-m', 'discoverydb',
                  '-t', 'sendtargets',
+                 '-I', iscsi_transport,
                  '-p', connection_properties['target_portal'],
                  '--discover'],
                 check_exit_code=[0, 255])[0] or ""
@@ -323,16 +328,19 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
             out = self._run_iscsiadm_bare(
                 ['-m', 'discovery',
                  '-t', 'sendtargets',
+                 '-I', iscsi_transport,
                  '-p', connection_properties['target_portal']],
                 check_exit_code=[0, 255])[0] or ""
 
         return self._get_target_portals_from_iscsiadm_output(out)
 
-    def _run_iscsiadm_update_discoverydb(self, connection_properties):
+    def _run_iscsiadm_update_discoverydb(self, connection_properties,
+                                         iscsi_transport='default'):
         return self._execute(
             'iscsiadm',
             '-m', 'discoverydb',
             '-t', 'sendtargets',
+            '-I', iscsi_transport,
             '-p', connection_properties['target_portal'],
             '--op', 'update',
             '-n', "discovery.sendtargets.auth.authmethod",
@@ -383,6 +391,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
 
         device_info = {'type': 'block'}
 
+        # At this point the host_devices may be an empty list
         host_devices, target_props = self._get_potential_volume_paths(
             connection_properties)
 
@@ -402,6 +411,9 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
             # The rescan isn't documented as being necessary(?), but it helps
             if self.use_multipath:
                 self._rescan_iscsi()
+                # We need to refresh the paths as the devices may be empty
+                host_devices, target_props = (
+                    self._get_potential_volume_paths(connection_properties))
             else:
                 if (tries):
                     host_devices = self._get_device_path(target_props)
