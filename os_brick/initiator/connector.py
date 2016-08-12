@@ -63,6 +63,7 @@ DRBD = "DRBD"
 NFS = "NFS"
 GLUSTERFS = "GLUSTERFS"
 LOCAL = "LOCAL"
+GPFS = "GPFS"
 HUAWEISDSHYPERVISOR = "HUAWEISDSHYPERVISOR"
 HGST = "HGST"
 RBD = "RBD"
@@ -85,6 +86,7 @@ connector_list = [
     'os_brick.initiator.connectors.remotefs.RemoteFsConnector',
     'os_brick.initiator.connectors.rbd.RBDConnector',
     'os_brick.initiator.connectors.local.LocalConnector',
+    'os_brick.initiator.connectors.gpfs.GPFSConnector',
     'os_brick.initiator.connectors.drbd.DRBDConnector',
     'os_brick.initiator.connectors.huawei.HuaweiStorHyperConnector',
     'os_brick.initiator.connectors.hgst.HGSTConnector',
@@ -138,6 +140,9 @@ _connector_mapping_linux = {
         'os_brick.initiator.connectors.sheepdog.SheepdogConnector',
     initiator.VMDK:
         'os_brick.initiator.connectors.vmware.VmdkConnector',
+    initiator.GPFS:
+        'os_brick.initiator.connectors.gpfs.GPFSConnector',
+
 }
 
 # Mapping for the S390X platform
