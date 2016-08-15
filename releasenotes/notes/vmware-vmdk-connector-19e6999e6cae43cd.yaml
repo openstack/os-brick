@@ -1,0 +1,4 @@
+---
+features:
+  - Added initiator connector 'VmdkConnector' to support backup and
+    restore of vmdk volumes by Cinder backup service.
