@@ -169,7 +169,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
             except Exception:
                 if 'target_portals' in connection_properties:
                     raise exception.TargetPortalsNotFound(
-                        target_portal=connection_properties['target_portals'])
+                        target_portals=connection_properties['target_portals'])
                 elif 'target_portal' in connection_properties:
                     raise exception.TargetPortalNotFound(
                         target_portal=connection_properties['target_portal'])
