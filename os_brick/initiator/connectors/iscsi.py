@@ -374,8 +374,17 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
 
     @utils.trace
     @synchronized('connect_volume')
+    @utils.retry(exceptions=(exception.VolumeDeviceNotFound))
     def connect_volume(self, connection_properties):
         """Attach the volume to instance_name.
+
+        NOTE: Will retry up to three times to handle the case where c-vol
+        and n-cpu are both using os-brick to manage iSCSI sessions but they
+        are on the same node and using different locking directories. In this
+        case, even though this call is synchronized, they will be separate
+        locks and can still overlap with connect and disconnect. Since a
+        disconnect during an initial attach can't cause IO failure (the device
+        has not been made available yet), we just try the connection again.
 
         :param connection_properties: The valid dictionary that describes all
                                       of the target volume attributes.
