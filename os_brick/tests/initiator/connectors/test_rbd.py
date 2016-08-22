@@ -28,10 +28,16 @@ class RBDConnectorTestCase(test_connector.ConnectorTestCase):
         self.user = 'fake_user'
         self.pool = 'fake_pool'
         self.volume = 'fake_volume'
+        self.clustername = 'fake_ceph'
+        self.hosts = ['192.168.10.2']
+        self.ports = ['6789']
 
         self.connection_properties = {
             'auth_username': self.user,
             'name': '%s/%s' % (self.pool, self.volume),
+            'cluster_name': self.clustername,
+            'hosts': self.hosts,
+            'ports': self.ports,
         }
 
     def test_get_search_path(self):
@@ -56,16 +62,20 @@ class RBDConnectorTestCase(test_connector.ConnectorTestCase):
 
     @mock.patch('os_brick.initiator.linuxrbd.rbd')
     @mock.patch('os_brick.initiator.linuxrbd.rados')
-    def test_connect_volume(self, mock_rados, mock_rbd):
+    @mock.patch.object(rbd.RBDConnector, '_create_ceph_conf')
+    @mock.patch('os.path.exists')
+    def test_connect_volume(self, mock_path, mock_conf, mock_rados, mock_rbd):
         """Test the connect volume case."""
         rbd_connector = rbd.RBDConnector(None)
+        mock_path.return_value = False
+        mock_conf.return_value = "/tmp/fake_dir/fake_ceph.conf"
         device_info = rbd_connector.connect_volume(self.connection_properties)
 
         # Ensure rados is instantiated correctly
         mock_rados.Rados.assert_called_once_with(
-            clustername='ceph',
+            clustername=self.clustername,
             rados_id=utils.convert_str(self.user),
-            conffile='/etc/ceph/ceph.conf')
+            conffile='/tmp/fake_dir/fake_ceph.conf')
 
         # Ensure correct calls to connect to cluster
         self.assertEqual(1, mock_rados.Rados.return_value.connect.call_count)
@@ -81,6 +91,20 @@ class RBDConnectorTestCase(test_connector.ConnectorTestCase):
         # Ensure expected object is returned correctly
         self.assertTrue(isinstance(device_info['path'],
                                    linuxrbd.RBDVolumeIOWrapper))
+
+    @mock.patch('os_brick.initiator.connectors.rbd.tempfile.mkstemp')
+    def test_create_ceph_conf(self, mock_mkstemp):
+        mockopen = mock.mock_open()
+        fd = mock.sentinel.fd
+        tmpfile = mock.sentinel.tmpfile
+        mock_mkstemp.return_value = (fd, tmpfile)
+
+        with mock.patch('os.fdopen', mockopen, create=True):
+            rbd_connector = rbd.RBDConnector(None)
+            conf_path = rbd_connector._create_ceph_conf(
+                self.hosts, self.ports, self.clustername, self.user)
+        self.assertEqual(conf_path, tmpfile)
+        mock_mkstemp.assert_called_once_with()
 
     @mock.patch.object(priv_rootwrap, 'execute')
     def test_connect_local_volume(self, mock_execute):
