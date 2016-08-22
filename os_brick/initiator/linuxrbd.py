@@ -75,7 +75,7 @@ class RBDClient(object):
         try:
             if self.rados_connect_timeout >= 0:
                 client.connect(
-                    timeout=self.configuration.rados_connect_timeout)
+                    timeout=self.rados_connect_timeout)
             else:
                 client.connect()
             ioctx = client.open_ioctx(self.rbd_pool)
