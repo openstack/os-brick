@@ -269,14 +269,14 @@ class FibreChannelConnector(base.BaseLinuxConnector):
             device_info = self._linuxscsi.get_device_info(real_path)
             devices.append(device_info)
 
-        LOG.debug("devices to remove = %s", devices)
-        self._remove_devices(connection_properties, devices)
-
         if self.use_multipath:
             # There is a bug in multipath where the flushing
             # doesn't remove the entry if friendly names are on
             # we'll try anyway.
             self._linuxscsi.flush_multipath_device(wwn)
+
+        LOG.debug("devices to remove = %s", devices)
+        self._remove_devices(connection_properties, devices)
 
     def _remove_devices(self, connection_properties, devices):
         # There may have been more than 1 device mounted
