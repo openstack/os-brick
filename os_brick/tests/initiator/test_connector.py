@@ -209,6 +209,9 @@ class ConnectorTestCase(test_base.TestCase):
         obj = connector.InitiatorConnector.factory('local', None)
         self.assertEqual("LocalConnector", obj.__class__.__name__)
 
+        obj = connector.InitiatorConnector.factory('gpfs', None)
+        self.assertEqual("GPFSConnector", obj.__class__.__name__)
+
         obj = connector.InitiatorConnector.factory('huaweisdshypervisor', None)
         self.assertEqual("HuaweiStorHyperConnector", obj.__class__.__name__)
 
