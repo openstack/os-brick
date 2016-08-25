@@ -231,3 +231,41 @@ class LogTracingTestCase(base.TestCase):
         self.assertEqual('OK', result)
         return_log = mock_log.debug.call_args_list[1]
         self.assertIn('2900', str(return_log))
+
+    def test_utils_trace_method_with_password_dict(self):
+        mock_logging = self.mock_object(utils, 'logging')
+        mock_log = mock.Mock()
+        mock_log.isEnabledFor = lambda x: True
+        mock_logging.getLogger = mock.Mock(return_value=mock_log)
+
+        @utils.trace
+        def _trace_test_method(*args, **kwargs):
+            return {'something': 'test',
+                    'password': 'Now you see me'}
+
+        result = _trace_test_method(self)
+        expected_unmasked_dict = {'something': 'test',
+                                  'password': 'Now you see me'}
+
+        self.assertEqual(expected_unmasked_dict, result)
+        self.assertEqual(2, mock_log.debug.call_count)
+        self.assertIn("'password': '***'",
+                      str(mock_log.debug.call_args_list[1]))
+
+    def test_utils_trace_method_with_password_str(self):
+        mock_logging = self.mock_object(utils, 'logging')
+        mock_log = mock.Mock()
+        mock_log.isEnabledFor = lambda x: True
+        mock_logging.getLogger = mock.Mock(return_value=mock_log)
+
+        @utils.trace
+        def _trace_test_method(*args, **kwargs):
+            return "'adminPass': 'Now you see me'"
+
+        result = _trace_test_method(self)
+        expected_unmasked_str = "'adminPass': 'Now you see me'"
+
+        self.assertEqual(expected_unmasked_str, result)
+        self.assertEqual(2, mock_log.debug.call_count)
+        self.assertIn("'adminPass': '***'",
+                      str(mock_log.debug.call_args_list[1]))
