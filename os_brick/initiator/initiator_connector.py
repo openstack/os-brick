@@ -15,14 +15,11 @@
 
 import abc
 
-from oslo_log import log as logging
 import six
 
 from os_brick import exception
 from os_brick import executor
 from os_brick import initiator
-
-LOG = logging.getLogger(__name__)
 
 
 @six.add_metaclass(abc.ABCMeta)

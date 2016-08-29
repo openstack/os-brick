@@ -17,7 +17,6 @@ import sys
 
 import mock
 from oslo_concurrency import processutils as putils
-from oslo_log import log as logging
 
 from os_brick.initiator import connector
 from os_brick.initiator.connectors import base
@@ -26,8 +25,6 @@ from os_brick.initiator.connectors import iscsi
 from os_brick.initiator import linuxfc
 from os_brick.privileged import rootwrap as priv_rootwrap
 from os_brick.tests import base as test_base
-
-LOG = logging.getLogger(__name__)
 
 MY_IP = '10.0.0.1'
 FAKE_SCSI_WWN = '1234567890'
