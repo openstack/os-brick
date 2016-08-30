@@ -47,6 +47,15 @@ class VolumeEncryptorTestCase(base.TestCase):
                                       keymgr=fake.fake_api(),
                                       execute=self.mock_execute)
 
+    def assert_exec_has_calls(self, expected_calls, any_order=False):
+        """Check that the root exec mock has calls, excluding child calls."""
+        if any_order:
+            self.assertSetEqual(set(expected_calls),
+                                set(self.mock_execute.call_args_list))
+        else:
+            self.assertListEqual(expected_calls,
+                                 self.mock_execute.call_args_list)
+
     def test_get_encryptors(self):
         root_helper = None
 
