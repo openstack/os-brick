@@ -163,6 +163,14 @@ _connector_mapping_windows = {
 }
 
 
+# Create aliases to the old names until 2.0.0
+# TODO(smcginnis) Remove this lookup once unit test code is updated to
+# point to the correct location
+for item in connector_list:
+    _name = item.split('.')[-1]
+    globals()[_name] = importutils.import_class(item)
+
+
 @utils.trace
 def get_connector_properties(root_helper, my_ip, multipath, enforce_multipath,
                              host=None, execute=None):
