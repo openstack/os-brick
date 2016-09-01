@@ -89,8 +89,8 @@ class RBDConnectorTestCase(test_connector.ConnectorTestCase):
             snapshot=None)
 
         # Ensure expected object is returned correctly
-        self.assertTrue(isinstance(device_info['path'],
-                                   linuxrbd.RBDVolumeIOWrapper))
+        self.assertIsInstance(device_info['path'],
+                              linuxrbd.RBDVolumeIOWrapper)
 
     @mock.patch('os_brick.initiator.connectors.rbd.tempfile.mkstemp')
     def test_create_ceph_conf(self, mock_mkstemp):
