@@ -19,7 +19,7 @@ from oslo_log import log as logging
 from oslo_service import loopingcall
 import six
 
-from os_brick.i18n import _LE, _LW
+from os_brick.i18n import _LE, _LI, _LW
 from os_brick import exception
 from os_brick import initiator
 from os_brick.initiator.connectors import base
@@ -156,9 +156,9 @@ class FibreChannelConnector(base.BaseLinuxConnector):
                 LOG.error(_LE("Fibre Channel volume device not found."))
                 raise exception.NoFibreChannelVolumeDeviceFound()
 
-            LOG.warning(_LW("Fibre Channel volume device not yet found. "
-                            "Will rescan & retry.  Try number: %(tries)s."),
-                        {'tries': tries})
+            LOG.info(_LI("Fibre Channel volume device not yet found. "
+                         "Will rescan & retry.  Try number: %(tries)s."),
+                     {'tries': tries})
 
             self._linuxfc.rescan_hosts(hbas,
                                        connection_properties['target_lun'])

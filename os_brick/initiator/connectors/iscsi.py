@@ -403,10 +403,9 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
             if tries >= self.device_scan_attempts:
                 raise exception.VolumeDeviceNotFound(device=host_devices)
 
-            LOG.warning(_LW("ISCSI volume not yet found at: %(host_devices)s. "
-                            "Will rescan & retry.  Try number: %(tries)s."),
-                        {'host_devices': host_devices,
-                         'tries': tries})
+            LOG.info(_LI("ISCSI volume not yet found at: %(host_devices)s. "
+                         "Will rescan & retry.  Try number: %(tries)s."),
+                     {'host_devices': host_devices, 'tries': tries})
 
             # The rescan isn't documented as being necessary(?), but it helps
             if self.use_multipath:
