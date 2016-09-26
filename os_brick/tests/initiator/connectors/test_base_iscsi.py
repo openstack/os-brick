@@ -48,7 +48,7 @@ class BaseISCSIConnectorTestCase(test_base.TestCase):
                           'target_iqn': mock.sentinel.iqn,
                           'target_lun': mock.sentinel.lun,
                           'extra_property': 'extra_property'}
-        self.assertDictEqual(expected_props, list_props[0])
+        self.assertEqual(expected_props, list_props[0])
 
     def test_get_all_targets(self):
         connection_properties = {
