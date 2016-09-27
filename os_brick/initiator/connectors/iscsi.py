@@ -416,9 +416,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                          "Will rescan & retry.  Try number: %(tries)s."),
                      {'host_devices': host_devices, 'tries': tries})
 
-            # The rescan isn't documented as being necessary(?), but it helps
             if self.use_multipath:
-                self._rescan_iscsi()
                 # We need to refresh the paths as the devices may be empty
                 host_devices, target_props = (
                     self._get_potential_volume_paths(connection_properties))
