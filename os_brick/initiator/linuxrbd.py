@@ -10,7 +10,7 @@
 # License for the specific language governing permissions and limitations under
 # the License.
 
-""" Generic RBD connection utilities."""
+"""Generic RBD connection utilities."""
 
 import io
 from oslo_log import log as logging
