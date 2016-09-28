@@ -33,6 +33,8 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
         This method only works for Fibre Channel targets that implement a
         single WWNN for all ports, so caller should expect us to return either
         None or an empty list.
+
+        :returns: List or None
         """
         # Leave only the number from the host_device field (ie: host6)
         host_device = hba['host_device']
@@ -48,7 +50,9 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
                     for line in out.split('\n') if line.startswith(path)]
         except Exception as exc:
             LOG.error(_LE('Could not get HBA channel and SCSI target ID, '
-                          'reason: %s'), exc)
+                          'path: %(path)s, reason: %(reason)s'),
+                      {'path': path,
+                       'reason': exc})
             return None
 
     def rescan_hosts(self, hbas, target_lun):
