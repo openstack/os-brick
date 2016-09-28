@@ -148,8 +148,20 @@ _connector_mapping_linux = {
 # Mapping for the S390X platform
 _connector_mapping_linux_s390x = {
     initiator.FIBRE_CHANNEL:
-        ('os_brick.initiator.connectors.fibre_channel_s390x.'
-         'FibreChannelConnectorS390X'),
+        'os_brick.initiator.connectors.fibre_channel_s390x.'
+        'FibreChannelConnectorS390X',
+    initiator.DRBD:
+        'os_brick.initiator.connectors.drbd.DRBDConnector',
+    initiator.NFS:
+        'os_brick.initiator.connectors.remotefs.RemoteFsConnector',
+    initiator.ISCSI:
+        'os_brick.initiator.connectors.iscsi.ISCSIConnector',
+    initiator.LOCAL:
+        'os_brick.initiator.connectors.local.LocalConnector',
+    initiator.RBD:
+        'os_brick.initiator.connectors.rbd.RBDConnector',
+    initiator.GPFS:
+        'os_brick.initiator.connectors.gpfs.GPFSConnector',
 }
 
 # Mapping for the windows connectors
