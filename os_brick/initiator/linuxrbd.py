@@ -112,14 +112,17 @@ class RBDVolume(object):
 
         self.client = client
 
-    def __enter__(self):
-        return self
-
-    def __exit__(self, type_, value, traceback):
+    def close(self):
         try:
             self.image.close()
         finally:
             self.client.disconnect()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, type_, value, traceback):
+        self.close()
 
     def __getattr__(self, attrib):
         return getattr(self.image, attrib)
@@ -229,4 +232,4 @@ class RBDVolumeIOWrapper(io.RawIOBase):
     # in this case is unwanted since the rbd image may have been closed prior
     # to the autoclean - currently triggering a segfault in librbd.
     def close(self):
-        pass
+        self.rbd_image.close()
