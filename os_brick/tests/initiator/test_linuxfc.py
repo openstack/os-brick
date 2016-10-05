@@ -27,11 +27,22 @@ class LinuxFCTestCase(base.TestCase):
         self.cmds = []
 
         self.mock_object(os.path, 'exists', return_value=True)
+        self.mock_object(os.path, 'isdir', return_value=True)
         self.lfc = linuxfc.LinuxFibreChannel(None, execute=self.fake_execute)
 
     def fake_execute(self, *cmd, **kwargs):
         self.cmds.append(" ".join(cmd))
         return "", None
+
+    def test_has_fc_support(self):
+
+        self.mock_object(os.path, 'isdir', return_value=False)
+        has_fc = self.lfc.has_fc_support()
+        self.assertFalse(has_fc)
+
+        self.mock_object(os.path, 'isdir', return_value=True)
+        has_fc = self.lfc.has_fc_support()
+        self.assertTrue(has_fc)
 
     def test_rescan_hosts(self):
         # We check that we try to get the HBA channel and SCSI target

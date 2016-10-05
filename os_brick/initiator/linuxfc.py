@@ -27,6 +27,14 @@ LOG = logging.getLogger(__name__)
 
 
 class LinuxFibreChannel(linuxscsi.LinuxSCSI):
+
+    def has_fc_support(self):
+        FC_HOST_SYSFS_PATH = '/sys/class/fc_host'
+        if os.path.isdir(FC_HOST_SYSFS_PATH):
+            return True
+        else:
+            return False
+
     def _get_hba_channel_scsi_target(self, hba):
         """Try to get the HBA channel and SCSI target for an HBA.
 
@@ -72,6 +80,13 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
 
     def get_fc_hbas(self):
         """Get the Fibre Channel HBA information."""
+
+        if not self.has_fc_support():
+            # there is no FC support in the kernel loaded
+            # so there is no need to even try to run systool
+            LOG.debug("No Fibre Channel support detected on system.")
+            return []
+
         out = None
         try:
             out, _err = self._execute('systool', '-c', 'fc_host', '-v',
