@@ -65,39 +65,46 @@ class WindowsRemoteFsClient(remotefs.RemoteFsClient):
 
         return local_share_path
 
+    def _get_share_norm_path(self, share):
+        return share.replace('/', '\\')
+
     def get_share_name(self, share):
-        return share.replace('/', '\\').lstrip('\\').split('\\', 1)[1]
+        return self._get_share_norm_path(share).lstrip('\\').split('\\', 1)[1]
 
     def mount(self, share, flags=None):
-        share = share.replace('/', '\\')
+        share_norm_path = self._get_share_norm_path(share)
         use_local_path = (self._local_path_for_loopback and
-                          self._smbutils.is_local_share(share))
+                          self._smbutils.is_local_share(share_norm_path))
 
         if use_local_path:
             LOG.info(_LI("Skipping mounting local share %(share_path)s."),
-                     dict(share_path=share))
+                     dict(share_path=share_norm_path))
         else:
             mount_options = " ".join(
                 [self._mount_options or '', flags or ''])
             username, password = self._parse_credentials(mount_options)
 
             if not self._smbutils.check_smb_mapping(
-                    share):
-                self._smbutils.mount_smb_share(share,
+                    share_norm_path):
+                self._smbutils.mount_smb_share(share_norm_path,
                                                username=username,
                                                password=password)
 
         if self._mount_base:
-            share_name = self.get_share_name(share)
-            symlink_dest = (share if not use_local_path
-                            else self.get_local_share_path(share_name))
-            self._create_mount_point(symlink_dest)
+            self._create_mount_point(share, use_local_path)
 
     def unmount(self, share):
-        self._smbutils.unmount_smb_share(share.replace('/', '\\'))
+        self._smbutils.unmount_smb_share(self._get_share_norm_path(share))
 
-    def _create_mount_point(self, share):
+    def _create_mount_point(self, share, use_local_path):
+        # The mount point will contain a hash of the share so we're
+        # intentionally preserving the original share path as this is
+        # what the caller will expect.
         mnt_point = self.get_mount_point(share)
+        share_norm_path = self._get_share_norm_path(share)
+        share_name = self.get_share_name(share)
+        symlink_dest = (share_norm_path if not use_local_path
+                        else self.get_local_share_path(share_name))
 
         if not os.path.isdir(self._mount_base):
             os.makedirs(self._mount_base)
@@ -107,7 +114,7 @@ class WindowsRemoteFsClient(remotefs.RemoteFsClient):
                 raise exception.BrickException(_("Link path already exists "
                                                  "and it's not a symlink"))
         else:
-            self._pathutils.create_sym_link(mnt_point, share)
+            self._pathutils.create_sym_link(mnt_point, symlink_dest)
 
     def _parse_credentials(self, opts_str):
         if not opts_str:

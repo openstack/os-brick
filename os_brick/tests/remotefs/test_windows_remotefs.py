@@ -65,10 +65,7 @@ class WindowsRemotefsClientTestCase(base.TestCase):
     @ddt.data(True, False)
     @mock.patch.object(windows_remotefs.WindowsRemoteFsClient,
                        '_create_mount_point')
-    @mock.patch.object(windows_remotefs.WindowsRemoteFsClient,
-                       'get_local_share_path')
     def test_mount(self, is_local_share,
-                   mock_get_local_share_path,
                    mock_create_mount_point):
         flags = '-o pass=password'
         self._remotefs._mount_options = '-o user=username,randomopt'
@@ -80,39 +77,37 @@ class WindowsRemotefsClientTestCase(base.TestCase):
         self._remotefs.mount(self._FAKE_SHARE, flags)
 
         if is_local_share:
-            expected_link_dest = mock_get_local_share_path.return_value
-
             self.assertFalse(self._smbutils.check_smb_mapping.called)
             self.assertFalse(self._smbutils.mount_smb_share.called)
-            mock_get_local_share_path.assert_called_once_with(
-                self._FAKE_SHARE_NAME)
         else:
-            expected_link_dest = self._FAKE_SHARE
-
             self._smbutils.check_smb_mapping.assert_called_once_with(
                 self._FAKE_SHARE)
             self._smbutils.mount_smb_share.assert_called_once_with(
                 self._FAKE_SHARE,
                 username='username',
                 password='password')
-            self.assertFalse(mock_get_local_share_path.called)
 
-        mock_create_mount_point.assert_called_once_with(expected_link_dest)
+        mock_create_mount_point.assert_called_once_with(self._FAKE_SHARE,
+                                                        is_local_share)
 
     def test_unmount(self):
         self._remotefs.unmount(self._FAKE_SHARE)
         self._smbutils.unmount_smb_share.assert_called_once_with(
             self._FAKE_SHARE)
 
-    @ddt.data({},
+    @ddt.data({'use_local_path': True},
               {'path_exists': True, 'is_symlink': True},
               {'path_exists': True})
+    @mock.patch.object(windows_remotefs.WindowsRemoteFsClient,
+                       'get_local_share_path')
     @mock.patch.object(windows_remotefs.WindowsRemoteFsClient,
                        'get_mount_point')
     @mock.patch.object(windows_remotefs, 'os')
     @ddt.unpack
     def test_create_mount_point(self, mock_os, mock_get_mount_point,
-                                path_exists=False, is_symlink=False):
+                                mock_get_local_share_path,
+                                path_exists=False, is_symlink=False,
+                                use_local_path=False):
         mock_os.path.exists.return_value = path_exists
         mock_os.isdir.return_value = False
         self._pathutils.is_symlink.return_value = is_symlink
@@ -120,12 +115,21 @@ class WindowsRemotefsClientTestCase(base.TestCase):
         if path_exists and not is_symlink:
             self.assertRaises(exception.BrickException,
                               self._remotefs._create_mount_point,
-                              mock.sentinel.share)
+                              self._FAKE_SHARE,
+                              use_local_path)
         else:
-            self._remotefs._create_mount_point(mock.sentinel.share)
+            self._remotefs._create_mount_point(self._FAKE_SHARE,
+                                               use_local_path)
 
-        mock_get_mount_point.assert_called_once_with(mock.sentinel.share)
+        mock_get_mount_point.assert_called_once_with(self._FAKE_SHARE)
         mock_os.path.isdir.assert_called_once_with(mock.sentinel.mount_base)
+
+        if use_local_path:
+            mock_get_local_share_path.assert_called_once_with(
+                self._FAKE_SHARE_NAME)
+            expected_symlink_target = mock_get_local_share_path.return_value
+        else:
+            expected_symlink_target = self._FAKE_SHARE.replace('/', '\\')
 
         if path_exists:
             self._pathutils.is_symlink.assert_called_once_with(
@@ -133,4 +137,4 @@ class WindowsRemotefsClientTestCase(base.TestCase):
         else:
             self._pathutils.create_sym_link.assert_called_once_with(
                 mock_get_mount_point.return_value,
-                mock.sentinel.share)
+                expected_symlink_target)
