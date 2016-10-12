@@ -146,5 +146,13 @@ class RBDVolumeIOWrapperTestCase(base.TestCase):
     def test_fileno(self):
         self.assertRaises(IOError, self.mock_volume_wrapper.fileno)
 
-    def test_close(self):
-        self.mock_volume_wrapper.close()
+    @mock.patch('os_brick.initiator.linuxrbd.rbd')
+    @mock.patch('os_brick.initiator.linuxrbd.rados')
+    @mock.patch.object(linuxrbd.RBDClient, 'disconnect')
+    def test_close(self, rbd_disconnect, mock_rados, mock_rbd):
+        rbd_client = linuxrbd.RBDClient('user', 'pool')
+        rbd_volume = linuxrbd.RBDVolume(rbd_client, 'volume')
+        rbd_handle = linuxrbd.RBDVolumeIOWrapper(
+            linuxrbd.RBDImageMetadata(rbd_volume, 'pool', 'user', None))
+        rbd_handle.close()
+        self.assertEqual(1, rbd_disconnect.call_count)
