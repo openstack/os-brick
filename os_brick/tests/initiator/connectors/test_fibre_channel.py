@@ -174,8 +174,8 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
                        exp_wwn)
             self.assertEqual(dev_info['type'], 'block')
             self.assertEqual(dev_info['path'], dev_str)
-            self.assertTrue('multipath_id' not in dev_info)
-            self.assertTrue('devices' not in dev_info)
+            self.assertNotIn('multipath_id', dev_info)
+            self.assertNotIn('devices', dev_info)
 
             self.connector.disconnect_volume(connection_info['data'], dev_info)
             expected_commands = []
