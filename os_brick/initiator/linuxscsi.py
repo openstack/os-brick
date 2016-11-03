@@ -371,35 +371,36 @@ class LinuxSCSI(executor.Executor):
                                     root_helper=self._root_helper)
         return out
 
-    def extend_volume(self, volume_path):
+    def extend_volume(self, volume_paths):
         """Signal the SCSI subsystem to test for volume resize.
 
         This function tries to signal the local system's kernel
         that an already attached volume might have been resized.
         """
-        LOG.debug("extend volume %s", volume_path)
+        LOG.debug("extend volume %s", volume_paths)
 
-        device = self.get_device_info(volume_path)
-        LOG.debug("Volume device info = %s", device)
-        device_id = ("%(host)s:%(channel)s:%(id)s:%(lun)s" %
-                     {'host': device['host'],
-                      'channel': device['channel'],
-                      'id': device['id'],
-                      'lun': device['lun']})
+        for volume_path in volume_paths:
+            device = self.get_device_info(volume_path)
+            LOG.debug("Volume device info = %s", device)
+            device_id = ("%(host)s:%(channel)s:%(id)s:%(lun)s" %
+                         {'host': device['host'],
+                          'channel': device['channel'],
+                          'id': device['id'],
+                          'lun': device['lun']})
 
-        scsi_path = ("/sys/bus/scsi/drivers/sd/%(device_id)s" %
-                     {'device_id': device_id})
+            scsi_path = ("/sys/bus/scsi/drivers/sd/%(device_id)s" %
+                         {'device_id': device_id})
 
-        size = self.get_device_size(volume_path)
-        LOG.debug("Starting size: %s", size)
+            size = self.get_device_size(volume_path)
+            LOG.debug("Starting size: %s", size)
 
-        # now issue the device rescan
-        rescan_path = "%(scsi_path)s/rescan" % {'scsi_path': scsi_path}
-        self.echo_scsi_command(rescan_path, "1")
-        new_size = self.get_device_size(volume_path)
-        LOG.debug("volume size after scsi device rescan %s", new_size)
+            # now issue the device rescan
+            rescan_path = "%(scsi_path)s/rescan" % {'scsi_path': scsi_path}
+            self.echo_scsi_command(rescan_path, "1")
+            new_size = self.get_device_size(volume_path)
+            LOG.debug("volume size after scsi device rescan %s", new_size)
 
-        scsi_wwn = self.get_scsi_wwn(volume_path)
+        scsi_wwn = self.get_scsi_wwn(volume_paths[0])
         mpath_device = self.find_multipath_device_path(scsi_wwn)
         if mpath_device:
             # Force a reconfigure so that resize works
@@ -412,16 +413,15 @@ class LinuxSCSI(executor.Executor):
             if 'fail' in result:
                 msg = (_LI("Multipathd failed to update the size mapping of "
                            "multipath device %(scsi_wwn)s volume %(volume)s") %
-                       {'scsi_wwn': scsi_wwn, 'volume': volume_path})
+                       {'scsi_wwn': scsi_wwn, 'volume': volume_paths})
                 LOG.error(msg)
                 return None
 
             new_size = self.get_device_size(mpath_device)
             LOG.info(_LI("mpath(%(device)s) new size %(size)s"),
                      {'device': mpath_device, 'size': new_size})
-            return new_size
-        else:
-            return new_size
+
+        return new_size
 
     def process_lun_id(self, lun_ids):
         if isinstance(lun_ids, list):

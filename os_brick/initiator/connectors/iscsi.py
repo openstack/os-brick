@@ -365,7 +365,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         volume_paths = self.get_volume_paths(connection_properties)
         LOG.info(_LI("Found paths for volume %s"), volume_paths)
         if volume_paths:
-            return self._linuxscsi.extend_volume(volume_paths[0])
+            return self._linuxscsi.extend_volume(volume_paths)
         else:
             LOG.warning(_LW("Couldn't find any volume paths on the host to "
                             "extend volume for %(props)s"),
