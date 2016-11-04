@@ -407,12 +407,11 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
                        '_get_target_portals_from_iscsiadm_output')
     @mock.patch.object(iscsi.ISCSIConnector, '_connect_to_iscsi_portal')
     @mock.patch.object(iscsi.ISCSIConnector, '_rescan_iscsi')
-    @mock.patch.object(iscsi.ISCSIConnector, '_rescan_multipath')
     @mock.patch.object(os.path, 'exists', return_value=True)
     @mock.patch.object(base.BaseLinuxConnector, '_discover_mpath_device')
     def test_connect_volume_with_multipath(
             self, mock_discover_mpath_device, exists_mock,
-            rescan_multipath_mock, rescan_iscsi_mock, connect_to_mock,
+            rescan_iscsi_mock, connect_to_mock,
             portals_mock, iscsiadm_mock, mock_iscsi_wwn):
         mock_iscsi_wwn.return_value = test_connector.FAKE_SCSI_WWN
         location = '10.0.2.15:3260'
@@ -587,7 +586,6 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(iscsi.ISCSIConnector, '_get_multipath_device_map',
                        return_value={})
     @mock.patch.object(iscsi.ISCSIConnector, '_get_iscsi_devices')
-    @mock.patch.object(iscsi.ISCSIConnector, '_rescan_multipath')
     @mock.patch.object(iscsi.ISCSIConnector, '_run_multipath')
     @mock.patch.object(iscsi.ISCSIConnector, '_get_multipath_iqns')
     @mock.patch.object(iscsi.ISCSIConnector, '_run_iscsiadm')
@@ -596,8 +594,8 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
     def test_connect_volume_with_multiple_portals_primary_error(
             self, mock_process_lun_id, mock_discover_mpath_device,
             mock_iscsiadm, mock_get_iqn, mock_run_multipath,
-            mock_rescan_multipath, mock_iscsi_devices,
-            mock_get_multipath_device_map, mock_devices, mock_exists,
+            mock_iscsi_devices, mock_get_multipath_device_map,
+            mock_devices, mock_exists,
             mock_scsi_wwn):
         mock_scsi_wwn.return_value = test_connector.FAKE_SCSI_WWN
         location1 = '10.0.2.15:3260'
@@ -668,12 +666,11 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(iscsi.ISCSIConnector, '_connect_to_iscsi_portal')
     @mock.patch.object(host_driver.HostDriver, 'get_all_block_devices')
     @mock.patch.object(iscsi.ISCSIConnector, '_get_iscsi_devices')
-    @mock.patch.object(iscsi.ISCSIConnector, '_rescan_multipath')
     @mock.patch.object(iscsi.ISCSIConnector, '_run_multipath')
     @mock.patch.object(base.BaseLinuxConnector, '_discover_mpath_device')
     def test_connect_volume_with_multipath_connecting(
             self, mock_discover_mpath_device, mock_run_multipath,
-            mock_rescan_multipath, mock_iscsi_devices, mock_devices,
+            mock_iscsi_devices, mock_devices,
             mock_connect, mock_portals, mock_exists, mock_scsi_wwn):
         mock_scsi_wwn.return_value = test_connector.FAKE_SCSI_WWN
         location1 = '10.0.2.15:3260'
@@ -715,10 +712,9 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(iscsi.ISCSIConnector, '_connect_to_iscsi_portal')
     @mock.patch.object(host_driver.HostDriver, 'get_all_block_devices')
     @mock.patch.object(iscsi.ISCSIConnector, '_get_iscsi_devices')
-    @mock.patch.object(iscsi.ISCSIConnector, '_rescan_multipath')
     @mock.patch.object(iscsi.ISCSIConnector, '_run_multipath')
     def test_connect_volume_multipath_failed_iscsi_login(
-            self, mock_run_multipath, mock_rescan_multipath,
+            self, mock_run_multipath,
             mock_iscsi_devices, mock_devices,
             mock_connect, mock_portals, mock_exists):
         location1 = '10.0.2.15:3260'
@@ -819,7 +815,6 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(iscsi.ISCSIConnector,
                        '_get_target_portals_from_iscsiadm_output')
     @mock.patch.object(iscsi.ISCSIConnector, '_rescan_iscsi')
-    @mock.patch.object(iscsi.ISCSIConnector, '_rescan_multipath')
     @mock.patch.object(iscsi.ISCSIConnector, '_get_iscsi_devices')
     @mock.patch.object(host_driver.HostDriver, 'get_all_block_devices')
     @mock.patch.object(iscsi.ISCSIConnector,
@@ -829,7 +824,7 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
     def test_disconnect_volume_multipath_iscsi(
             self, exists_mock, multipath_iqn_mock, disconnect_mock,
             get_all_devices_mock, get_iscsi_devices_mock,
-            rescan_multipath_mock, rescan_iscsi_mock, get_portals_mock,
+            rescan_iscsi_mock, get_portals_mock,
             get_multipath_device_map_mock):
         iqn1 = 'iqn.2013-01.ro.com.netapp:node.netapp01'
         iqn2 = 'iqn.2013-01.ro.com.netapp:node.netapp02'
@@ -852,7 +847,6 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(iscsi.ISCSIConnector,
                        '_get_target_portals_from_iscsiadm_output')
     @mock.patch.object(iscsi.ISCSIConnector, '_rescan_iscsi')
-    @mock.patch.object(iscsi.ISCSIConnector, '_rescan_multipath')
     @mock.patch.object(iscsi.ISCSIConnector, '_get_iscsi_devices')
     @mock.patch.object(host_driver.HostDriver, 'get_all_block_devices')
     @mock.patch.object(iscsi.ISCSIConnector,
@@ -863,7 +857,7 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
     def test_disconnect_volume_multipath_iscsi_other_targets(
             self, exists_mock, multipath_iqn_mock, get_multipath_map_mock,
             disconnect_mock, get_all_devices_mock, get_iscsi_devices_mock,
-            rescan_multipath_mock, rescan_iscsi_mock, get_portals_mock):
+            rescan_iscsi_mock, get_portals_mock):
         iqn1 = 'iqn.2010-10.org.openstack:target-1'
         iqn2 = 'iqn.2010-10.org.openstack:target-2'
         portal = '10.0.0.1:3260'
@@ -888,7 +882,6 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(iscsi.ISCSIConnector,
                        '_get_target_portals_from_iscsiadm_output')
     @mock.patch.object(iscsi.ISCSIConnector, '_rescan_iscsi')
-    @mock.patch.object(iscsi.ISCSIConnector, '_rescan_multipath')
     @mock.patch.object(iscsi.ISCSIConnector, '_get_iscsi_devices',
                        return_value=[])
     @mock.patch.object(host_driver.HostDriver, 'get_all_block_devices',
@@ -898,7 +891,7 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(os.path, 'exists', return_value=True)
     def test_disconnect_volume_multipath_iscsi_without_other_mp_devices(
             self, exists_mock, disconnect_mock, get_all_devices_mock,
-            get_iscsi_devices_mock, rescan_multipath_mock, rescan_iscsi_mock,
+            get_iscsi_devices_mock, rescan_iscsi_mock,
             get_portals_mock, get_multipath_device_map_mock):
         portal = '10.0.2.15:3260'
         name = 'volume-00000001'
@@ -917,7 +910,6 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(iscsi.ISCSIConnector,
                        '_get_target_portals_from_iscsiadm_output')
     @mock.patch.object(iscsi.ISCSIConnector, '_rescan_iscsi')
-    @mock.patch.object(iscsi.ISCSIConnector, '_rescan_multipath')
     @mock.patch.object(iscsi.ISCSIConnector, '_get_iscsi_devices')
     @mock.patch.object(host_driver.HostDriver, 'get_all_block_devices')
     @mock.patch.object(iscsi.ISCSIConnector,
@@ -925,7 +917,7 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(os.path, 'exists', return_value=False)
     def test_disconnect_volume_multipath_iscsi_with_invalid_symlink(
             self, exists_mock, disconnect_mock, get_all_devices_mock,
-            get_iscsi_devices_mock, rescan_multipath_mock, rescan_iscsi_mock,
+            get_iscsi_devices_mock, rescan_iscsi_mock,
             get_portals_mock, get_multipath_device_map_mock):
         # Simulate a broken symlink by returning False for os.path.exists(dev)
         portal = '10.0.0.1:3260'

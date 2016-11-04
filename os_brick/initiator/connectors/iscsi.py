@@ -475,7 +475,6 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         target_lun(s) - LUN id of the volume
         """
         if self.use_multipath:
-            self._rescan_multipath()
             host_device = multipath_device = None
             host_devices = self._get_device_path(connection_properties)
             # Choose an accessible host device
@@ -779,8 +778,6 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
             props['target_iqn'] = iqn
             self._disconnect_from_iscsi_portal(props)
 
-        self._rescan_multipath()
-
     def _get_multipath_iqns(self, multipath_devices, mpath_map):
         entries = self._get_iscsi_devices()
         iqns = []
@@ -847,6 +844,3 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                                 check_exit_code=[0, 1, 21, 255])
         self._run_iscsiadm_bare(('-m', 'session', '--rescan'),
                                 check_exit_code=[0, 1, 21, 255])
-
-    def _rescan_multipath(self):
-        self._run_multipath(['-r'], check_exit_code=[0, 1, 21])
