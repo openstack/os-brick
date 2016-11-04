@@ -154,3 +154,8 @@ class InvalidIOHandleObject(BrickException):
 class VolumeEncryptionNotSupported(Invalid):
     message = _("Volume encryption is not supported for %(volume_type)s "
                 "volume %(volume_id)s.")
+
+
+# NOTE(mriedem): This extends ValueError to maintain backward compatibility.
+class InvalidConnectorProtocol(ValueError):
+    pass
