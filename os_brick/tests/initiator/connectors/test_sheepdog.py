@@ -59,8 +59,8 @@ class SheepdogConnectorTestCase(test_connector.ConnectorTestCase):
         device_info = sd_connector.connect_volume(self.connection_properties)
 
         # Ensure expected object is returned correctly
-        self.assertTrue(isinstance(device_info['path'],
-                                   linuxsheepdog.SheepdogVolumeIOWrapper))
+        self.assertIsInstance(device_info['path'],
+                              linuxsheepdog.SheepdogVolumeIOWrapper)
 
     @mock.patch.object(linuxsheepdog.SheepdogVolumeIOWrapper, 'close')
     def test_disconnect_volume(self, volume_close):
