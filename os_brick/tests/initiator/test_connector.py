@@ -18,6 +18,7 @@ import sys
 import mock
 from oslo_concurrency import processutils as putils
 
+from os_brick import exception
 from os_brick.initiator import connector
 from os_brick.initiator.connectors import base
 from os_brick.initiator.connectors import fake
@@ -222,7 +223,7 @@ class ConnectorTestCase(test_base.TestCase):
         obj = connector.InitiatorConnector.factory("disco", None)
         self.assertEqual("DISCOConnector", obj.__class__.__name__)
 
-        self.assertRaises(ValueError,
+        self.assertRaises(exception.InvalidConnectorProtocol,
                           connector.InitiatorConnector.factory,
                           "bogus", None)
 

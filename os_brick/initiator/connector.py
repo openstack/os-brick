@@ -29,6 +29,7 @@ from oslo_concurrency import lockutils
 from oslo_log import log as logging
 from oslo_utils import importutils
 
+from os_brick import exception
 from os_brick.i18n import _
 from os_brick import initiator
 from os_brick import utils
@@ -282,7 +283,7 @@ class InitiatorConnector(object):
             msg = (_("Invalid InitiatorConnector protocol "
                      "specified %(protocol)s") %
                    dict(protocol=protocol))
-            raise ValueError(msg)
+            raise exception.InvalidConnectorProtocol(msg)
 
         conn_cls = importutils.import_class(connector)
         return conn_cls(*args, **kwargs)
