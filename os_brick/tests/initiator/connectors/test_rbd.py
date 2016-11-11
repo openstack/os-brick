@@ -11,6 +11,7 @@
 #    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #    License for the specific language governing permissions and limitations
 #    under the License.
+import ddt
 import mock
 
 from os_brick.initiator.connectors import rbd
@@ -20,6 +21,7 @@ from os_brick.tests.initiator import test_connector
 from os_brick import utils
 
 
+@ddt.ddt
 class RBDConnectorTestCase(test_connector.ConnectorTestCase):
 
     def setUp(self):
@@ -91,6 +93,24 @@ class RBDConnectorTestCase(test_connector.ConnectorTestCase):
         # Ensure expected object is returned correctly
         self.assertIsInstance(device_info['path'],
                               linuxrbd.RBDVolumeIOWrapper)
+
+    @ddt.data((['192.168.1.1', '192.168.1.2'],
+               ['192.168.1.1', '192.168.1.2']),
+              (['3ffe:1900:4545:3:200:f8ff:fe21:67cf',
+                'fe80:0:0:0:200:f8ff:fe21:67cf'],
+               ['[3ffe:1900:4545:3:200:f8ff:fe21:67cf]',
+                '[fe80:0:0:0:200:f8ff:fe21:67cf]']),
+              (['foobar', 'fizzbuzz'], ['foobar', 'fizzbuzz']),
+              (['192.168.1.1',
+                '3ffe:1900:4545:3:200:f8ff:fe21:67cf',
+                'hello, world!'],
+               ['192.168.1.1',
+                '[3ffe:1900:4545:3:200:f8ff:fe21:67cf]',
+                'hello, world!']))
+    @ddt.unpack
+    def test_sanitize_mon_host(self, hosts_in, hosts_out):
+        conn = rbd.RBDConnector(None)
+        self.assertEqual(hosts_out, conn._sanitize_mon_hosts(hosts_in))
 
     @mock.patch('os_brick.initiator.connectors.rbd.tempfile.mkstemp')
     def test_create_ceph_conf(self, mock_mkstemp):
