@@ -18,6 +18,7 @@ import tempfile
 
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
+from oslo_utils import netutils
 
 from os_brick.i18n import _, _LE
 from os_brick import exception
@@ -60,16 +61,24 @@ class RBDConnector(base.BaseLinuxConnector):
         # TODO(e0ne): Implement this for local volume.
         return []
 
+    def _sanitize_mon_hosts(self, hosts):
+        def _sanitize_host(host):
+            if netutils.is_valid_ipv6(host):
+                host = '[%s]' % host
+            return host
+        return list(map(_sanitize_host, hosts))
+
     def _create_ceph_conf(self, monitor_ips, monitor_ports,
                           cluster_name, user):
+        monitors = ["%s:%s" % (ip, port) for ip, port in
+                    zip(self._sanitize_mon_hosts(monitor_ips), monitor_ports)]
+        mon_hosts = "mon_host = %s" % (','.join(monitors))
+
+        client_section = "[client.%s]" % user
+        keyring = ("keyring = /etc/ceph/%s.client.%s.keyring" %
+                   (cluster_name, user))
         try:
             fd, ceph_conf_path = tempfile.mkstemp()
-            monitors = ["%s:%s" % (ip, port) for ip, port
-                        in zip(monitor_ips, monitor_ports)]
-            mon_hosts = "mon_host = %s" % (','.join(monitors))
-            client_section = "[client.%s]" % user
-            keyring = ("keyring = /etc/ceph/%s.client.%s.keyring" %
-                       (cluster_name, user))
             with os.fdopen(fd, 'w') as conf_file:
                 conf_file.writelines([mon_hosts, "\n",
                                       client_section, "\n", keyring])
