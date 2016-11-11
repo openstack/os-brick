@@ -18,6 +18,7 @@ import tempfile
 
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
+from oslo_utils import fileutils
 from oslo_utils import netutils
 
 from os_brick.i18n import _, _LE
@@ -78,7 +79,7 @@ class RBDConnector(base.BaseLinuxConnector):
         keyring = ("keyring = /etc/ceph/%s.client.%s.keyring" %
                    (cluster_name, user))
         try:
-            fd, ceph_conf_path = tempfile.mkstemp()
+            fd, ceph_conf_path = tempfile.mkstemp(prefix="brickrbd_")
             with os.fdopen(fd, 'w') as conf_file:
                 conf_file.writelines([mon_hosts, "\n",
                                       client_section, "\n", keyring])
@@ -100,14 +101,14 @@ class RBDConnector(base.BaseLinuxConnector):
 
         conf = self._create_ceph_conf(monitor_ips, monitor_ports,
                                       str(cluster_name), user)
-        rbd_client = linuxrbd.RBDClient(user, pool, conffile=conf,
-                                        rbd_cluster_name=str(cluster_name))
-        rbd_volume = linuxrbd.RBDVolume(rbd_client, volume)
-        rbd_handle = linuxrbd.RBDVolumeIOWrapper(
-            linuxrbd.RBDImageMetadata(rbd_volume, pool, user, conf))
-
-        if os.path.exists(conf):
-            os.remove(conf)
+        try:
+            rbd_client = linuxrbd.RBDClient(user, pool, conffile=conf,
+                                            rbd_cluster_name=str(cluster_name))
+            rbd_volume = linuxrbd.RBDVolume(rbd_client, volume)
+            rbd_handle = linuxrbd.RBDVolumeIOWrapper(
+                linuxrbd.RBDImageMetadata(rbd_volume, pool, user, conf))
+        finally:
+            fileutils.delete_if_exists(conf)
 
         return rbd_handle
 
