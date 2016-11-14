@@ -13,9 +13,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import array
 from castellan.tests.unit.key_manager import fake
-import codecs
 import mock
 
 from os_brick import encryptors
@@ -35,8 +33,6 @@ class VolumeEncryptorTestCase(base.TestCase):
                 ":volume-fake_uuid-lun-1",
             },
         }
-        _hex = codecs.getdecoder("hex_codec")('0' * 32)[0]
-        self.encryption_key = array.array('B', _hex).tolist()
         self.root_helper = None
         self.keymgr = fake.fake_api()
         self.encryptor = self._create()
