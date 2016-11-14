@@ -138,7 +138,12 @@ def trace(f):
 
         all_args = inspect.getcallargs(f, *args, **kwargs)
         logger.debug('==> %(func)s: call %(all_args)r',
-                     {'func': func_name, 'all_args': all_args})
+                     {'func': func_name,
+                      # NOTE(mriedem): We have to stringify the dict first
+                      # and don't use mask_dict_password because it results in
+                      # an infinite recursion failure.
+                      'all_args': strutils.mask_password(
+                          six.text_type(all_args))})
 
         start_time = time.time() * 1000
         try:
