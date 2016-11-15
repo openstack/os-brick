@@ -33,16 +33,14 @@ def fake__get_key(context):
     return symmetric_key
 
 
-@mock.patch('os_brick.executor.encodeutils.safe_decode',
-            lambda x, errors=None: x)
 class CryptsetupEncryptorTestCase(test_base.VolumeEncryptorTestCase):
+
     @mock.patch('os.path.exists', return_value=False)
-    def _create(self, mock_exists, root_helper,
-                connection_info, keymgr, execute):
-        return cryptsetup.CryptsetupEncryptor(root_helper=root_helper,
-                                              connection_info=connection_info,
-                                              keymgr=keymgr,
-                                              execute=execute)
+    def _create(self, mock_exists):
+        return cryptsetup.CryptsetupEncryptor(
+            root_helper=self.root_helper,
+            connection_info=self.connection_info,
+            keymgr=self.keymgr)
 
     def setUp(self):
         super(CryptsetupEncryptorTestCase, self).setUp()
@@ -52,10 +50,11 @@ class CryptsetupEncryptorTestCase(test_base.VolumeEncryptorTestCase):
 
         self.symlink_path = self.dev_path
 
-    def test__open_volume(self):
+    @mock.patch('os_brick.executor.Executor._execute')
+    def test__open_volume(self, mock_execute):
         self.encryptor._open_volume("passphrase")
 
-        self.assert_exec_has_calls([
+        mock_execute.assert_has_calls([
             mock.call('cryptsetup', 'create', '--key-file=-', self.dev_name,
                       self.dev_path, process_input='passphrase',
                       run_as_root=True,
@@ -63,13 +62,14 @@ class CryptsetupEncryptorTestCase(test_base.VolumeEncryptorTestCase):
                       check_exit_code=True),
         ])
 
-    def test_attach_volume(self):
+    @mock.patch('os_brick.executor.Executor._execute')
+    def test_attach_volume(self, mock_execute):
         self.encryptor._get_key = mock.MagicMock()
         self.encryptor._get_key.return_value = fake__get_key(None)
 
         self.encryptor.attach_volume(None)
 
-        self.assert_exec_has_calls([
+        mock_execute.assert_has_calls([
             mock.call('cryptsetup', 'create', '--key-file=-', self.dev_name,
                       self.dev_path, process_input='0' * 32,
                       root_helper=self.root_helper,
@@ -80,19 +80,21 @@ class CryptsetupEncryptorTestCase(test_base.VolumeEncryptorTestCase):
                       run_as_root=True, check_exit_code=True),
         ])
 
-    def test__close_volume(self):
+    @mock.patch('os_brick.executor.Executor._execute')
+    def test__close_volume(self, mock_execute):
         self.encryptor.detach_volume()
 
-        self.assert_exec_has_calls([
+        mock_execute.assert_has_calls([
             mock.call('cryptsetup', 'remove', self.dev_name,
                       root_helper=self.root_helper,
                       run_as_root=True, check_exit_code=True),
         ])
 
-    def test_detach_volume(self):
+    @mock.patch('os_brick.executor.Executor._execute')
+    def test_detach_volume(self, mock_execute):
         self.encryptor.detach_volume()
 
-        self.assert_exec_has_calls([
+        mock_execute.assert_has_calls([
             mock.call('cryptsetup', 'remove', self.dev_name,
                       root_helper=self.root_helper,
                       run_as_root=True, check_exit_code=True),
@@ -111,26 +113,27 @@ class CryptsetupEncryptorTestCase(test_base.VolumeEncryptorTestCase):
                                 keymgr=fake.fake_api())
         self.assertIn(type, six.text_type(exc))
 
+    @mock.patch('os_brick.executor.Executor._execute')
     @mock.patch('os.path.exists', return_value=True)
-    def test_init_volume_encryption_with_old_name(self,
-                                                  mock_exists):
+    def test_init_volume_encryption_with_old_name(self, mock_exists,
+                                                  mock_execute):
         # If an old name crypt device exists, dev_path should be the old name.
         old_dev_name = self.dev_path.split('/')[-1]
         encryptor = cryptsetup.CryptsetupEncryptor(
             root_helper=self.root_helper,
             connection_info=self.connection_info,
-            keymgr=fake.fake_api(),
-            execute=self.mock_execute)
+            keymgr=self.keymgr)
         self.assertFalse(encryptor.dev_name.startswith('crypt-'))
         self.assertEqual(old_dev_name, encryptor.dev_name)
         self.assertEqual(self.dev_path, encryptor.dev_path)
         self.assertEqual(self.symlink_path, encryptor.symlink_path)
         mock_exists.assert_called_once_with('/dev/mapper/%s' % old_dev_name)
-        self.mock_execute.assert_called_once_with(
+        mock_execute.assert_called_once_with(
             'cryptsetup', 'status', old_dev_name, run_as_root=True)
 
+    @mock.patch('os_brick.executor.Executor._execute')
     @mock.patch('os.path.exists', side_effect=[False, True])
-    def test_init_volume_encryption_with_wwn(self, mock_exists):
+    def test_init_volume_encryption_with_wwn(self, mock_exists, mock_execute):
         # If an wwn name crypt device exists, dev_path should be based on wwn.
         old_dev_name = self.dev_path.split('/')[-1]
         wwn = 'fake_wwn'
@@ -140,7 +143,7 @@ class CryptsetupEncryptorTestCase(test_base.VolumeEncryptorTestCase):
             root_helper=self.root_helper,
             connection_info=connection_info,
             keymgr=fake.fake_api(),
-            execute=self.mock_execute)
+            execute=mock_execute)
         self.assertFalse(encryptor.dev_name.startswith('crypt-'))
         self.assertEqual(wwn, encryptor.dev_name)
         self.assertEqual(self.dev_path, encryptor.dev_path)
@@ -148,5 +151,5 @@ class CryptsetupEncryptorTestCase(test_base.VolumeEncryptorTestCase):
         mock_exists.assert_has_calls([
             mock.call('/dev/mapper/%s' % old_dev_name),
             mock.call('/dev/mapper/%s' % wwn)])
-        self.mock_execute.assert_called_once_with(
+        mock_execute.assert_called_once_with(
             'cryptsetup', 'status', wwn, run_as_root=True)

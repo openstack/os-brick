@@ -21,34 +21,32 @@ from os_brick.tests.encryptors import test_cryptsetup
 from oslo_concurrency import processutils as putils
 
 
-@mock.patch('os_brick.executor.encodeutils.safe_decode',
-            lambda x, errors=None: x)
 class LuksEncryptorTestCase(test_cryptsetup.CryptsetupEncryptorTestCase):
-    def _create(self, root_helper, connection_info, keymgr, execute):
-        return luks.LuksEncryptor(root_helper=root_helper,
-                                  connection_info=connection_info,
-                                  keymgr=keymgr,
-                                  execute=execute)
+    def _create(self):
+        return luks.LuksEncryptor(root_helper=self.root_helper,
+                                  connection_info=self.connection_info,
+                                  keymgr=self.keymgr)
 
-    def test_is_luks(self):
-        luks.is_luks(self.root_helper, self.dev_path)
+    @mock.patch('os_brick.executor.Executor._execute')
+    def test_is_luks(self, mock_execute):
+        luks.is_luks(self.root_helper, self.dev_path, execute=mock_execute)
 
-        self.assert_exec_has_calls([
+        mock_execute.assert_has_calls([
             mock.call('cryptsetup', 'isLuks', '--verbose', self.dev_path,
                       run_as_root=True, root_helper=self.root_helper,
                       check_exit_code=True),
         ], any_order=False)
 
+    @mock.patch('os_brick.executor.Executor._execute')
     @mock.patch('os_brick.encryptors.luks.LOG')
-    def test_is_luks_with_error(self, mock_log):
+    def test_is_luks_with_error(self, mock_log, mock_execute):
         error_msg = "Device %s is not a valid LUKS device." % self.dev_path
-        self.mock_execute.side_effect = \
-            putils.ProcessExecutionError(exit_code=1,
-                                         stderr=error_msg)
+        mock_execute.side_effect = putils.ProcessExecutionError(
+            exit_code=1, stderr=error_msg)
 
-        luks.is_luks(self.root_helper, self.dev_path)
+        luks.is_luks(self.root_helper, self.dev_path, execute=mock_execute)
 
-        self.assert_exec_has_calls([
+        mock_execute.assert_has_calls([
             mock.call('cryptsetup', 'isLuks', '--verbose', self.dev_path,
                       run_as_root=True, root_helper=self.root_helper,
                       check_exit_code=True),
@@ -56,19 +54,11 @@ class LuksEncryptorTestCase(test_cryptsetup.CryptsetupEncryptorTestCase):
 
         self.assertEqual(1, mock_log.warning.call_count)  # warning logged
 
-    def test_is_luks_with_execute(self):
-        mock_execute = mock.Mock()
-        luks.is_luks(self.root_helper, self.dev_path, execute=mock_execute)
-        self.assertListEqual(
-            [mock.call('cryptsetup', 'isLuks', '--verbose', self.dev_path,
-                       run_as_root=True, root_helper=self.root_helper,
-                       check_exit_code=True)],
-            mock_execute.call_args_list)
-
-    def test__format_volume(self):
+    @mock.patch('os_brick.executor.Executor._execute')
+    def test__format_volume(self, mock_execute):
         self.encryptor._format_volume("passphrase")
 
-        self.assert_exec_has_calls([
+        mock_execute.assert_has_calls([
             mock.call('cryptsetup', '--batch-mode', 'luksFormat',
                       '--key-file=-', self.dev_path,
                       process_input='passphrase',
@@ -76,24 +66,26 @@ class LuksEncryptorTestCase(test_cryptsetup.CryptsetupEncryptorTestCase):
                       run_as_root=True, check_exit_code=True, attempts=3),
         ])
 
-    def test__open_volume(self):
+    @mock.patch('os_brick.executor.Executor._execute')
+    def test__open_volume(self, mock_execute):
         self.encryptor._open_volume("passphrase")
 
-        self.assert_exec_has_calls([
+        mock_execute.assert_has_calls([
             mock.call('cryptsetup', 'luksOpen', '--key-file=-', self.dev_path,
                       self.dev_name, process_input='passphrase',
                       root_helper=self.root_helper,
                       run_as_root=True, check_exit_code=True),
         ])
 
-    def test_attach_volume(self):
+    @mock.patch('os_brick.executor.Executor._execute')
+    def test_attach_volume(self, mock_execute):
         self.encryptor._get_key = mock.MagicMock()
         self.encryptor._get_key.return_value = (
             test_cryptsetup.fake__get_key(None))
 
         self.encryptor.attach_volume(None)
 
-        self.assert_exec_has_calls([
+        mock_execute.assert_has_calls([
             mock.call('cryptsetup', 'luksOpen', '--key-file=-', self.dev_path,
                       self.dev_name, process_input='0' * 32,
                       root_helper=self.root_helper,
@@ -104,12 +96,13 @@ class LuksEncryptorTestCase(test_cryptsetup.CryptsetupEncryptorTestCase):
                       run_as_root=True, check_exit_code=True),
         ])
 
-    def test_attach_volume_not_formatted(self):
+    @mock.patch('os_brick.executor.Executor._execute')
+    def test_attach_volume_not_formatted(self, mock_execute):
         self.encryptor._get_key = mock.MagicMock()
         self.encryptor._get_key.return_value = (
             test_cryptsetup.fake__get_key(None))
 
-        self.mock_execute.side_effect = [
+        mock_execute.side_effect = [
             putils.ProcessExecutionError(exit_code=1),  # luksOpen
             putils.ProcessExecutionError(exit_code=1),  # isLuks
             mock.DEFAULT,  # luksFormat
@@ -119,7 +112,7 @@ class LuksEncryptorTestCase(test_cryptsetup.CryptsetupEncryptorTestCase):
 
         self.encryptor.attach_volume(None)
 
-        self.assert_exec_has_calls([
+        mock_execute.assert_has_calls([
             mock.call('cryptsetup', 'luksOpen', '--key-file=-', self.dev_path,
                       self.dev_name, process_input='0' * 32,
                       root_helper=self.root_helper,
@@ -141,12 +134,13 @@ class LuksEncryptorTestCase(test_cryptsetup.CryptsetupEncryptorTestCase):
                       run_as_root=True, check_exit_code=True),
         ], any_order=False)
 
-    def test_attach_volume_fail(self):
+    @mock.patch('os_brick.executor.Executor._execute')
+    def test_attach_volume_fail(self, mock_execute):
         self.encryptor._get_key = mock.MagicMock()
         self.encryptor._get_key.return_value = (
             test_cryptsetup.fake__get_key(None))
 
-        self.mock_execute.side_effect = [
+        mock_execute.side_effect = [
             putils.ProcessExecutionError(exit_code=1),  # luksOpen
             mock.DEFAULT,  # isLuks
         ]
@@ -154,7 +148,7 @@ class LuksEncryptorTestCase(test_cryptsetup.CryptsetupEncryptorTestCase):
         self.assertRaises(putils.ProcessExecutionError,
                           self.encryptor.attach_volume, None)
 
-        self.assert_exec_has_calls([
+        mock_execute.assert_has_calls([
             mock.call('cryptsetup', 'luksOpen', '--key-file=-', self.dev_path,
                       self.dev_name, process_input='0' * 32,
                       root_helper=self.root_helper,
@@ -164,19 +158,21 @@ class LuksEncryptorTestCase(test_cryptsetup.CryptsetupEncryptorTestCase):
                       run_as_root=True, check_exit_code=True),
         ], any_order=False)
 
-    def test__close_volume(self):
+    @mock.patch('os_brick.executor.Executor._execute')
+    def test__close_volume(self, mock_execute):
         self.encryptor.detach_volume()
 
-        self.assert_exec_has_calls([
+        mock_execute.assert_has_calls([
             mock.call('cryptsetup', 'luksClose', self.dev_name,
                       root_helper=self.root_helper,
                       attempts=3, run_as_root=True, check_exit_code=True),
         ])
 
-    def test_detach_volume(self):
+    @mock.patch('os_brick.executor.Executor._execute')
+    def test_detach_volume(self, mock_execute):
         self.encryptor.detach_volume()
 
-        self.assert_exec_has_calls([
+        mock_execute.assert_has_calls([
             mock.call('cryptsetup', 'luksClose', self.dev_name,
                       root_helper=self.root_helper,
                       attempts=3, run_as_root=True, check_exit_code=True),
