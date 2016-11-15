@@ -18,11 +18,10 @@ from os_brick.tests.encryptors import test_base
 
 
 class NoOpEncryptorTestCase(test_base.VolumeEncryptorTestCase):
-    def _create(self, root_helper, connection_info, keymgr, execute):
-        return nop.NoOpEncryptor(root_helper=root_helper,
-                                 connection_info=connection_info,
-                                 keymgr=keymgr,
-                                 execute=execute)
+    def _create(self):
+        return nop.NoOpEncryptor(root_helper=self.root_helper,
+                                 connection_info=self.connection_info,
+                                 keymgr=self.keymgr)
 
     def test_attach_volume(self):
         self.encryptor.attach_volume(None)

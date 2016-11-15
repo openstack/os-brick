@@ -23,12 +23,11 @@ from os_brick.tests import base
 
 
 class VolumeEncryptorTestCase(base.TestCase):
-    def _create(self, root_helper, connection_info, keymgr, execute):
+    def _create(self):
         pass
 
     def setUp(self):
         super(VolumeEncryptorTestCase, self).setUp()
-        self.cmds = []
         self.connection_info = {
             "data": {
                 "device_path": "/dev/disk/by-path/"
@@ -36,16 +35,14 @@ class VolumeEncryptorTestCase(base.TestCase):
                 ":volume-fake_uuid-lun-1",
             },
         }
-        patcher = mock.patch("os_brick.privileged.rootwrap.execute")
-        self.mock_execute = patcher.start()
-        self.addCleanup(patcher.stop)
         _hex = codecs.getdecoder("hex_codec")('0' * 32)[0]
         self.encryption_key = array.array('B', _hex).tolist()
         self.root_helper = None
-        self.encryptor = self._create(root_helper=self.root_helper,
-                                      connection_info=self.connection_info,
-                                      keymgr=fake.fake_api(),
-                                      execute=self.mock_execute)
+        self.keymgr = fake.fake_api()
+        self.encryptor = self._create()
+
+
+class BaseEncryptorTestCase(VolumeEncryptorTestCase):
 
     def assert_exec_has_calls(self, expected_calls, any_order=False):
         """Check that the root exec mock has calls, excluding child calls."""
@@ -57,15 +54,13 @@ class VolumeEncryptorTestCase(base.TestCase):
                                  self.mock_execute.call_args_list)
 
     def test_get_encryptors(self):
-        root_helper = None
 
         encryption = {'control_location': 'front-end',
                       'provider': 'LuksEncryptor'}
         encryptor = encryptors.get_volume_encryptor(
-            root_helper=root_helper,
+            root_helper=self.root_helper,
             connection_info=self.connection_info,
-            keymgr=fake.fake_api(),
-            execute=self.mock_execute,
+            keymgr=self.keymgr,
             **encryption)
 
         self.assertIsInstance(encryptor,
@@ -75,10 +70,9 @@ class VolumeEncryptorTestCase(base.TestCase):
         encryption = {'control_location': 'front-end',
                       'provider': 'CryptsetupEncryptor'}
         encryptor = encryptors.get_volume_encryptor(
-            root_helper=root_helper,
+            root_helper=self.root_helper,
             connection_info=self.connection_info,
-            keymgr=fake.fake_api(),
-            execute=self.mock_execute,
+            keymgr=self.keymgr,
             **encryption)
 
         self.assertIsInstance(encryptor,
@@ -89,25 +83,23 @@ class VolumeEncryptorTestCase(base.TestCase):
         encryption = {'control_location': 'front-end',
                       'provider': 'NoOpEncryptor'}
         encryptor = encryptors.get_volume_encryptor(
-            root_helper=root_helper,
+            root_helper=self.root_helper,
             connection_info=self.connection_info,
-            keymgr=fake.fake_api(),
-            execute=self.mock_execute,
+            keymgr=self.keymgr,
             **encryption)
 
         self.assertIsInstance(encryptor,
                               encryptors.nop.NoOpEncryptor,
                               "encryptor is not an instance of NoOpEncryptor")
 
-    def test_get_error_encryptos(self):
+    def test_get_error_encryptors(self):
         encryption = {'control_location': 'front-end',
                       'provider': 'ErrorEncryptor'}
         self.assertRaises(ValueError,
                           encryptors.get_volume_encryptor,
-                          root_helper=None,
+                          root_helper=self.root_helper,
                           connection_info=self.connection_info,
-                          keymgr=fake.fake_api(),
-                          execute=self.mock_execute,
+                          keymgr=self.keymgr,
                           **encryption)
 
     @mock.patch('os_brick.encryptors.LOG')
@@ -117,10 +109,9 @@ class VolumeEncryptorTestCase(base.TestCase):
         provider = 'TestEncryptor'
         try:
             encryptors.get_volume_encryptor(
-                root_helper=None,
+                root_helper=self.root_helper,
                 connection_info=self.connection_info,
-                keymgr=fake.fake_api(),
-                execute=self.mock_execute,
+                keymgr=self.keymgr,
                 **encryption)
         except Exception as e:
             log.error.assert_called_once_with("Error instantiating "
