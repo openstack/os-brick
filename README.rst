@@ -29,8 +29,10 @@ Python 2.7 and Python 3.4. A recent tox is required, as is a recent virtualenv
 If "tox -e py34" fails with the error "db type could not be determined", remove
 the .testrepository/ directory and then run "tox -e py34".
 
-For any other imformation, refer to the parent project, Cinder:
-  https://github.com/openstack/cinder
+For any other information, refer to the developer documents:
+  http://docs.openstack.org/developer/os-brick/index.html
+OR refer to the parent project, Cinder:
+  http://docs.openstack.org/developer/cinder/
 
 * License: Apache License, Version 2.0
 * Source: http://git.openstack.org/cgit/openstack/os-brick
