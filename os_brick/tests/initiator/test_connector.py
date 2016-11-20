@@ -182,14 +182,15 @@ class ConnectorTestCase(test_base.TestCase):
         obj = connector.InitiatorConnector.factory('iscsi', None)
         self.assertEqual("ISCSIConnector", obj.__class__.__name__)
 
-        obj = connector.InitiatorConnector.factory('fibre_channel', None)
+        obj = connector.InitiatorConnector.factory('fibre_channel', None,
+                                                   arch='x86_64')
         self.assertEqual("FibreChannelConnector", obj.__class__.__name__)
 
         obj = connector.InitiatorConnector.factory('fibre_channel', None,
                                                    arch='s390x')
         self.assertEqual("FibreChannelConnectorS390X", obj.__class__.__name__)
 
-        obj = connector.InitiatorConnector.factory('aoe', None)
+        obj = connector.InitiatorConnector.factory('aoe', None, arch='x86_64')
         self.assertEqual("AoEConnector", obj.__class__.__name__)
 
         obj = connector.InitiatorConnector.factory(
@@ -197,11 +198,13 @@ class ConnectorTestCase(test_base.TestCase):
         self.assertEqual("RemoteFsConnector", obj.__class__.__name__)
 
         obj = connector.InitiatorConnector.factory(
-            'glusterfs', None, glusterfs_mount_point_base='/mnt/test')
+            'glusterfs', None, glusterfs_mount_point_base='/mnt/test',
+            arch='x86_64')
         self.assertEqual("RemoteFsConnector", obj.__class__.__name__)
 
         obj = connector.InitiatorConnector.factory(
-            'scality', None, scality_mount_point_base='/mnt/test')
+            'scality', None, scality_mount_point_base='/mnt/test',
+            arch='x86_64')
         self.assertEqual("RemoteFsConnector", obj.__class__.__name__)
 
         obj = connector.InitiatorConnector.factory('local', None)
@@ -210,17 +213,21 @@ class ConnectorTestCase(test_base.TestCase):
         obj = connector.InitiatorConnector.factory('gpfs', None)
         self.assertEqual("GPFSConnector", obj.__class__.__name__)
 
-        obj = connector.InitiatorConnector.factory('huaweisdshypervisor', None)
+        obj = connector.InitiatorConnector.factory(
+            'huaweisdshypervisor', None, arch='x86_64')
         self.assertEqual("HuaweiStorHyperConnector", obj.__class__.__name__)
 
-        obj = connector.InitiatorConnector.factory("scaleio", None)
+        obj = connector.InitiatorConnector.factory(
+            "scaleio", None, arch='x86_64')
         self.assertEqual("ScaleIOConnector", obj.__class__.__name__)
 
         obj = connector.InitiatorConnector.factory(
-            'quobyte', None, quobyte_mount_point_base='/mnt/test')
+            'quobyte', None, quobyte_mount_point_base='/mnt/test',
+            arch='x86_64')
         self.assertEqual("RemoteFsConnector", obj.__class__.__name__)
 
-        obj = connector.InitiatorConnector.factory("disco", None)
+        obj = connector.InitiatorConnector.factory(
+            "disco", None, arch='x86_64')
         self.assertEqual("DISCOConnector", obj.__class__.__name__)
 
         self.assertRaises(exception.InvalidConnectorProtocol,
