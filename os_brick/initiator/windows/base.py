@@ -29,9 +29,14 @@ class BaseWindowsConnector(initiator_connector.InitiatorConnector):
     platform = initiator.PLATFORM_ALL
     os_type = initiator.OS_TYPE_WINDOWS
 
+    DEFAULT_DEVICE_SCAN_INTERVAL = 2
+
     def __init__(self, root_helper=None, *args, **kwargs):
         super(BaseWindowsConnector, self).__init__(root_helper,
                                                    *args, **kwargs)
+        self.device_scan_interval = kwargs.pop(
+            'device_scan_interval', self.DEFAULT_DEVICE_SCAN_INTERVAL)
+
         self._diskutils = utilsfactory.get_diskutils()
 
     @staticmethod

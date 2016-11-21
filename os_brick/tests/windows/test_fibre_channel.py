@@ -25,7 +25,8 @@ from os_brick.tests.windows import test_base
 class WindowsFCConnectorTestCase(test_base.WindowsConnectorTestBase):
     def setUp(self):
         super(WindowsFCConnectorTestCase, self).setUp()
-        self._connector = fc.WindowsFCConnector()
+        self._connector = fc.WindowsFCConnector(
+            device_scan_interval=mock.sentinel.rescan_interval)
 
         self._diskutils = self._connector._diskutils
         self._fc_utils = self._connector._fc_utils
@@ -92,10 +93,12 @@ class WindowsFCConnectorTestCase(test_base.WindowsConnectorTestBase):
                                    dict(device_name=mock.sentinel.disk_path)],
                'expected_paths': [mock.sentinel.disk_path]})
     @ddt.unpack
+    @mock.patch('time.sleep')
     @mock.patch.object(fc.WindowsFCConnector, '_get_fc_volume_mappings')
     @mock.patch.object(fc.WindowsFCConnector, '_check_device_paths')
     def test_get_volume_paths(self, mock_check_device_paths,
                               mock_get_fc_mappings,
+                              mock_sleep,
                               volume_mappings, expected_paths):
         mock_get_fc_mappings.return_value = volume_mappings
 
@@ -113,6 +116,9 @@ class WindowsFCConnectorTestCase(test_base.WindowsConnectorTestBase):
             [mock.call(mock.sentinel.conn_props)] * expected_try_count)
         mock_check_device_paths.assert_called_once_with(
             set(vol_paths))
+        mock_sleep.assert_has_calls(
+            [mock.call(mock.sentinel.rescan_interval)] *
+            (expected_try_count - 1))
 
     @mock.patch.object(fc.WindowsFCConnector, '_get_fc_hba_mappings')
     def test_get_fc_volume_mappings(self, mock_get_fc_hba_mappings):
