@@ -47,7 +47,7 @@ class DISCOConnector(base.BaseLinuxConnector):
             device_scan_attempts=device_scan_attempts,
             *args, **kwargs
         )
-        LOG.info(_LI("Init DISCO connector"))
+        LOG.debug("Init DISCO connector")
 
         self.server_port = None
         self.server_ip = None
