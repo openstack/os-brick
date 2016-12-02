@@ -25,9 +25,7 @@ from oslo_log import log as logging
 
 from os_brick import exception
 from os_brick import executor
-from os_brick.i18n import _LE
-from os_brick.i18n import _LI
-from os_brick.i18n import _LW
+from os_brick.i18n import _LE, _LI, _LW
 from os_brick.privileged import rootwrap as priv_rootwrap
 from os_brick import utils
 
