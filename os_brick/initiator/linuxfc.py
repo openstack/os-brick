@@ -139,8 +139,6 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
         # Note(walter-boring) modern Linux kernels contain the FC HBA's in /sys
         # and are obtainable via the systool app
         hbas = self.get_fc_hbas()
-        if not hbas:
-            return []
 
         hbas_info = []
         for hba in hbas:
@@ -162,11 +160,10 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
         hbas = self.get_fc_hbas()
 
         wwpns = []
-        if hbas:
-            for hba in hbas:
-                if hba['port_state'] == 'Online':
-                    wwpn = hba['port_name'].replace('0x', '')
-                    wwpns.append(wwpn)
+        for hba in hbas:
+            if hba['port_state'] == 'Online':
+                wwpn = hba['port_name'].replace('0x', '')
+                wwpns.append(wwpn)
 
         return wwpns
 
@@ -176,15 +173,12 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
         # Note(walter-boring) modern Linux kernels contain the FC HBA's in /sys
         # and are obtainable via the systool app
         hbas = self.get_fc_hbas()
-        if not hbas:
-            return []
 
         wwnns = []
-        if hbas:
-            for hba in hbas:
-                if hba['port_state'] == 'Online':
-                    wwnn = hba['node_name'].replace('0x', '')
-                    wwnns.append(wwnn)
+        for hba in hbas:
+            if hba['port_state'] == 'Online':
+                wwnn = hba['node_name'].replace('0x', '')
+                wwnns.append(wwnn)
 
         return wwnns
 
@@ -194,8 +188,6 @@ class LinuxFibreChannelS390X(LinuxFibreChannel):
         """Get Fibre Channel WWNs and device paths from the system, if any."""
 
         hbas = self.get_fc_hbas()
-        if not hbas:
-            return []
 
         hbas_info = []
         for hba in hbas:
