@@ -14,8 +14,7 @@
 #    under the License.
 
 from os_brick.encryptors import cryptsetup
-from os_brick.i18n import _LI
-from os_brick.i18n import _LW
+from os_brick.i18n import _LI, _LW
 from os_brick.privileged import rootwrap as priv_rootwrap
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
