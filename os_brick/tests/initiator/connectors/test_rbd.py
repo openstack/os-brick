@@ -124,7 +124,7 @@ class RBDConnectorTestCase(test_connector.ConnectorTestCase):
             conf_path = rbd_connector._create_ceph_conf(
                 self.hosts, self.ports, self.clustername, self.user)
         self.assertEqual(conf_path, tmpfile)
-        mock_mkstemp.assert_called_once_with()
+        mock_mkstemp.assert_called_once_with(prefix='brickrbd_')
 
     @mock.patch.object(priv_rootwrap, 'execute', return_value=None)
     def test_connect_local_volume(self, mock_execute):
