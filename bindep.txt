@@ -5,3 +5,7 @@
 multipath-utils [platform:dpkg rpm]
 sg3-utils [platform:dpkg]
 sg3_utils [platform:rpm]
+libxml2-devel [platform:rpm]
+libxml2-dev [platform:dpkg]
+libxslt-devel [platform:rpm]
+libxslt1-dev [platform:dpkg]
