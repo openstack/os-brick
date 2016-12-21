@@ -37,9 +37,11 @@ class FibreChannelConnectorS390XTestCase(test_connector.ConnectorTestCase):
         devices = self.connector._get_host_devices(possible_devs, lun)
         mock_configure_scsi_device.assert_called_with(3, 5,
                                                       "0x0002000000000000")
-        self.assertEqual(1, len(devices))
+        self.assertEqual(2, len(devices))
         device_path = "/dev/disk/by-path/ccw-3-zfcp-5:0x0002000000000000"
         self.assertEqual(devices[0], device_path)
+        device_path = "/dev/disk/by-path/ccw-3-fc-5-lun-2"
+        self.assertEqual(devices[1], device_path)
 
     def test_get_lun_string(self):
         lun = 1
