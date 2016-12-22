@@ -99,7 +99,7 @@ class AoEConnectorTestCase(test_connector.ConnectorTestCase):
             volume_info = self.connector.connect_volume(
                 self.connection_properties)
 
-        self.assertDictMatch(volume_info, expected_info)
+        self.assertDictEqual(volume_info, expected_info)
 
     @mock.patch.object(os.path, 'exists', return_value=False)
     def test_connect_volume_could_not_discover_path(self, exists_mock):
