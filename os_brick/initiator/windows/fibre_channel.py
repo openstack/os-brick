@@ -14,6 +14,7 @@
 #    under the License.
 
 import collections
+import time
 
 from os_win import utilsfactory
 from oslo_log import log as logging
@@ -94,6 +95,8 @@ class WindowsFCConnector(win_conn_base.BaseWindowsConnector):
 
             if disk_paths:
                 break
+
+            time.sleep(self.device_scan_interval)
 
         self._check_device_paths(disk_paths)
         return list(disk_paths)

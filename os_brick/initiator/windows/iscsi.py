@@ -101,7 +101,12 @@ class WindowsISCSIConnector(win_conn_base.BaseWindowsConnector,
                     auth_password=connection_properties.get('auth_password'),
                     mpio_enabled=self.use_multipath,
                     initiator_name=initiator_name,
-                    rescan_attempts=self.device_scan_attempts)
+                    ensure_lun_available=False)
+                self._iscsi_utils.ensure_lun_available(
+                    target_iqn=target_iqn,
+                    target_lun=target_lun,
+                    rescan_attempts=self.device_scan_attempts,
+                    retry_interval=self.device_scan_interval)
 
                 if not volume_connected:
                     (device_number,
