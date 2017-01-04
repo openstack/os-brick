@@ -2,6 +2,7 @@
 # install and tests
 # see http://docs.openstack.org/infra/bindep/ for additional information.
 
+curl
 multipath-utils [platform:dpkg rpm]
 sg3-utils [platform:dpkg]
 sg3_utils [platform:rpm]

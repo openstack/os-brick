@@ -16,7 +16,7 @@ localfile="$VIRTUAL_ENV/log/upper-constraints.txt"
 if [[ "$CONSTRAINTS_FILE" != http* ]]; then
     CONSTRAINTS_FILE="file://$CONSTRAINTS_FILE"
 fi
-# NOTE(tonyb): need to add curl to bindep.txt if the project supports bindep
+
 curl "$CONSTRAINTS_FILE" --insecure --progress-bar --output "$localfile"
 
 pip install -c"$localfile" openstack-requirements
