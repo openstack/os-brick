@@ -40,44 +40,42 @@ class VolumeEncryptorTestCase(base.TestCase):
 
 class BaseEncryptorTestCase(VolumeEncryptorTestCase):
 
+    def _test_get_encryptor(self, provider, expected_provider_class):
+        encryption = {'control_location': 'front-end',
+                      'provider': provider}
+        encryptor = encryptors.get_volume_encryptor(
+            root_helper=self.root_helper,
+            connection_info=self.connection_info,
+            keymgr=self.keymgr,
+            **encryption)
+        self.assertIsInstance(encryptor, expected_provider_class)
+
     def test_get_encryptors(self):
 
-        encryption = {'control_location': 'front-end',
-                      'provider': 'LuksEncryptor'}
-        encryptor = encryptors.get_volume_encryptor(
-            root_helper=self.root_helper,
-            connection_info=self.connection_info,
-            keymgr=self.keymgr,
-            **encryption)
+        self._test_get_encryptor('luks',
+                                 encryptors.luks.LuksEncryptor)
+        # TODO(lyarwood): Remove the following in Pike
+        self._test_get_encryptor('LuksEncryptor',
+                                 encryptors.luks.LuksEncryptor)
+        self._test_get_encryptor('os_brick.encryptors.luks.LuksEncryptor',
+                                 encryptors.luks.LuksEncryptor)
 
-        self.assertIsInstance(encryptor,
-                              encryptors.luks.LuksEncryptor,
-                              "encryptor is not an instance of LuksEncryptor")
+        self._test_get_encryptor('plain',
+                                 encryptors.cryptsetup.CryptsetupEncryptor)
+        # TODO(lyarwood): Remove the following in Pike
+        self._test_get_encryptor('CryptsetupEncryptor',
+                                 encryptors.cryptsetup.CryptsetupEncryptor)
+        self._test_get_encryptor(
+            'os_brick.encryptors.cryptsetup.CryptsetupEncryptor',
+            encryptors.cryptsetup.CryptsetupEncryptor)
 
-        encryption = {'control_location': 'front-end',
-                      'provider': 'CryptsetupEncryptor'}
-        encryptor = encryptors.get_volume_encryptor(
-            root_helper=self.root_helper,
-            connection_info=self.connection_info,
-            keymgr=self.keymgr,
-            **encryption)
-
-        self.assertIsInstance(encryptor,
-                              encryptors.cryptsetup.CryptsetupEncryptor,
-                              "encryptor is not an instance of"
-                              "CryptsetupEncryptor")
-
-        encryption = {'control_location': 'front-end',
-                      'provider': 'NoOpEncryptor'}
-        encryptor = encryptors.get_volume_encryptor(
-            root_helper=self.root_helper,
-            connection_info=self.connection_info,
-            keymgr=self.keymgr,
-            **encryption)
-
-        self.assertIsInstance(encryptor,
-                              encryptors.nop.NoOpEncryptor,
-                              "encryptor is not an instance of NoOpEncryptor")
+        self._test_get_encryptor(None,
+                                 encryptors.nop.NoOpEncryptor)
+        # TODO(lyarwood): Remove the following in Pike
+        self._test_get_encryptor('NoOpEncryptor',
+                                 encryptors.nop.NoOpEncryptor)
+        self._test_get_encryptor('os_brick.encryptors.nop.NoOpEncryptor',
+                                 encryptors.nop.NoOpEncryptor)
 
     def test_get_error_encryptors(self):
         encryption = {'control_location': 'front-end',
@@ -106,3 +104,55 @@ class BaseEncryptorTestCase(VolumeEncryptorTestCase):
                                               "%(exception)s",
                                               {'provider': provider,
                                                'exception': e})
+
+    @mock.patch('os_brick.encryptors.LOG')
+    def test_get_missing_out_of_tree_encryptor_log(self, log):
+        provider = 'TestEncryptor'
+        encryption = {'control_location': 'front-end',
+                      'provider': provider}
+        try:
+            encryptors.get_volume_encryptor(
+                root_helper=self.root_helper,
+                connection_info=self.connection_info,
+                keymgr=self.keymgr,
+                **encryption)
+        except Exception as e:
+            log.error.assert_called_once_with("Error instantiating "
+                                              "%(provider)s: "
+                                              "%(exception)s",
+                                              {'provider': provider,
+                                               'exception': e})
+            log.warning.assert_called_once_with("Use of the out of tree "
+                                                "encryptor class %(provider)s "
+                                                "will be blocked with the "
+                                                "Pike release of os-brick.",
+                                                {'provider': provider})
+
+    @mock.patch('os_brick.encryptors.LOG')
+    def test_get_direct_encryptor_log(self, log):
+        encryption = {'control_location': 'front-end',
+                      'provider': 'LuksEncryptor'}
+        encryptors.get_volume_encryptor(
+            root_helper=self.root_helper,
+            connection_info=self.connection_info,
+            keymgr=self.keymgr,
+            **encryption)
+
+        encryption = {'control_location': 'front-end',
+                      'provider': 'os_brick.encryptors.luks.LuksEncryptor'}
+        encryptors.get_volume_encryptor(
+            root_helper=self.root_helper,
+            connection_info=self.connection_info,
+            keymgr=self.keymgr,
+            **encryption)
+
+        log.warning.assert_has_calls([
+            mock.call("Use of the in tree encryptor class %(provider)s by "
+                      "directly referencing the implementation class will be "
+                      "blocked in the Pike release of os-brick.",
+                      {'provider': 'LuksEncryptor'}),
+            mock.call("Use of the in tree encryptor class %(provider)s by "
+                      "directly referencing the implementation class will be "
+                      "blocked in the Pike release of os-brick.",
+                      {'provider':
+                       'os_brick.encryptors.luks.LuksEncryptor'})])
