@@ -433,7 +433,7 @@ class LinuxSCSI(executor.Executor):
 
     def _format_lun_id(self, lun_id):
         if lun_id < 256:
-                return lun_id
+            return lun_id
         else:
             return ("0x%04x%04x00000000" %
                     (lun_id & 0xffff, lun_id >> 16 & 0xffff))
