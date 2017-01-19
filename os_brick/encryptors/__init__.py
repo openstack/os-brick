@@ -22,6 +22,23 @@ from oslo_utils import strutils
 
 LOG = logging.getLogger(__name__)
 
+LUKS = "luks"
+PLAIN = "plain"
+
+FORMAT_TO_FRONTEND_ENCRYPTOR_MAP = {
+    LUKS: 'os_brick.encryptors.luks.LuksEncryptor',
+    PLAIN: 'os_brick.encryptors.cryptsetup.CryptsetupEncryptor'
+}
+
+LEGACY_PROVIDER_CLASS_TO_FORMAT_MAP = {
+    "os_brick.encryptors.luks.LuksEncryptor": LUKS,
+    "os_brick.encryptors.cryptsetup.CryptsetupEncryptor": PLAIN,
+    "os_brick.encryptors.nop.NoopEncryptor": None,
+    "LuksEncryptor": LUKS,
+    "CryptsetupEncryptor": PLAIN,
+    "NoOpEncryptor": None,
+}
+
 
 def get_volume_encryptor(root_helper,
                          connection_info,
@@ -43,14 +60,24 @@ def get_volume_encryptor(root_helper,
     if location and location.lower() == 'front-end':  # case insensitive
         provider = kwargs.get('provider')
 
-        if provider == 'LuksEncryptor' or 'LuksEncryptor' in provider:
-            provider = 'os_brick.encryptors.luks.LuksEncryptor'
-        elif (provider == 'CryptsetupEncryptor' or
-              'CryptsetupEncryptor' in provider):
-            provider = \
-                'os_brick.encryptors.cryptsetup.CryptsetupEncryptor'
-        elif (provider == 'NoOpEncryptor' or 'NoOpEncryptor' in provider):
-            provider = 'os_brick.encryptors.nop.NoOpEncryptor'
+        # TODO(lyarwood): Remove the following in Pike and raise an
+        # ERROR if provider is not a key in SUPPORTED_ENCRYPTION_PROVIDERS.
+        # Until then continue to allow both the class name and path to be used.
+        if provider in LEGACY_PROVIDER_CLASS_TO_FORMAT_MAP:
+            LOG.warning(_LW("Use of the in tree encryptor class %(provider)s"
+                            " by directly referencing the implementation class"
+                            " will be blocked in the Pike release of"
+                            " os-brick."), {'provider': provider})
+            provider = LEGACY_PROVIDER_CLASS_TO_FORMAT_MAP[provider]
+
+        if provider in FORMAT_TO_FRONTEND_ENCRYPTOR_MAP:
+            provider = FORMAT_TO_FRONTEND_ENCRYPTOR_MAP[provider]
+        elif provider is None:
+            provider = "os_brick.encryptors.nop.NoOpEncryptor"
+        else:
+            LOG.warning(_LW("Use of the out of tree encryptor class "
+                            "%(provider)s will be blocked with the Pike "
+                            "release of os-brick."), {'provider': provider})
 
         try:
             encryptor = importutils.import_object(
