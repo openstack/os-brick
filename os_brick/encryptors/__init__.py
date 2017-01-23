@@ -31,6 +31,9 @@ FORMAT_TO_FRONTEND_ENCRYPTOR_MAP = {
 }
 
 LEGACY_PROVIDER_CLASS_TO_FORMAT_MAP = {
+    "nova.volume.encryptors.luks.LuksEncryptor": LUKS,
+    "nova.volume.encryptors.cryptsetup.CryptsetupEncryptor": PLAIN,
+    "nova.volume.encryptors.nop.NoopEncryptor": None,
     "os_brick.encryptors.luks.LuksEncryptor": LUKS,
     "os_brick.encryptors.cryptsetup.CryptsetupEncryptor": PLAIN,
     "os_brick.encryptors.nop.NoopEncryptor": None,
