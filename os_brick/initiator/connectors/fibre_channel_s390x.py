@@ -49,14 +49,16 @@ class FibreChannelConnectorS390X(fibre_channel.FibreChannelConnector):
     def _get_host_devices(self, possible_devs, lun):
         host_devices = []
         for pci_num, target_wwn in possible_devs:
-            target_lun = self._get_lun_string(lun)
             host_device = self._get_device_file_path(
                 pci_num,
                 target_wwn,
-                target_lun)
+                lun)
+            # NOTE(arne_r)
+            # LUN driver path is the same on all distros, so no need to have
+            # multiple calls here
             self._linuxfc.configure_scsi_device(pci_num, target_wwn,
-                                                target_lun)
-            host_devices.append(host_device)
+                                                self._get_lun_string(lun))
+            host_devices.extend(host_device)
         return host_devices
 
     def _get_lun_string(self, lun):
@@ -67,11 +69,17 @@ class FibreChannelConnectorS390X(fibre_channel.FibreChannelConnector):
             target_lun = "0x%08x00000000" % lun
         return target_lun
 
-    def _get_device_file_path(self, pci_num, target_wwn, target_lun):
-        host_device = "/dev/disk/by-path/ccw-%s-zfcp-%s:%s" % (
-            pci_num,
-            target_wwn,
-            target_lun)
+    def _get_device_file_path(self, pci_num, target_wwn, lun):
+        # NOTE(arne_r)
+        # Need to add two possible ways to resolve device paths,
+        # depending on OS. Since it gets passed to '_get_possible_volume_paths'
+        # having a mismatch is not a problem
+        host_device = [
+            "/dev/disk/by-path/ccw-%s-zfcp-%s:%s" % (
+                pci_num, target_wwn, self._get_lun_string(lun)),
+            "/dev/disk/by-path/ccw-%s-fc-%s-lun-%s" % (
+                pci_num, target_wwn, lun),
+        ]
         return host_device
 
     def _remove_devices(self, connection_properties, devices):
