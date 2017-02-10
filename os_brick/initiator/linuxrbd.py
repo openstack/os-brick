@@ -110,6 +110,11 @@ class RBDVolume(object):
             client.disconnect()
             raise
 
+        # Ceph provides rbd.so to cinder, but we can't
+        # get volume name from rbd.Image, so, we record
+        # name here, so other modules can easily get
+        # volume name.
+        self.name = name
         self.client = client
 
     def close(self):
