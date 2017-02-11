@@ -18,6 +18,7 @@ import textwrap
 import time
 
 import mock
+from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
 
 from os_brick import exception
@@ -94,6 +95,24 @@ class LinuxSCSITestCase(base.TestCase):
         self.linuxscsi.flush_multipath_device('/dev/dm-9')
         expected_commands = [('multipath -f /dev/dm-9')]
         self.assertEqual(expected_commands, self.cmds)
+
+    @mock.patch('retrying.time.sleep', mock.Mock())
+    def test_flush_multipath_device_in_use(self):
+        side_effect = (
+            putils.ProcessExecutionError(
+                stdout='Feb 09 14:38:02 | mpatha: map in use\n'
+                       'Feb 09 14:38:02 | failed to remove multipath map '
+                       'mpatha\n',
+                exit_code=1),
+            ('', '')
+        )
+
+        with mock.patch.object(self.linuxscsi, '_execute') as execute_mock:
+            execute_mock.side_effect = side_effect
+            self.linuxscsi.flush_multipath_device('mpatha')
+            execute_mock.assert_has_calls(
+                [mock.call('multipath', '-f', 'mpatha', run_as_root=True,
+                           root_helper=mock.ANY)] * 2)
 
     def test_flush_multipath_devices(self):
         self.linuxscsi.flush_multipath_devices()
