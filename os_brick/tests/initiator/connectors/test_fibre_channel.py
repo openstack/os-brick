@@ -193,6 +193,7 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
                           self.connector.connect_volume,
                           connection_info['data'])
 
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'find_multipath_device_path')
     def _test_connect_volume_multipath(self, get_device_info_mock,
                                        get_scsi_wwn_mock,
                                        get_fc_hbas_info_mock,
@@ -202,7 +203,8 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
                                        wait_for_rw_mock,
                                        find_mp_dev_mock,
                                        access_mode,
-                                       should_wait_for_rw):
+                                       should_wait_for_rw,
+                                       find_mp_device_path_mock):
         self.connector.use_multipath = True
         get_fc_hbas_mock.side_effect = self.fake_get_fc_hbas
         get_fc_hbas_info_mock.side_effect = self.fake_get_fc_hbas_info
@@ -227,7 +229,10 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
         vol = {'id': 1, 'name': name}
         initiator_wwn = ['1234567890123456', '1234567890123457']
 
-        find_mp_dev_mock.return_value = '/dev/disk/by-id/dm-uuid-mpath-' + wwn
+        find_mp_device_path_mock.return_value = '/dev/mapper/mpatha'
+        find_mp_dev_mock.return_value = {"device": "dm-3",
+                                         "id": wwn,
+                                         "name": "mpatha"}
 
         connection_info = self.fibrechan_connection(vol, location,
                                                     initiator_wwn)
@@ -240,7 +245,7 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
         self.connector.disconnect_volume(connection_info['data'],
                                          devices['devices'][0])
         expected_commands = [
-            'multipath -f ' + wwn,
+            'multipath -f ' + find_mp_device_path_mock.return_value,
             'blockdev --flushbufs /dev/sdb',
             'tee -a /sys/block/sdb/device/delete',
             'blockdev --flushbufs /dev/sdc',
