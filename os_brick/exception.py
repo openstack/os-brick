@@ -159,3 +159,11 @@ class VolumeEncryptionNotSupported(Invalid):
 # NOTE(mriedem): This extends ValueError to maintain backward compatibility.
 class InvalidConnectorProtocol(ValueError):
     pass
+
+
+class HostChannelsTargetsNotFound(BrickException):
+    message = _('Unable to find host, channel, and target for %(iqns)s.')
+
+    def __init__(self, message=None, iqns=None, found=None):
+        super(HostChannelsTargetsNotFound, self).__init__(message, iqns=iqns)
+        self.found = found

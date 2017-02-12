@@ -13,6 +13,7 @@
 #    under the License.
 
 
+import collections
 import copy
 import glob
 import os
@@ -165,7 +166,8 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
             LOG.info(_LI("Multipath discovery for iSCSI enabled"))
             # Multipath installed, discovering other targets if available
             try:
-                ips_iqns = self._discover_iscsi_portals(connection_properties)
+                ips_iqns_luns = self._discover_iscsi_portals(
+                    connection_properties)
             except Exception:
                 if 'target_portals' in connection_properties:
                     raise exception.TargetPortalsNotFound(
@@ -186,13 +188,14 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                 # latter, so try the ip,iqn combinations to find the targets
                 # which constitutes the multipath device.
                 main_iqn = connection_properties['target_iqn']
-                all_portals = set([ip for ip, iqn in ips_iqns])
-                match_portals = set([ip for ip, iqn in ips_iqns
-                                     if iqn == main_iqn])
+                all_portals = {(ip, lun) for ip, iqn, lun in ips_iqns_luns}
+                match_portals = {(ip, lun) for ip, iqn, lun in ips_iqns_luns
+                                 if iqn == main_iqn}
                 if len(all_portals) == len(match_portals):
-                    ips_iqns = zip(all_portals, [main_iqn] * len(all_portals))
+                    ips_iqns_luns = [(p[0], main_iqn, p[1])
+                                     for p in all_portals]
 
-            for ip, iqn in ips_iqns:
+            for ip, iqn, lun in ips_iqns_luns:
                 props = copy.deepcopy(connection_properties)
                 props['target_portal'] = ip
                 props['target_iqn'] = iqn
@@ -201,7 +204,8 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                         connected_to_portal = True
 
             if use_rescan:
-                self._rescan_iscsi()
+                self._rescan_iscsi(ips_iqns_luns)
+
             host_devices = self._get_device_path(connection_properties)
         else:
             LOG.info(_LI("Multipath discovery for iSCSI not enabled."))
@@ -283,12 +287,19 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
     def _get_transport(self):
         return self.transport
 
+    @staticmethod
+    def _get_luns(con_props, iqns=None):
+        luns = con_props.get('target_luns')
+        num_luns = len(con_props['target_iqns']) if iqns is None else len(iqns)
+        return luns or [con_props.get('target_lun')] * num_luns
+
     def _discover_iscsi_portals(self, connection_properties):
         if all([key in connection_properties for key in ('target_portals',
                                                          'target_iqns')]):
             # Use targets specified by connection_properties
-            return zip(connection_properties['target_portals'],
-                       connection_properties['target_iqns'])
+            return list(zip(connection_properties['target_portals'],
+                        connection_properties['target_iqns'],
+                        self._get_luns(connection_properties)))
 
         out = None
         iscsi_transport = ('iser' if self._get_transport() == 'iser'
@@ -332,7 +343,9 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                  '-p', connection_properties['target_portal']],
                 check_exit_code=[0, 255])[0] or ""
 
-        return self._get_target_portals_from_iscsiadm_output(out)
+        ips, iqns = self._get_target_portals_from_iscsiadm_output(out)
+        luns = self._get_luns(connection_properties, iqns)
+        return list(zip(ips, iqns, luns))
 
     def _run_iscsiadm_update_discoverydb(self, connection_properties,
                                          iscsi_transport='default'):
@@ -607,16 +620,18 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                                   **kwargs)
 
     def _get_target_portals_from_iscsiadm_output(self, output):
-        # return both portals and iqns
+        # return both portals and iqns as 2 lists
         #
         # as we are parsing a command line utility, allow for the
         # possibility that additional debug data is spewed in the
         # stream, and only grab actual ip / iqn lines.
-        targets = []
+        ips = []
+        iqns = []
         for data in [line.split() for line in output.splitlines()]:
             if len(data) == 2 and data[1].startswith('iqn.'):
-                targets.append(data)
-        return targets
+                ips.append(data[0])
+                iqns.append(data[1])
+        return ips, iqns
 
     def _disconnect_volume_multipath_iscsi(self, connection_properties,
                                            multipath_name):
@@ -637,14 +652,14 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         # Do a discovery to find all targets.
         # Targets for multiple paths for the same multipath device
         # may not be the same.
-        all_ips_iqns = self._discover_iscsi_portals(connection_properties)
+        all_ips_iqns_luns = self._discover_iscsi_portals(connection_properties)
 
         # As discovery result may contain other targets' iqns, extract targets
         # to be disconnected whose block devices are already deleted here.
         ips_iqns = []
         entries = [device.lstrip('ip-').split('-lun-')[0]
                    for device in self._get_iscsi_devices()]
-        for ip, iqn in all_ips_iqns:
+        for ip, iqn, lun in all_ips_iqns_luns:
             ip_iqn = "%s-iscsi-%s" % (ip.split(",")[0], iqn)
             if ip_iqn not in entries:
                 ips_iqns.append([ip, iqn])
@@ -837,8 +852,71 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                    'out': out, 'err': err})
         return (out, err)
 
-    def _rescan_iscsi(self):
-        self._run_iscsiadm_bare(('-m', 'node', '--rescan'),
-                                check_exit_code=[0, 1, 21, 255])
-        self._run_iscsiadm_bare(('-m', 'session', '--rescan'),
-                                check_exit_code=[0, 1, 21, 255])
+    @utils.retry(exception.HostChannelsTargetsNotFound, backoff_rate=1.5)
+    def _get_hosts_channels_targets_luns(self, ips_iqns_luns):
+        iqns = {iqn: lun for ip, iqn, lun in ips_iqns_luns}
+        LOG.debug('Getting hosts, channels, and targets for iqns: %s',
+                  iqns.keys())
+
+        # Get all targets indexed by scsi host path
+        targets_paths = glob.glob('/sys/class/scsi_host/host*/device/session*/'
+                                  'target*')
+        targets = collections.defaultdict(list)
+        for path in targets_paths:
+            target = path.split('/target')[1]
+            host = path.split('/device/')[0]
+            targets[host].append(target.split(':'))
+
+        # Get all scsi targets
+        sessions = glob.glob('/sys/class/scsi_host/host*/device/session*/'
+                             'iscsi_session/session*/targetname')
+
+        result = []
+        for session in sessions:
+            # Read iSCSI target name
+            try:
+                with open(session, 'r') as f:
+                    targetname = f.read().strip('\n')
+            except Exception:
+                continue
+
+            # If we are interested in it we store its target information
+            if targetname in iqns:
+                host = session.split('/device/')[0]
+                for __, channel, target_id in targets[host]:
+                    result.append((host, channel, target_id, iqns[targetname]))
+                # Stop as soon as we have the info of all our iqns, even if
+                # there are more sessions to check
+                del iqns[targetname]
+                if not iqns:
+                    break
+
+        # In some cases the login and udev triggers may not have been fast
+        # enough to create all sysfs entries, so we want to retry.
+        else:
+            raise exception.HostChannelsTargetsNotFound(iqns=iqns.keys(),
+                                                        found=result)
+        return result
+
+    def _rescan_iscsi(self, ips_iqns_luns):
+        try:
+            hctls = self._get_hosts_channels_targets_luns(ips_iqns_luns)
+        except exception.HostChannelsTargetsNotFound as e:
+            if not e.found:
+                LOG.error(_LE('iSCSI scan failed: %s'), e)
+                return
+
+            hctls = e.found
+            LOG.warning(_LW('iSCSI scan: %(error)s\nScanning %(hosts)s'),
+                        {'error': e, 'hosts': [h for h, c, t, l in hctls]})
+
+        for host_path, channel, target_id, target_lun in hctls:
+            LOG.debug('Scanning host %(host)s c: %(channel)s, '
+                      't: %(target)s, l: %(lun)s)',
+                      {'host': host_path, 'channel': channel,
+                       'target': target_id, 'lun': target_lun})
+            self._linuxscsi.echo_scsi_command(
+                "%s/scan" % host_path,
+                "%(c)s %(t)s %(l)s" % {'c': channel,
+                                       't': target_id,
+                                       'l': target_lun})
