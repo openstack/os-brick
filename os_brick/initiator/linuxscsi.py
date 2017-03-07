@@ -150,12 +150,16 @@ class LinuxSCSI(executor.Executor):
             LOG.warning(_LW("Failed to flush IO buffers prior to removing "
                             "device: %(code)s"), {'code': exc.exit_code})
 
+    @utils.retry(exceptions=putils.ProcessExecutionError)
     def flush_multipath_device(self, device):
         try:
             LOG.debug("Flush multipath device %s", device)
             self._execute('multipath', '-f', device, run_as_root=True,
                           root_helper=self._root_helper)
         except putils.ProcessExecutionError as exc:
+            if exc.exit_code == 1 and 'map in use' in exc.stdout:
+                LOG.debug('Multipath is in use, cannot be flushed yet.')
+                raise
             LOG.warning(_LW("multipath call failed exit %(code)s"),
                         {'code': exc.exit_code})
 
