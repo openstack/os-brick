@@ -134,7 +134,7 @@ class LinuxSCSI(executor.Executor):
         LOG.debug("remove multipath device %s", device)
         mpath_dev = self.find_multipath_device(device)
         if mpath_dev:
-            self.flush_multipath_device(mpath_dev['id'])
+            self.flush_multipath_device(mpath_dev['name'])
             devices = mpath_dev['devices']
             LOG.debug("multipath LUNs to remove %s", devices)
             for device in devices:

@@ -260,20 +260,18 @@ class FibreChannelConnector(base.BaseLinuxConnector):
         """
 
         devices = []
-        volume_paths = self.get_volume_paths(connection_properties)
         wwn = None
+        volume_paths = self.get_volume_paths(connection_properties)
+        mpath_path = None
         for path in volume_paths:
             real_path = self._linuxscsi.get_name_from_path(path)
-            if not wwn:
+            if self.use_multipath and not mpath_path:
                 wwn = self._linuxscsi.get_scsi_wwn(path)
+                mpath_path = self._linuxscsi.find_multipath_device_path(wwn)
+                if mpath_path:
+                    self._linuxscsi.flush_multipath_device(mpath_path)
             device_info = self._linuxscsi.get_device_info(real_path)
             devices.append(device_info)
-
-        if self.use_multipath:
-            # There is a bug in multipath where the flushing
-            # doesn't remove the entry if friendly names are on
-            # we'll try anyway.
-            self._linuxscsi.flush_multipath_device(wwn)
 
         LOG.debug("devices to remove = %s", devices)
         self._remove_devices(connection_properties, devices)

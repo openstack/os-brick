@@ -161,6 +161,7 @@ class LinuxSCSITestCase(base.TestCase):
 
             info = {"device": "dm-3",
                     "id": "350002ac20398383d",
+                    "name": "mpatha",
                     "devices": devices}
             return info
 
@@ -168,7 +169,7 @@ class LinuxSCSITestCase(base.TestCase):
 
         self.linuxscsi.remove_multipath_device('/dev/dm-3')
         expected_commands = [
-            ('multipath -f 350002ac20398383d'),
+            ('multipath -f mpatha'),
             ('blockdev --flushbufs /dev/sde'),
             ('tee -a /sys/block/sde/device/delete'),
             ('blockdev --flushbufs /dev/sdf'),
