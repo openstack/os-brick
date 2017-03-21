@@ -23,7 +23,6 @@ import re
 
 from os_brick import exception
 from os_brick import executor
-from os_brick.i18n import _LE, _LI
 from os_brick.privileged import rootwrap as priv_rootwrap
 from os_brick import utils
 from oslo_concurrency import processutils as putils
@@ -88,14 +87,14 @@ class LVM(executor.Executor):
             try:
                 self._create_vg(physical_volumes)
             except putils.ProcessExecutionError as err:
-                LOG.exception(_LE('Error creating Volume Group'))
-                LOG.error(_LE('Cmd     :%s'), err.cmd)
-                LOG.error(_LE('StdOut  :%s'), err.stdout)
-                LOG.error(_LE('StdErr  :%s'), err.stderr)
+                LOG.exception('Error creating Volume Group')
+                LOG.error('Cmd     :%s', err.cmd)
+                LOG.error('StdOut  :%s', err.stdout)
+                LOG.error('StdErr  :%s', err.stderr)
                 raise exception.VolumeGroupCreationFailed(vg_name=self.vg_name)
 
         if self._vg_exists() is False:
-            LOG.error(_LE('Unable to locate Volume Group %s'), vg_name)
+            LOG.error('Unable to locate Volume Group %s', vg_name)
             raise exception.VolumeGroupNotFound(vg_name=vg_name)
 
         # NOTE: we assume that the VG has been activated outside of Cinder
@@ -181,10 +180,10 @@ class LVM(executor.Executor):
                 free_space = pool_size - consumed_space
                 free_space = round(free_space, 2)
         except putils.ProcessExecutionError as err:
-            LOG.exception(_LE('Error querying thin pool about data_percent'))
-            LOG.error(_LE('Cmd     :%s'), err.cmd)
-            LOG.error(_LE('StdOut  :%s'), err.stdout)
-            LOG.error(_LE('StdErr  :%s'), err.stderr)
+            LOG.exception('Error querying thin pool about data_percent')
+            LOG.error('Cmd     :%s', err.cmd)
+            LOG.error('StdOut  :%s', err.stdout)
+            LOG.error('StdErr  :%s', err.stderr)
 
         return free_space
 
@@ -298,8 +297,8 @@ class LVM(executor.Executor):
             with excutils.save_and_reraise_exception(reraise=True) as ctx:
                 if "not found" in err.stderr or "Failed to find" in err.stderr:
                     ctx.reraise = False
-                    LOG.info(_LI("Logical Volume not found when querying "
-                                 "LVM info. (vg_name=%(vg)s, lv_name=%(lv)s"),
+                    LOG.info("Logical Volume not found when querying "
+                             "LVM info. (vg_name=%(vg)s, lv_name=%(lv)s",
                              {'vg': vg_name, 'lv': lv_name})
                     out = None
 
@@ -421,7 +420,7 @@ class LVM(executor.Executor):
         vg_list = self.get_all_volume_groups(self._root_helper, self.vg_name)
 
         if len(vg_list) != 1:
-            LOG.error(_LE('Unable to find VG: %s'), self.vg_name)
+            LOG.error('Unable to find VG: %s', self.vg_name)
             raise exception.VolumeGroupNotFound(vg_name=self.vg_name)
 
         self.vg_size = float(vg_list[0]['size'])
@@ -510,9 +509,9 @@ class LVM(executor.Executor):
         """
 
         if not LVM.supports_thin_provisioning(self._root_helper):
-            LOG.error(_LE('Requested to setup thin provisioning, '
-                          'however current LVM version does not '
-                          'support it.'))
+            LOG.error('Requested to setup thin provisioning, '
+                      'however current LVM version does not '
+                      'support it.')
             return None
 
         if name is None:
@@ -572,10 +571,10 @@ class LVM(executor.Executor):
                           root_helper=self._root_helper,
                           run_as_root=True)
         except putils.ProcessExecutionError as err:
-            LOG.exception(_LE('Error creating Volume'))
-            LOG.error(_LE('Cmd     :%s'), err.cmd)
-            LOG.error(_LE('StdOut  :%s'), err.stdout)
-            LOG.error(_LE('StdErr  :%s'), err.stderr)
+            LOG.exception('Error creating Volume')
+            LOG.error('Cmd     :%s', err.cmd)
+            LOG.error('StdOut  :%s', err.stdout)
+            LOG.error('StdErr  :%s', err.stderr)
             raise
 
     @utils.retry(putils.ProcessExecutionError)
@@ -589,7 +588,7 @@ class LVM(executor.Executor):
         """
         source_lvref = self.get_volume(source_lv_name)
         if source_lvref is None:
-            LOG.error(_LE("Trying to create snapshot by non-existent LV: %s"),
+            LOG.error("Trying to create snapshot by non-existent LV: %s",
                       source_lv_name)
             raise exception.VolumeDeviceNotFound(device=source_lv_name)
         cmd = LVM.LVM_CMD_PREFIX + ['lvcreate', '--name', name, '--snapshot',
@@ -603,10 +602,10 @@ class LVM(executor.Executor):
                           root_helper=self._root_helper,
                           run_as_root=True)
         except putils.ProcessExecutionError as err:
-            LOG.exception(_LE('Error creating snapshot'))
-            LOG.error(_LE('Cmd     :%s'), err.cmd)
-            LOG.error(_LE('StdOut  :%s'), err.stdout)
-            LOG.error(_LE('StdErr  :%s'), err.stderr)
+            LOG.exception('Error creating snapshot')
+            LOG.error('Cmd     :%s', err.cmd)
+            LOG.error('StdOut  :%s', err.stdout)
+            LOG.error('StdErr  :%s', err.stderr)
             raise
 
     def _mangle_lv_name(self, name):
@@ -639,10 +638,10 @@ class LVM(executor.Executor):
                           root_helper=self._root_helper,
                           run_as_root=True)
         except putils.ProcessExecutionError as err:
-            LOG.exception(_LE('Error deactivating LV'))
-            LOG.error(_LE('Cmd     :%s'), err.cmd)
-            LOG.error(_LE('StdOut  :%s'), err.stdout)
-            LOG.error(_LE('StdErr  :%s'), err.stderr)
+            LOG.exception('Error deactivating LV')
+            LOG.error('Cmd     :%s', err.cmd)
+            LOG.error('StdOut  :%s', err.stdout)
+            LOG.error('StdErr  :%s', err.stderr)
             raise
 
         # Wait until lv is deactivated to return in
@@ -696,10 +695,10 @@ class LVM(executor.Executor):
                           root_helper=self._root_helper,
                           run_as_root=True)
         except putils.ProcessExecutionError as err:
-            LOG.exception(_LE('Error activating LV'))
-            LOG.error(_LE('Cmd     :%s'), err.cmd)
-            LOG.error(_LE('StdOut  :%s'), err.stdout)
-            LOG.error(_LE('StdErr  :%s'), err.stderr)
+            LOG.exception('Error activating LV')
+            LOG.error('Cmd     :%s', err.cmd)
+            LOG.error('StdOut  :%s', err.stdout)
+            LOG.error('StdErr  :%s', err.stderr)
             raise
 
     @utils.retry(putils.ProcessExecutionError)
@@ -785,10 +784,10 @@ class LVM(executor.Executor):
             self._execute(*cmd, root_helper=self._root_helper,
                           run_as_root=True)
         except putils.ProcessExecutionError as err:
-            LOG.exception(_LE('Error extending Volume'))
-            LOG.error(_LE('Cmd     :%s'), err.cmd)
-            LOG.error(_LE('StdOut  :%s'), err.stdout)
-            LOG.error(_LE('StdErr  :%s'), err.stderr)
+            LOG.exception('Error extending Volume')
+            LOG.error('Cmd     :%s', err.cmd)
+            LOG.error('StdOut  :%s', err.stdout)
+            LOG.error('StdErr  :%s', err.stderr)
             raise
 
     def vg_mirror_free_space(self, mirror_count):
@@ -823,8 +822,8 @@ class LVM(executor.Executor):
                           root_helper=self._root_helper,
                           run_as_root=True)
         except putils.ProcessExecutionError as err:
-            LOG.exception(_LE('Error renaming logical volume'))
-            LOG.error(_LE('Cmd     :%s'), err.cmd)
-            LOG.error(_LE('StdOut  :%s'), err.stdout)
-            LOG.error(_LE('StdErr  :%s'), err.stderr)
+            LOG.exception('Error renaming logical volume')
+            LOG.error('Cmd     :%s', err.cmd)
+            LOG.error('StdOut  :%s', err.stdout)
+            LOG.error('StdErr  :%s', err.stderr)
             raise

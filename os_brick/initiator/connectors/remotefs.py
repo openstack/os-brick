@@ -14,7 +14,6 @@
 
 from oslo_log import log as logging
 
-from os_brick.i18n import _LW
 from os_brick import initiator
 from os_brick.initiator.connectors import base
 from os_brick.remotefs import remotefs
@@ -41,8 +40,8 @@ class RemoteFsConnector(base.BaseLinuxConnector):
                     kwargs.get(mount_type_lower + '_mount_point_base') or
                     mount_point_base)
         else:
-            LOG.warning(_LW("Connection details not present."
-                            " RemoteFsClient may not initialize properly."))
+            LOG.warning("Connection details not present."
+                        " RemoteFsClient may not initialize properly.")
 
         if mount_type_lower == 'scality':
             cls = remotefs.ScalityRemoteFsClient

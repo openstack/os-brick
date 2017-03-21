@@ -21,8 +21,8 @@ from oslo_concurrency import lockutils
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
 
-from os_brick.i18n import _, _LI, _LW
 from os_brick import exception
+from os_brick.i18n import _
 from os_brick import initiator
 from os_brick.initiator.connectors import base
 from os_brick import utils
@@ -80,8 +80,8 @@ class ScaleIOConnector(base.BaseLinuxConnector):
         return volume_paths
 
     def _find_volume_path(self):
-        LOG.info(_LI(
-            "Looking for volume %(volume_id)s, maximum tries: %(tries)s"),
+        LOG.info(
+            "Looking for volume %(volume_id)s, maximum tries: %(tries)s",
             {'volume_id': self.volume_id, 'tries': self.device_scan_attempts}
         )
 
@@ -91,7 +91,7 @@ class ScaleIOConnector(base.BaseLinuxConnector):
         disk_filename = self._wait_for_volume_path(by_id_path)
         full_disk_name = ("%(path)s/%(filename)s" %
                           {'path': by_id_path, 'filename': disk_filename})
-        LOG.info(_LI("Full disk name is %(full_path)s"),
+        LOG.info("Full disk name is %(full_path)s",
                  {'full_path': full_disk_name})
         return full_disk_name
 
@@ -113,8 +113,8 @@ class ScaleIOConnector(base.BaseLinuxConnector):
 
         disk_filename = None
         filenames = os.listdir(path)
-        LOG.info(_LI(
-            "Files found in %(path)s path: %(files)s "),
+        LOG.info(
+            "Files found in %(path)s path: %(files)s ",
             {'path': path, 'files': filenames}
         )
 
@@ -143,7 +143,7 @@ class ScaleIOConnector(base.BaseLinuxConnector):
             }
         )
 
-        LOG.info(_LI("ScaleIO get client id by ip request: %(request)s"),
+        LOG.info("ScaleIO get client id by ip request: %(request)s",
                  {'request': request})
 
         r = requests.get(
@@ -166,7 +166,7 @@ class ScaleIOConnector(base.BaseLinuxConnector):
             LOG.error(msg)
             raise exception.BrickException(message=msg)
 
-        LOG.info(_LI("ScaleIO sdc id is %(sdc_id)s."),
+        LOG.info("ScaleIO sdc id is %(sdc_id)s.",
                  {'sdc_id': sdc_id})
         return sdc_id
 
@@ -189,7 +189,7 @@ class ScaleIOConnector(base.BaseLinuxConnector):
         )
 
         LOG.info(
-            _LI("ScaleIO get volume id by name request: %(request)s"),
+            "ScaleIO get volume id by name request: %(request)s",
             {'request': request}
         )
 
@@ -217,15 +217,15 @@ class ScaleIOConnector(base.BaseLinuxConnector):
             LOG.error(msg)
             raise exception.BrickException(message=msg)
 
-        LOG.info(_LI("ScaleIO volume id is %(volume_id)s."),
+        LOG.info("ScaleIO volume id is %(volume_id)s.",
                  {'volume_id': volume_id})
         return volume_id
 
     def _check_response(self, response, request, is_get_request=True,
                         params=None):
         if response.status_code == 401 or response.status_code == 403:
-            LOG.info(_LI("Token is invalid, "
-                         "going to re-login to get a new one"))
+            LOG.info("Token is invalid, "
+                     "going to re-login to get a new one")
 
             login_request = (
                 "https://%(server_ip)s:%(server_port)s/api/login" %
@@ -306,15 +306,15 @@ class ScaleIOConnector(base.BaseLinuxConnector):
             }
         )
 
-        LOG.info(_LI("ScaleIO sdc query guid command: %(cmd)s"),
+        LOG.info("ScaleIO sdc query guid command: %(cmd)s",
                  {'cmd': self.GET_GUID_CMD})
 
         try:
             (out, err) = self._execute(*self.GET_GUID_CMD, run_as_root=True,
                                        root_helper=self._root_helper)
 
-            LOG.info(_LI("Map volume %(cmd)s: stdout=%(out)s "
-                         "stderr=%(err)s"),
+            LOG.info("Map volume %(cmd)s: stdout=%(out)s "
+                     "stderr=%(err)s",
                      {'cmd': self.GET_GUID_CMD, 'out': out, 'err': err})
 
         except putils.ProcessExecutionError as e:
@@ -323,7 +323,7 @@ class ScaleIOConnector(base.BaseLinuxConnector):
             raise exception.BrickException(message=msg)
 
         guid = out
-        LOG.info(_LI("Current sdc guid: %(guid)s"), {'guid': guid})
+        LOG.info("Current sdc guid: %(guid)s", {'guid': guid})
         params = {'guid': guid, 'allowMultipleMappings': 'TRUE'}
         self.volume_id = self.volume_id or self._get_volume_id()
 
@@ -335,7 +335,7 @@ class ScaleIOConnector(base.BaseLinuxConnector):
              'volume_id': self.volume_id}
         )
 
-        LOG.info(_LI("map volume request: %(request)s"), {'request': request})
+        LOG.info("map volume request: %(request)s", {'request': request})
         r = requests.post(
             request,
             data=json.dumps(params),
@@ -349,9 +349,9 @@ class ScaleIOConnector(base.BaseLinuxConnector):
             response = r.json()
             error_code = response['errorCode']
             if error_code == self.VOLUME_ALREADY_MAPPED_ERROR:
-                LOG.warning(_LW(
+                LOG.warning(
                     "Ignoring error mapping volume %(volume_name)s: "
-                    "volume already mapped."),
+                    "volume already mapped.",
                     {'volume_name': self.volume_name}
                 )
             else:
@@ -382,7 +382,7 @@ class ScaleIOConnector(base.BaseLinuxConnector):
                  'volume_id': self.volume_id}
             )
 
-            LOG.info(_LI("Set client limit request: %(request)s"),
+            LOG.info("Set client limit request: %(request)s",
                      {'request': request})
 
             r = requests.post(
@@ -395,7 +395,7 @@ class ScaleIOConnector(base.BaseLinuxConnector):
             r = self._check_response(r, request, False, params)
             if r.status_code != self.OK_STATUS_CODE:
                 response = r.json()
-                LOG.info(_LI("Set client limit response: %(response)s"),
+                LOG.info("Set client limit response: %(response)s",
                          {'response': response})
                 msg = (
                     _("Error setting client limits for volume "
@@ -421,9 +421,9 @@ class ScaleIOConnector(base.BaseLinuxConnector):
         """
         self.get_config(connection_properties)
         self.volume_id = self.volume_id or self._get_volume_id()
-        LOG.info(_LI(
+        LOG.info(
             "ScaleIO disconnect volume in ScaleIO brick volume driver."
-        ))
+        )
 
         LOG.debug(
             _("ScaleIO Volume name: %(volume_name)s, SDC IP: %(sdc_ip)s, "
@@ -432,14 +432,14 @@ class ScaleIOConnector(base.BaseLinuxConnector):
              'server_ip': self.server_ip}
         )
 
-        LOG.info(_LI("ScaleIO sdc query guid command: %(cmd)s"),
+        LOG.info("ScaleIO sdc query guid command: %(cmd)s",
                  {'cmd': self.GET_GUID_CMD})
 
         try:
             (out, err) = self._execute(*self.GET_GUID_CMD, run_as_root=True,
                                        root_helper=self._root_helper)
             LOG.info(
-                _LI("Unmap volume %(cmd)s: stdout=%(out)s stderr=%(err)s"),
+                "Unmap volume %(cmd)s: stdout=%(out)s stderr=%(err)s",
                 {'cmd': self.GET_GUID_CMD, 'out': out, 'err': err}
             )
 
@@ -449,7 +449,7 @@ class ScaleIOConnector(base.BaseLinuxConnector):
             raise exception.BrickException(message=msg)
 
         guid = out
-        LOG.info(_LI("Current sdc guid: %(guid)s"), {'guid': guid})
+        LOG.info("Current sdc guid: %(guid)s", {'guid': guid})
 
         params = {'guid': guid}
         headers = {'content-type': 'application/json'}
@@ -460,7 +460,7 @@ class ScaleIOConnector(base.BaseLinuxConnector):
              'volume_id': self.volume_id}
         )
 
-        LOG.info(_LI("Unmap volume request: %(request)s"),
+        LOG.info("Unmap volume request: %(request)s",
                  {'request': request})
         r = requests.post(
             request,
@@ -475,9 +475,9 @@ class ScaleIOConnector(base.BaseLinuxConnector):
             response = r.json()
             error_code = response['errorCode']
             if error_code == self.VOLUME_NOT_MAPPED_ERROR:
-                LOG.warning(_LW(
+                LOG.warning(
                     "Ignoring error unmapping volume %(volume_id)s: "
-                    "volume not mapped."), {'volume_id': self.volume_name}
+                    "volume not mapped.", {'volume_id': self.volume_name}
                 )
             else:
                 msg = (_("Error unmapping volume %(volume_id)s: %(err)s") %

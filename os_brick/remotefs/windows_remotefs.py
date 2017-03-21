@@ -23,7 +23,7 @@ from oslo_log import log as logging
 from os_win import utilsfactory
 
 from os_brick import exception
-from os_brick.i18n import _, _LI
+from os_brick.i18n import _
 from os_brick.remotefs import remotefs
 
 LOG = logging.getLogger(__name__)
@@ -77,7 +77,7 @@ class WindowsRemoteFsClient(remotefs.RemoteFsClient):
                           self._smbutils.is_local_share(share_norm_path))
 
         if use_local_path:
-            LOG.info(_LI("Skipping mounting local share %(share_path)s."),
+            LOG.info("Skipping mounting local share %(share_path)s.",
                      dict(share_path=share_norm_path))
         else:
             mount_options = " ".join(

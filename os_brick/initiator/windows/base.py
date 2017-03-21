@@ -17,8 +17,8 @@ from os_win import utilsfactory
 from oslo_log import log as logging
 
 from os_brick import exception
+from os_brick.i18n import _
 from os_brick import initiator
-from os_brick.i18n import _, _LE
 from os_brick.initiator import initiator_connector
 from os_brick import utils
 
@@ -45,10 +45,10 @@ class BaseWindowsConnector(initiator_connector.InitiatorConnector):
         mpio_enabled = hostutils.check_server_feature(
             hostutils.FEATURE_MPIO)
         if not mpio_enabled:
-            err_msg = _LE(
-                "Using multipath connections for iSCSI and FC disks "
-                "requires the Multipath IO Windows feature to be "
-                "enabled. MPIO must be configured to claim such devices.")
+            err_msg = _("Using multipath connections for iSCSI and FC disks "
+                        "requires the Multipath IO Windows feature to be "
+                        "enabled. MPIO must be configured to claim such "
+                        "devices.")
             LOG.error(err_msg)
             if enforce_multipath:
                 raise exception.BrickException(err_msg)
@@ -82,8 +82,8 @@ class BaseWindowsConnector(initiator_connector.InitiatorConnector):
                 dev.read(1)
         except IOError:
             LOG.exception(
-                _LE("Failed to access the device on the path "
-                    "%(path)s"), {"path": path})
+                "Failed to access the device on the path "
+                "%(path)s", {"path": path})
             return False
         return True
 

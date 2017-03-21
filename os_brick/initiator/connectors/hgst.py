@@ -18,8 +18,8 @@ import socket
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
 
-from os_brick.i18n import _, _LE
 from os_brick import exception
+from os_brick.i18n import _
 from os_brick import initiator
 from os_brick.initiator.connectors import base
 from os_brick import utils
@@ -48,8 +48,8 @@ class HGSTConnector(base.BaseLinuxConnector):
 
     def _log_cli_err(self, err):
         """Dumps the full command output to a logfile in error cases."""
-        LOG.error(_LE("CLI fail: '%(cmd)s' = %(code)s\nout: %(stdout)s\n"
-                      "err: %(stderr)s"),
+        LOG.error("CLI fail: '%(cmd)s' = %(code)s\nout: %(stdout)s\n"
+                  "err: %(stderr)s",
                   {'cmd': err.cmd, 'code': err.exit_code,
                    'stdout': err.stdout, 'stderr': err.stderr})
 

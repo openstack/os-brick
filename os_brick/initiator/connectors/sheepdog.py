@@ -14,8 +14,8 @@
 
 from oslo_log import log as logging
 
-from os_brick.i18n import _, _LE
 from os_brick import exception
+from os_brick.i18n import _
 from os_brick import initiator
 from os_brick.initiator.connectors import base
 from os_brick.initiator import linuxsheepdog
@@ -112,8 +112,8 @@ class SheepdogConnector(base.BaseLinuxConnector):
         try:
             sheepdog_handle.read(4096)
         except Exception as e:
-            LOG.error(_LE("Failed to access sheepdog device "
-                          "handle: %(error)s"),
+            LOG.error("Failed to access sheepdog device "
+                      "handle: %(error)s",
                       {"error": e})
             return False
         finally:

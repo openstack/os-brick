@@ -22,7 +22,6 @@ from oslo_log import log as logging
 from os_brick import exception
 from os_brick import initiator
 
-from os_brick.i18n import _LE, _LW
 from os_brick.initiator import host_driver
 from os_brick.initiator import initiator_connector
 from os_brick.initiator import linuxscsi
@@ -66,8 +65,8 @@ class BaseLinuxConnector(initiator_connector.InitiatorConnector):
             out, info = self._execute(*cmd, run_as_root=run_as_root,
                                       root_helper=self._root_helper)
         except putils.ProcessExecutionError as e:
-            LOG.error(_LE("Failed to access the device on the path "
-                          "%(path)s: %(error)s."),
+            LOG.error("Failed to access the device on the path "
+                      "%(path)s: %(error)s.",
                       {"path": path, "error": e.stderr})
             return False
         # If the info is none, the path does not exist.
@@ -124,6 +123,6 @@ class BaseLinuxConnector(initiator_connector.InitiatorConnector):
                 # initially and need additional time/rescans to get to RW.
                 self._linuxscsi.wait_for_rw(device_wwn, device_path)
             except exception.BlockDeviceReadOnly:
-                LOG.warning(_LW('Block device %s is still read-only. '
-                                'Continuing anyway.'), device_path)
+                LOG.warning('Block device %s is still read-only. '
+                            'Continuing anyway.', device_path)
         return device_path, multipath_id

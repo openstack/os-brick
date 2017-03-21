@@ -25,8 +25,8 @@ from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
 from oslo_utils import strutils
 
-from os_brick.i18n import _, _LE, _LI, _LW
 from os_brick import exception
+from os_brick.i18n import _
 from os_brick import initiator
 from os_brick.initiator.connectors import base
 from os_brick.initiator.connectors import base_iscsi
@@ -112,8 +112,8 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         iscsi_sessions = []
 
         if err:
-            LOG.warning(_LW("Couldn't find iscsi sessions because "
-                        "iscsiadm err: %s"),
+            LOG.warning("Couldn't find iscsi sessions because "
+                        "iscsiadm err: %s",
                         err)
         else:
             # parse the output from iscsiadm
@@ -163,7 +163,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         target_props = None
         connected_to_portal = False
         if self.use_multipath:
-            LOG.info(_LI("Multipath discovery for iSCSI enabled"))
+            LOG.info("Multipath discovery for iSCSI enabled")
             # Multipath installed, discovering other targets if available
             try:
                 ips_iqns_luns = self._discover_iscsi_portals(
@@ -208,7 +208,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
 
             host_devices = self._get_device_path(connection_properties)
         else:
-            LOG.info(_LI("Multipath discovery for iSCSI not enabled."))
+            LOG.info("Multipath discovery for iSCSI not enabled.")
             iscsi_sessions = []
             if not connect_to_portal:
                 iscsi_sessions = self._get_iscsi_sessions()
@@ -223,8 +223,8 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                         host_devices = self._get_device_path(props)
                         break
                     else:
-                        LOG.warning(_LW(
-                            'Failed to connect to iSCSI portal %(portal)s.'),
+                        LOG.warning(
+                            'Failed to connect to iSCSI portal %(portal)s.',
                             {'portal': props['target_portal']})
                 else:
                     # If we aren't trying to connect to the portal, we
@@ -279,8 +279,8 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                 if data[2] in self.supported_transports:
                     return transport_iface
 
-        LOG.warning(_LW("No useable transport found for iscsi iface %s. "
-                        "Falling back to default transport."),
+        LOG.warning("No useable transport found for iscsi iface %s. "
+                    "Falling back to default transport.",
                     transport_iface)
         return 'default'
 
@@ -323,8 +323,8 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                         connection_properties
                     )
                 else:
-                    LOG.error(_LE("Unable to find target portal: "
-                                  "%(target_portal)s."),
+                    LOG.error("Unable to find target portal: "
+                              "%(target_portal)s.",
                               {'target_portal': connection_properties[
                                   'target_portal']})
                     raise
@@ -373,15 +373,15 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         Try and update the local kernel's size information
         for an iSCSI volume.
         """
-        LOG.info(_LI("Extend volume for %s"), connection_properties)
+        LOG.info("Extend volume for %s", connection_properties)
 
         volume_paths = self.get_volume_paths(connection_properties)
-        LOG.info(_LI("Found paths for volume %s"), volume_paths)
+        LOG.info("Found paths for volume %s", volume_paths)
         if volume_paths:
             return self._linuxscsi.extend_volume(volume_paths)
         else:
-            LOG.warning(_LW("Couldn't find any volume paths on the host to "
-                            "extend volume for %(props)s"),
+            LOG.warning("Couldn't find any volume paths on the host to "
+                        "extend volume for %(props)s",
                         {'props': connection_properties})
             raise exception.VolumePathsNotFound()
 
@@ -425,8 +425,8 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
             if tries >= self.device_scan_attempts:
                 raise exception.VolumeDeviceNotFound(device=host_devices)
 
-            LOG.info(_LI("ISCSI volume not yet found at: %(host_devices)s. "
-                         "Will rescan & retry.  Try number: %(tries)s."),
+            LOG.info("ISCSI volume not yet found at: %(host_devices)s. "
+                     "Will rescan & retry.  Try number: %(tries)s.",
                      {'host_devices': host_devices, 'tries': tries})
 
             if self.use_multipath:
@@ -499,7 +499,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                     if multipath_device:
                         break
             if not host_device:
-                LOG.error(_LE("No accessible volume device: %(host_devices)s"),
+                LOG.error("No accessible volume device: %(host_devices)s",
                           {'host_devices': host_devices})
                 raise exception.VolumeDeviceNotFound(device=host_devices)
 
@@ -588,7 +588,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                 if l.startswith('InitiatorName='):
                     return l[l.index('=') + 1:].strip()
         except putils.ProcessExecutionError:
-            LOG.warning(_LW("Could not find the iSCSI Initiator File %s"),
+            LOG.warning("Could not find the iSCSI Initiator File %s",
                         file_path)
             return None
 
@@ -699,7 +699,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         #             target exists, and if we get 255 (Not Found), then
         #             we run --op new. This will also happen if another
         #             volume is using the same target.
-        LOG.info(_LI("Trying to connect to iSCSI portal %(portal)s"),
+        LOG.info("Trying to connect to iSCSI portal %(portal)s",
                  {"portal": connection_properties['target_portal']})
         try:
             self._run_iscsiadm(connection_properties, ())
@@ -748,9 +748,9 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                 # exit_code=15 means the session already exists, so it should
                 # be regarded as successful login.
                 if err.exit_code not in [15]:
-                    LOG.warning(_LW('Failed to login iSCSI target %(iqn)s '
-                                    'on portal %(portal)s (exit code '
-                                    '%(err)s).'),
+                    LOG.warning('Failed to login iSCSI target %(iqn)s '
+                                'on portal %(portal)s (exit code '
+                                '%(err)s).',
                                 {'iqn': connection_properties['target_iqn'],
                                  'portal': connection_properties[
                                      'target_portal'],
@@ -817,8 +817,8 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                 mpath_map['/dev/' + m[1].split(" ")[0]] = mpath_dev
 
         if mpath_line and not mpath_map:
-            LOG.warning(_LW("Failed to parse the output of multipath -ll. "
-                            "stdout: %s"), out)
+            LOG.warning("Failed to parse the output of multipath -ll. "
+                        "stdout: %s", out)
         return mpath_map
 
     def _run_iscsi_session(self):
@@ -903,11 +903,11 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
             hctls = self._get_hosts_channels_targets_luns(ips_iqns_luns)
         except exception.HostChannelsTargetsNotFound as e:
             if not e.found:
-                LOG.error(_LE('iSCSI scan failed: %s'), e)
+                LOG.error('iSCSI scan failed: %s', e)
                 return
 
             hctls = e.found
-            LOG.warning(_LW('iSCSI scan: %(error)s\nScanning %(hosts)s'),
+            LOG.warning('iSCSI scan: %(error)s\nScanning %(hosts)s',
                         {'error': e, 'hosts': [h for h, c, t, l in hctls]})
 
         for host_path, channel, target_id, target_lun in hctls:

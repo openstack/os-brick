@@ -25,7 +25,7 @@ import six
 
 from os_brick import exception
 from os_brick import executor
-from os_brick.i18n import _, _LI
+from os_brick.i18n import _
 
 LOG = logging.getLogger(__name__)
 
@@ -99,7 +99,7 @@ class RemoteFsClient(executor.Executor):
         mount_path = self.get_mount_point(share)
 
         if mount_path in self._read_mounts():
-            LOG.info(_LI('Already mounted: %s'), mount_path)
+            LOG.info('Already mounted: %s', mount_path)
             return
 
         self._execute('mkdir', '-p', mount_path, check_exit_code=0)
@@ -256,7 +256,7 @@ class ScalityRemoteFsClient(RemoteFsClient):
         same method signature for class inheritance purpose.
         """
         if self._mount_base in self._read_mounts():
-            LOG.info(_LI('Already mounted: %s'), self._mount_base)
+            LOG.info('Already mounted: %s', self._mount_base)
             return
         self._execute('mkdir', '-p', self._mount_base, check_exit_code=0)
         super(ScalityRemoteFsClient, self)._do_mount(

@@ -20,7 +20,6 @@ import os
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
 
-from os_brick.i18n import _LE, _LW
 from os_brick.initiator import linuxscsi
 
 LOG = logging.getLogger(__name__)
@@ -57,8 +56,8 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
             return [line.split('/')[4].split(':')[1:]
                     for line in out.split('\n') if line.startswith(path)]
         except Exception as exc:
-            LOG.error(_LE('Could not get HBA channel and SCSI target ID, '
-                          'path: %(path)s, reason: %(reason)s'),
+            LOG.error('Could not get HBA channel and SCSI target ID, '
+                      'path: %(path)s, reason: %(reason)s',
                       {'path': path,
                        'reason': exc})
             return None
@@ -101,13 +100,13 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
             # and systool is not installed
             # 96 = nova.cmd.rootwrap.RC_NOEXECFOUND:
             if exc.exit_code == 96:
-                LOG.warning(_LW("systool is not installed"))
+                LOG.warning("systool is not installed")
             return []
         except OSError as exc:
             # This handles the case where rootwrap is NOT used
             # and systool is not installed
             if exc.errno == errno.ENOENT:
-                LOG.warning(_LW("systool is not installed"))
+                LOG.warning("systool is not installed")
             return []
 
         # No FC HBAs were found
@@ -230,8 +229,8 @@ class LinuxFibreChannelS390X(LinuxFibreChannel):
             try:
                 self.echo_scsi_command(zfcp_device_command, "1")
             except putils.ProcessExecutionError as exc:
-                LOG.warning(_LW("port_rescan call for s390 failed exit"
-                                " %(code)s, stderr %(stderr)s"),
+                LOG.warning("port_rescan call for s390 failed exit"
+                            " %(code)s, stderr %(stderr)s",
                             {'code': exc.exit_code, 'stderr': exc.stderr})
 
         zfcp_device_command = ("/sys/bus/ccw/drivers/zfcp/%s/%s/unit_add" %
@@ -240,8 +239,8 @@ class LinuxFibreChannelS390X(LinuxFibreChannel):
         try:
             self.echo_scsi_command(zfcp_device_command, lun)
         except putils.ProcessExecutionError as exc:
-            LOG.warning(_LW("unit_add call for s390 failed exit %(code)s, "
-                            "stderr %(stderr)s"),
+            LOG.warning("unit_add call for s390 failed exit %(code)s, "
+                        "stderr %(stderr)s",
                         {'code': exc.exit_code, 'stderr': exc.stderr})
 
     def deconfigure_scsi_device(self, device_number, target_wwn, lun):
@@ -263,6 +262,6 @@ class LinuxFibreChannelS390X(LinuxFibreChannel):
         try:
             self.echo_scsi_command(zfcp_device_command, lun)
         except putils.ProcessExecutionError as exc:
-            LOG.warning(_LW("unit_remove call for s390 failed exit %(code)s, "
-                            "stderr %(stderr)s"),
+            LOG.warning("unit_remove call for s390 failed exit %(code)s, "
+                        "stderr %(stderr)s",
                         {'code': exc.exit_code, 'stderr': exc.stderr})

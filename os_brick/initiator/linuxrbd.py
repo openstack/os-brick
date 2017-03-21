@@ -16,7 +16,7 @@ import io
 from oslo_log import log as logging
 
 from os_brick import exception
-from os_brick.i18n import _, _LE, _LW
+from os_brick.i18n import _
 from os_brick import utils
 
 try:
@@ -106,7 +106,7 @@ class RBDVolume(object):
                                           snapshot=snapshot,
                                           read_only=read_only)
         except client.rbd.Error:
-            LOG.exception(_LE("error opening rbd image %s"), name)
+            LOG.exception("error opening rbd image %s", name)
             client.disconnect()
             raise
 
@@ -217,7 +217,7 @@ class RBDVolumeIOWrapper(io.RawIOBase):
         try:
             self._rbd_volume.image.flush()
         except AttributeError:
-            LOG.warning(_LW("flush() not supported in this version of librbd"))
+            LOG.warning("flush() not supported in this version of librbd")
 
     def fileno(self):
         """RBD does not have support for fileno() so we raise IOError.

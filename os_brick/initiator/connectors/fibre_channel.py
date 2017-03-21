@@ -19,7 +19,6 @@ from oslo_log import log as logging
 from oslo_service import loopingcall
 import six
 
-from os_brick.i18n import _LE, _LI, _LW
 from os_brick import exception
 from os_brick import initiator
 from os_brick.initiator.connectors import base
@@ -105,8 +104,8 @@ class FibreChannelConnector(base.BaseLinuxConnector):
         if volume_paths:
             return self._linuxscsi.extend_volume(volume_paths)
         else:
-            LOG.warning(_LW("Couldn't find any volume paths on the host to "
-                            "extend volume for %(props)s"),
+            LOG.warning("Couldn't find any volume paths on the host to "
+                        "extend volume for %(props)s",
                         {'props': connection_properties})
             raise exception.VolumePathsNotFound()
 
@@ -133,8 +132,7 @@ class FibreChannelConnector(base.BaseLinuxConnector):
 
         if len(host_devices) == 0:
             # this is empty because we don't have any FC HBAs
-            LOG.warning(
-                _LW("We are unable to locate any Fibre Channel devices"))
+            LOG.warning("We are unable to locate any Fibre Channel devices")
             raise exception.NoFibreChannelHostsFound()
 
         # The /dev/disk/by-path/... node is not always present immediately
@@ -153,11 +151,11 @@ class FibreChannelConnector(base.BaseLinuxConnector):
                     raise loopingcall.LoopingCallDone()
 
             if self.tries >= self.device_scan_attempts:
-                LOG.error(_LE("Fibre Channel volume device not found."))
+                LOG.error("Fibre Channel volume device not found.")
                 raise exception.NoFibreChannelVolumeDeviceFound()
 
-            LOG.info(_LI("Fibre Channel volume device not yet found. "
-                         "Will rescan & retry.  Try number: %(tries)s."),
+            LOG.info("Fibre Channel volume device not yet found. "
+                     "Will rescan & retry.  Try number: %(tries)s.",
                      {'tries': tries})
 
             self._linuxfc.rescan_hosts(hbas,

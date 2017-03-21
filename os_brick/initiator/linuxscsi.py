@@ -25,7 +25,6 @@ from oslo_log import log as logging
 
 from os_brick import exception
 from os_brick import executor
-from os_brick.i18n import _LE, _LI, _LW
 from os_brick.privileged import rootwrap as priv_rootwrap
 from os_brick import utils
 
@@ -118,7 +117,7 @@ class LinuxSCSI(executor.Executor):
             execute('multipathd', 'show', 'status',
                     run_as_root=True, root_helper=root_helper)
         except putils.ProcessExecutionError as err:
-            LOG.error(_LE('multipathd is not running: exit code %(err)s'),
+            LOG.error('multipathd is not running: exit code %(err)s',
                       {'err': err.exit_code})
             if enforce_multipath:
                 raise
@@ -147,8 +146,8 @@ class LinuxSCSI(executor.Executor):
             self._execute('blockdev', '--flushbufs', device, run_as_root=True,
                           root_helper=self._root_helper)
         except putils.ProcessExecutionError as exc:
-            LOG.warning(_LW("Failed to flush IO buffers prior to removing "
-                            "device: %(code)s"), {'code': exc.exit_code})
+            LOG.warning("Failed to flush IO buffers prior to removing "
+                        "device: %(code)s", {'code': exc.exit_code})
 
     @utils.retry(exceptions=putils.ProcessExecutionError)
     def flush_multipath_device(self, device):
@@ -160,7 +159,7 @@ class LinuxSCSI(executor.Executor):
             if exc.exit_code == 1 and 'map in use' in exc.stdout:
                 LOG.debug('Multipath is in use, cannot be flushed yet.')
                 raise
-            LOG.warning(_LW("multipath call failed exit %(code)s"),
+            LOG.warning("multipath call failed exit %(code)s",
                         {'code': exc.exit_code})
 
     def flush_multipath_devices(self):
@@ -168,7 +167,7 @@ class LinuxSCSI(executor.Executor):
             self._execute('multipath', '-F', run_as_root=True,
                           root_helper=self._root_helper)
         except putils.ProcessExecutionError as exc:
-            LOG.warning(_LW("multipath call failed exit %(code)s"),
+            LOG.warning("multipath call failed exit %(code)s",
                         {'code': exc.exit_code})
 
     @utils.retry(exceptions=exception.VolumeDeviceNotFound)
@@ -236,7 +235,7 @@ class LinuxSCSI(executor.Executor):
             /dev/mapper/<WWN>
 
         """
-        LOG.info(_LI("Find Multipath device file for volume WWN %(wwn)s"),
+        LOG.info("Find Multipath device file for volume WWN %(wwn)s",
                  {'wwn': wwn})
         # First look for the common path
         wwn_dict = {'wwn': wwn}
@@ -257,8 +256,8 @@ class LinuxSCSI(executor.Executor):
             pass
 
         # couldn't find a path
-        LOG.warning(_LW("couldn't find a valid multipath device path for "
-                        "%(wwn)s"), wwn_dict)
+        LOG.warning("couldn't find a valid multipath device path for "
+                    "%(wwn)s", wwn_dict)
         return None
 
     def find_multipath_device(self, device):
@@ -279,7 +278,7 @@ class LinuxSCSI(executor.Executor):
                                         run_as_root=True,
                                         root_helper=self._root_helper)
         except putils.ProcessExecutionError as exc:
-            LOG.warning(_LW("multipath call failed exit %(code)s"),
+            LOG.warning("multipath call failed exit %(code)s",
                         {'code': exc.exit_code})
             raise exception.CommandExecutionFailed(
                 cmd='multipath -l %s' % device)
@@ -302,7 +301,7 @@ class LinuxSCSI(executor.Executor):
                 try:
                     os.stat(mdev)
                 except OSError:
-                    LOG.warning(_LW("Couldn't find multipath device %s"),
+                    LOG.warning("Couldn't find multipath device %s",
                                 mdev)
                     return None
 
@@ -409,18 +408,17 @@ class LinuxSCSI(executor.Executor):
             self.multipath_reconfigure()
 
             size = self.get_device_size(mpath_device)
-            LOG.info(_LI("mpath(%(device)s) current size %(size)s"),
+            LOG.info("mpath(%(device)s) current size %(size)s",
                      {'device': mpath_device, 'size': size})
             result = self.multipath_resize_map(scsi_wwn)
             if 'fail' in result:
-                msg = (_LI("Multipathd failed to update the size mapping of "
-                           "multipath device %(scsi_wwn)s volume %(volume)s") %
-                       {'scsi_wwn': scsi_wwn, 'volume': volume_paths})
-                LOG.error(msg)
+                LOG.error("Multipathd failed to update the size mapping of "
+                          "multipath device %(scsi_wwn)s volume %(volume)s",
+                          {'scsi_wwn': scsi_wwn, 'volume': volume_paths})
                 return None
 
             new_size = self.get_device_size(mpath_device)
-            LOG.info(_LI("mpath(%(device)s) new size %(size)s"),
+            LOG.info("mpath(%(device)s) new size %(size)s",
                      {'device': mpath_device, 'size': new_size})
 
         return new_size
