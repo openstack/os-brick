@@ -94,6 +94,21 @@ class RBDConnectorTestCase(test_connector.ConnectorTestCase):
         self.assertIsInstance(device_info['path'],
                               linuxrbd.RBDVolumeIOWrapper)
 
+    @mock.patch('os_brick.initiator.linuxrbd.rbd')
+    @mock.patch('os_brick.initiator.linuxrbd.rados')
+    @mock.patch.object(rbd.RBDConnector, '_create_ceph_conf')
+    @mock.patch('os.path.exists')
+    def test_custom_keyring(self, mock_path, mock_conf, mock_rados, mock_rbd):
+        conn = rbd.RBDConnector(None)
+        mock_path.return_value = False
+        mock_conf.return_value = "/tmp/fake_dir/fake_ceph.conf"
+        custom_keyring_path = "/foo/bar/baz"
+        self.connection_properties['keyring'] = custom_keyring_path
+        conn.connect_volume(self.connection_properties)
+        mock_conf.assert_called_once_with(self.hosts, self.ports,
+                                          self.clustername, self.user,
+                                          custom_keyring_path)
+
     @ddt.data((['192.168.1.1', '192.168.1.2'],
                ['192.168.1.1', '192.168.1.2']),
               (['3ffe:1900:4545:3:200:f8ff:fe21:67cf',
@@ -122,7 +137,7 @@ class RBDConnectorTestCase(test_connector.ConnectorTestCase):
         with mock.patch('os.fdopen', mockopen, create=True):
             rbd_connector = rbd.RBDConnector(None)
             conf_path = rbd_connector._create_ceph_conf(
-                self.hosts, self.ports, self.clustername, self.user)
+                self.hosts, self.ports, self.clustername, self.user, None)
         self.assertEqual(conf_path, tmpfile)
         mock_mkstemp.assert_called_once_with(prefix='brickrbd_')
 

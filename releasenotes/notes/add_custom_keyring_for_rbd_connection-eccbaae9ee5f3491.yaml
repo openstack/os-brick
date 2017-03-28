@@ -1,0 +1,4 @@
+---
+fixes:
+  - Add support to use custom Ceph keyring files (previously os-brick
+    hardcoded using /etc/ceph/<cluster>.client.<user>.keyring file).
