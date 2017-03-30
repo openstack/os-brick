@@ -96,7 +96,7 @@ Request Succeeded
 
     def test_factory(self):
         """Can we instantiate a HGSTConnector of the right kind?"""
-        obj = connector.InitiatorConnector.factory('HGST', None)
+        obj = connector.InitiatorConnector.factory('HGST', None, arch='x86_64')
         self.assertEqual("HGSTConnector", obj.__class__.__name__)
 
     def test_get_search_path(self):
