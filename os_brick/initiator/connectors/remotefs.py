@@ -45,6 +45,8 @@ class RemoteFsConnector(base.BaseLinuxConnector):
 
         if mount_type_lower == 'scality':
             cls = remotefs.ScalityRemoteFsClient
+        elif mount_type_lower == 'vzstorage':
+            cls = remotefs.VZStorageRemoteFSClient
         else:
             cls = remotefs.RemoteFsClient
         self._remotefsclient = cls(mount_type, root_helper, execute=execute,
