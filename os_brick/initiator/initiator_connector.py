@@ -112,7 +112,8 @@ class InitiatorConnector(executor.Executor):
         pass
 
     @abc.abstractmethod
-    def disconnect_volume(self, connection_properties, device_info):
+    def disconnect_volume(self, connection_properties, device_info,
+                          force=False, ignore_errors=False):
         """Disconnect a volume from the local host.
 
         The connection_properties are the same as from connect_volume.
@@ -123,6 +124,12 @@ class InitiatorConnector(executor.Executor):
         :type connection_properties: dict
         :param device_info: historical difference, but same as connection_props
         :type device_info: dict
+        :param force: Whether to forcefully disconnect even if flush fails.
+        :type force: bool
+        :param ignore_errors: When force is True, this will decide whether to
+                              ignore errors or raise an exception once finished
+                              the operation.  Default is False.
+        :type ignore_errors: bool
         """
         pass
 

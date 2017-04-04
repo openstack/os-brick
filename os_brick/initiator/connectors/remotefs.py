@@ -105,7 +105,8 @@ class RemoteFsConnector(base.BaseLinuxConnector):
         return {'path': path}
 
     @utils.trace
-    def disconnect_volume(self, connection_properties, device_info):
+    def disconnect_volume(self, connection_properties, device_info,
+                          force=False, ignore_errors=False):
         """No need to do anything to disconnect a volume in a filesystem.
 
         :param connection_properties: The dictionary that describes all

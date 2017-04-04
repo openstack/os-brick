@@ -134,7 +134,8 @@ class WindowsISCSIConnector(win_conn_base.BaseWindowsConnector,
         return device_info
 
     @utils.trace
-    def disconnect_volume(self, connection_properties):
+    def disconnect_volume(self, connection_properties,
+                          force=False, ignore_errors=False):
         # We want to refresh the cached information first.
         self._diskutils.rescan_disks()
         for (target_portal,

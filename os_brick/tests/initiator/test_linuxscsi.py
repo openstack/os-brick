@@ -17,8 +17,8 @@ import os.path
 import textwrap
 import time
 
+import ddt
 import mock
-from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
 
 from os_brick import exception
@@ -28,6 +28,7 @@ from os_brick.tests import base
 LOG = logging.getLogger(__name__)
 
 
+@ddt.ddt
 class LinuxSCSITestCase(base.TestCase):
     def setUp(self):
         super(LinuxSCSITestCase, self).setUp()
@@ -73,51 +74,51 @@ class LinuxSCSITestCase(base.TestCase):
             ('tee -a /sys/block/sdc/device/delete')]
         self.assertEqual(expected_commands, self.cmds)
 
-    @mock.patch('time.sleep')
-    def test_wait_for_volume_removal(self, sleep_mock):
-        fake_path = '/dev/disk/by-path/fake-iscsi-iqn-lun-0'
-        exists_mock = mock.Mock()
-        exists_mock.return_value = True
-        os.path.exists = exists_mock
-        self.assertRaises(exception.VolumePathNotRemoved,
-                          self.linuxscsi.wait_for_volume_removal,
-                          fake_path)
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'echo_scsi_command')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'flush_device_io')
+    @mock.patch.object(os.path, 'exists', return_value=True)
+    def test_remove_scsi_device_force(self, exists_mock, flush_mock,
+                                      echo_mock):
+        """With force we'll always call delete even if flush fails."""
+        exc = exception.ExceptionChainer()
+        flush_mock.side_effect = Exception()
+        echo_mock.side_effect = Exception()
+        device = '/dev/sdc'
 
-        exists_mock = mock.Mock()
-        exists_mock.return_value = False
-        os.path.exists = exists_mock
-        self.linuxscsi.wait_for_volume_removal(fake_path)
-        expected_commands = []
-        self.assertEqual(expected_commands, self.cmds)
-        self.assertTrue(sleep_mock.called)
+        self.linuxscsi.remove_scsi_device(device, force=True, exc=exc)
+        # The context manager has caught the exceptions
+        self.assertTrue(exc)
+        flush_mock.assert_called_once_with(device)
+        echo_mock.assert_called_once_with('/sys/block/sdc/device/delete', '1')
+
+    @mock.patch('time.sleep')
+    @mock.patch('os.path.exists', return_value=True)
+    def test_wait_for_volumes_removal_failure(self, exists_mock, sleep_mock):
+        retries = 3
+        names = ('sda', 'sdb')
+        self.assertRaises(exception.VolumePathNotRemoved,
+                          self.linuxscsi.wait_for_volumes_removal, names)
+        exists_mock.assert_has_calls([mock.call('/dev/' + name)
+                                      for name in names] * retries)
+        self.assertEqual(retries - 1, sleep_mock.call_count)
+
+    @mock.patch('time.sleep')
+    @mock.patch('os.path.exists', side_effect=(True, True, False, False))
+    def test_wait_for_volumes_removal_retry(self, exists_mock, sleep_mock):
+        names = ('sda', 'sdb')
+        self.linuxscsi.wait_for_volumes_removal(names)
+        exists_mock.assert_has_calls([mock.call('/dev/' + name)
+                                      for name in names] * 2)
+        self.assertEqual(1, sleep_mock.call_count)
 
     def test_flush_multipath_device(self):
-        self.linuxscsi.flush_multipath_device('/dev/dm-9')
-        expected_commands = [('multipath -f /dev/dm-9')]
-        self.assertEqual(expected_commands, self.cmds)
+        dm_map_name = '3600d0230000000000e13955cc3757800'
+        with mock.patch.object(self.linuxscsi, '_execute') as exec_mock:
+            self.linuxscsi.flush_multipath_device(dm_map_name)
 
-    @mock.patch('retrying.time.sleep', mock.Mock())
-    def test_flush_multipath_device_in_use(self):
-        side_effect = (
-            putils.ProcessExecutionError(
-                stdout='Feb 09 14:38:02 | mpatha: map in use\n'
-                       'Feb 09 14:38:02 | failed to remove multipath map '
-                       'mpatha\n',
-                exit_code=1),
-            ('', '')
-        )
-
-        with mock.patch.object(self.linuxscsi, '_execute') as execute_mock:
-            execute_mock.side_effect = side_effect
-            self.linuxscsi.flush_multipath_device('mpatha')
-            execute_mock.assert_has_calls(
-                [mock.call('multipath', '-f', 'mpatha', run_as_root=True,
-                           root_helper=mock.ANY)] * 2)
-
-    def test_flush_multipath_devices(self):
-        self.linuxscsi.flush_multipath_devices()
-        expected_commands = [('multipath -F')]
-        self.assertEqual(expected_commands, self.cmds)
+        exec_mock.assert_called_once_with(
+            'multipath', '-f', dm_map_name, run_as_root=True, attempts=3,
+            timeout=300, interval=10, root_helper=self.linuxscsi._root_helper)
 
     def test_get_scsi_wwn(self):
         fake_path = '/dev/disk/by-id/somepath'
@@ -129,6 +130,51 @@ class LinuxSCSITestCase(base.TestCase):
         self.linuxscsi._execute = fake_execute
         wwn = self.linuxscsi.get_scsi_wwn(fake_path)
         self.assertEqual(fake_wwn, wwn)
+
+    @mock.patch('six.moves.builtins.open')
+    def test_get_dm_name(self, open_mock):
+        dm_map_name = '3600d0230000000000e13955cc3757800'
+        cm_open = open_mock.return_value.__enter__.return_value
+        cm_open.read.return_value = dm_map_name
+        res = self.linuxscsi.get_dm_name('dm-0')
+        self.assertEqual(dm_map_name, res)
+        open_mock.assert_called_once_with('/sys/block/dm-0/dm/name')
+
+    @mock.patch('six.moves.builtins.open', side_effect=IOError)
+    def test_get_dm_name_failure(self, open_mock):
+        self.assertEqual('', self.linuxscsi.get_dm_name('dm-0'))
+
+    @mock.patch('glob.glob', side_effect=[[], ['/sys/block/sda/holders/dm-9']])
+    def test_find_sysfs_multipath_dm(self, glob_mock):
+        device_names = ('sda', 'sdb')
+        res = self.linuxscsi.find_sysfs_multipath_dm(device_names)
+        self.assertEqual('dm-9', res)
+        glob_mock.assert_has_calls([mock.call('/sys/block/sda/holders/dm-*'),
+                                    mock.call('/sys/block/sdb/holders/dm-*')])
+
+    @mock.patch('glob.glob', return_value=[])
+    def test_find_sysfs_multipath_dm_not_found(self, glob_mock):
+        device_names = ('sda', 'sdb')
+        res = self.linuxscsi.find_sysfs_multipath_dm(device_names)
+        self.assertIsNone(res)
+        glob_mock.assert_has_calls([mock.call('/sys/block/sda/holders/dm-*'),
+                                    mock.call('/sys/block/sdb/holders/dm-*')])
+
+    @mock.patch.object(linuxscsi.LinuxSCSI, '_execute')
+    @mock.patch('os.path.exists', return_value=True)
+    def test_flush_device_io(self, exists_mock, exec_mock):
+        device = '/dev/sda'
+        self.linuxscsi.flush_device_io(device)
+        exists_mock.assert_called_once_with(device)
+        exec_mock.assert_called_once_with(
+            'blockdev', '--flushbufs', device, run_as_root=True, attempts=3,
+            timeout=300, interval=10, root_helper=self.linuxscsi._root_helper)
+
+    @mock.patch('os.path.exists', return_value=False)
+    def test_flush_device_io_non_existent(self, exists_mock):
+        device = '/dev/sda'
+        self.linuxscsi.flush_device_io(device)
+        exists_mock.assert_called_once_with(device)
 
     @mock.patch.object(os.path, 'exists', return_value=True)
     def test_find_multipath_device_path(self, exists_mock):
@@ -168,31 +214,73 @@ class LinuxSCSITestCase(base.TestCase):
                                 self.linuxscsi.wait_for_path,
                                 path)
 
-    @mock.patch.object(linuxscsi.LinuxSCSI, 'find_multipath_device')
-    @mock.patch.object(os.path, 'exists', return_value=True)
-    def test_remove_multipath_device(self, exists_mock, mock_multipath):
-        def fake_find_multipath_device(device):
-            devices = [{'device': '/dev/sde', 'host': 0,
-                        'channel': 0, 'id': 0, 'lun': 1},
-                       {'device': '/dev/sdf', 'host': 2,
-                        'channel': 0, 'id': 0, 'lun': 1}, ]
+    @ddt.data({'do_raise': False, 'force': False},
+              {'do_raise': True, 'force': True})
+    @ddt.unpack
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'flush_multipath_device')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_dm_name')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'find_sysfs_multipath_dm')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'wait_for_volumes_removal')
+    @mock.patch('os_brick.initiator.linuxscsi.LinuxSCSI.remove_scsi_device')
+    def test_remove_connection_multipath_complete(self, remove_mock, wait_mock,
+                                                  find_dm_mock,
+                                                  get_dm_name_mock,
+                                                  flush_mp_mock,
+                                                  do_raise, force):
+        if do_raise:
+            flush_mp_mock.side_effect = Exception
+        devices_names = ('sda', 'sdb')
+        exc = exception.ExceptionChainer()
+        mp_name = self.linuxscsi.remove_connection(devices_names,
+                                                   is_multipath=True,
+                                                   force=mock.sentinel.Force,
+                                                   exc=exc)
+        find_dm_mock.assert_called_once_with(devices_names)
+        get_dm_name_mock.assert_called_once_with(find_dm_mock.return_value)
+        flush_mp_mock.assert_called_once_with(get_dm_name_mock.return_value)
+        self.assertEqual(get_dm_name_mock.return_value if do_raise else None,
+                         mp_name)
+        remove_mock.assert_has_calls([
+            mock.call('/dev/sda', mock.sentinel.Force, exc),
+            mock.call('/dev/sdb', mock.sentinel.Force, exc)])
+        wait_mock.assert_called_once_with(devices_names)
+        self.assertEqual(do_raise, bool(exc))
 
-            info = {"device": "dm-3",
-                    "id": "350002ac20398383d",
-                    "name": "mpatha",
-                    "devices": devices}
-            return info
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'flush_multipath_device',
+                       side_effect=Exception)
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_dm_name')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'find_sysfs_multipath_dm')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'wait_for_volumes_removal')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'remove_scsi_device')
+    def test_remove_connection_multipath_fail(self, remove_mock, wait_mock,
+                                              find_dm_mock, get_dm_name_mock,
+                                              flush_mp_mock):
+        flush_mp_mock.side_effect = exception.ExceptionChainer
+        devices_names = ('sda', 'sdb')
+        exc = exception.ExceptionChainer()
+        self.assertRaises(exception.ExceptionChainer,
+                          self.linuxscsi.remove_connection,
+                          devices_names, is_multipath=True,
+                          force=False, exc=exc)
+        find_dm_mock.assert_called_once_with(devices_names)
+        get_dm_name_mock.assert_called_once_with(find_dm_mock.return_value)
+        flush_mp_mock.assert_called_once_with(get_dm_name_mock.return_value)
+        remove_mock.assert_not_called()
+        wait_mock.assert_not_called()
+        self.assertTrue(bool(exc))
 
-        mock_multipath.side_effect = fake_find_multipath_device
-
-        self.linuxscsi.remove_multipath_device('/dev/dm-3')
-        expected_commands = [
-            ('multipath -f mpatha'),
-            ('blockdev --flushbufs /dev/sde'),
-            ('tee -a /sys/block/sde/device/delete'),
-            ('blockdev --flushbufs /dev/sdf'),
-            ('tee -a /sys/block/sdf/device/delete'), ]
-        self.assertEqual(expected_commands, self.cmds)
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'wait_for_volumes_removal')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'remove_scsi_device')
+    def test_remove_connection_singlepath(self, remove_mock, wait_mock):
+        devices_names = ('sda', 'sdb')
+        exc = exception.ExceptionChainer()
+        self.linuxscsi.remove_connection(devices_names, is_multipath=False,
+                                         force=mock.sentinel.Force,
+                                         exc=exc)
+        remove_mock.assert_has_calls(
+            [mock.call('/dev/sda', mock.sentinel.Force, exc),
+             mock.call('/dev/sdb', mock.sentinel.Force, exc)])
+        wait_mock.assert_called_once_with(devices_names)
 
     def test_find_multipath_device_3par_ufn(self):
         def fake_execute(*cmd, **kwargs):

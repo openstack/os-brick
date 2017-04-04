@@ -127,7 +127,8 @@ class HyperScaleConnector(base.BaseLinuxConnector):
 
     @utils.trace
     @synchronized('connect_volume')
-    def disconnect_volume(self, connection_properties, device_info):
+    def disconnect_volume(self, connection_properties, device_info,
+                          force=False, ignore_errors=False):
         """Disconnect a volume from an instance."""
         volume_name = None
 

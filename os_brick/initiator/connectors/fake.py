@@ -27,7 +27,8 @@ class FakeConnector(base.BaseLinuxConnector):
                             'path': self.fake_path}
         return fake_device_info
 
-    def disconnect_volume(self, connection_properties, device_info):
+    def disconnect_volume(self, connection_properties, device_info,
+                          force=False, ignore_errors=False):
         pass
 
     def get_volume_paths(self, connection_properties):

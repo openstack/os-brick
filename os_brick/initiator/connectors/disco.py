@@ -113,7 +113,8 @@ class DISCOConnector(base.BaseLinuxConnector):
 
     @utils.trace
     @synchronized('connect_volume')
-    def disconnect_volume(self, connection_properties, device_info):
+    def disconnect_volume(self, connection_properties, device_info,
+                          force=False, ignore_errors=False):
         """Detach the volume from instance."""
         disco_id = connection_properties['disco_id']
         disco_dev = '/dev/dms%s' % (disco_id)

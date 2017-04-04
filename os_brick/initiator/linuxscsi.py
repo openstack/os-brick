@@ -16,6 +16,7 @@
 
    Note, this is not iSCSI.
 """
+import glob
 import os
 import re
 import six
@@ -56,30 +57,32 @@ class LinuxSCSI(executor.Executor):
         else:
             return None
 
-    def remove_scsi_device(self, device):
+    def remove_scsi_device(self, device, force=False, exc=None):
         """Removes a scsi device based upon /dev/sdX name."""
-
         path = "/sys/block/%s/device/delete" % device.replace("/dev/", "")
         if os.path.exists(path):
+            exc = exception.ExceptionChainer() if exc is None else exc
             # flush any outstanding IO first
-            self.flush_device_io(device)
+            with exc.context(force, 'Flushing %s failed', device):
+                self.flush_device_io(device)
 
             LOG.debug("Remove SCSI device %(device)s with %(path)s",
                       {'device': device, 'path': path})
-            self.echo_scsi_command(path, "1")
+            with exc.context(force, 'Removing %s failed', device):
+                self.echo_scsi_command(path, "1")
 
-    @utils.retry(exceptions=exception.VolumePathNotRemoved, retries=3,
-                 backoff_rate=2)
-    def wait_for_volume_removal(self, volume_path):
-        """This is used to ensure that volumes are gone."""
-        LOG.debug("Checking to see if SCSI volume %s has been removed.",
-                  volume_path)
-        if os.path.exists(volume_path):
-            LOG.debug("%(path)s still exists.", {'path': volume_path})
-            raise exception.VolumePathNotRemoved(
-                volume_path=volume_path)
-        else:
-            LOG.debug("SCSI volume %s has been removed.", volume_path)
+    @utils.retry(exceptions=exception.VolumePathNotRemoved)
+    def wait_for_volumes_removal(self, volumes_names):
+        """Wait for device paths to be removed from the system."""
+        str_names = ', '.join(volumes_names)
+        LOG.debug('Checking to see if SCSI volumes %s have been removed.',
+                  str_names)
+        exist = [volume_name for volume_name in volumes_names
+                 if os.path.exists('/dev/' + volume_name)]
+        if exist:
+            LOG.debug('%s still exist.', ', '.join(exist))
+            raise exception.VolumePathNotRemoved(volume_path=exist)
+        LOG.debug("SCSI volumes %s have been removed.", str_names)
 
     def get_device_info(self, device):
         (out, _err) = self._execute('sg_scan', device, run_as_root=True,
@@ -125,52 +128,92 @@ class LinuxSCSI(executor.Executor):
 
         return True
 
-    def remove_multipath_device(self, device):
-        """Removes related LUNs and multipath device
+    def get_dm_name(self, dm):
+        """Get the Device map name given the device name of the dm on sysfs.
 
-        This removes LUNs associated with a multipath device
-        and the multipath device itself.
+        :param dm: Device map name as seen in sysfs. ie: 'dm-0'
+        :returns: String with the name, or empty string if not available.
+                  ie: '36e843b658476b7ed5bc1d4d10d9b1fde'
         """
+        try:
+            with open('/sys/block/' + dm + '/dm/name') as f:
+                return f.read().strip()
+        except IOError:
+            return ''
 
-        LOG.debug("remove multipath device %s", device)
-        mpath_dev = self.find_multipath_device(device)
-        if mpath_dev:
-            self.flush_multipath_device(mpath_dev['name'])
-            devices = mpath_dev['devices']
-            LOG.debug("multipath LUNs to remove %s", devices)
-            for device in devices:
-                self.remove_scsi_device(device['device'])
+    def find_sysfs_multipath_dm(self, device_names):
+        """Find the dm device name given a list of device names
+
+        :param device_names: Iterable with device names, not paths. ie: ['sda']
+        :returns: String with the dm name or None if not found. ie: 'dm-0'
+        """
+        glob_str = '/sys/block/%s/holders/dm-*'
+        for dev_name in device_names:
+            dms = glob.glob(glob_str % dev_name)
+            if dms:
+                __, device_name, __, dm = dms[0].rsplit('/', 3)
+                return dm
+        return None
+
+    def remove_connection(self, devices_names, is_multipath, force=False,
+                          exc=None):
+        """Remove LUNs and multipath associated with devices names.
+
+        :param devices_names: Iterable with real device names ('sda', 'sdb')
+        :param is_multipath: Whether this is a multipath connection or not
+        :param force: Whether to forcefully disconnect even if flush fails.
+        :param exc: ExceptionChainer where to add exceptions if forcing
+        :returns: Multipath device map name if found and not flushed
+        """
+        if not devices_names:
+            return
+        multipath_name = None
+        exc = exception.ExceptionChainer() if exc is None else exc
+        LOG.debug('Removing %(type)s devices %(devices)s',
+                  {'type': 'multipathed' if is_multipath else 'single pathed',
+                   'devices': ', '.join(devices_names)})
+
+        if is_multipath:
+            multipath_dm = self.find_sysfs_multipath_dm(devices_names)
+            multipath_name = multipath_dm and self.get_dm_name(multipath_dm)
+            if multipath_name:
+                with exc.context(force, 'Flushing %s failed', multipath_name):
+                    self.flush_multipath_device(multipath_name)
+                    multipath_name = None
+
+        for device_name in devices_names:
+            self.remove_scsi_device('/dev/' + device_name, force, exc)
+
+        # Wait until the symlinks are removed
+        with exc.context(force, 'Some devices remain from %s', devices_names):
+            self.wait_for_volumes_removal(devices_names)
+
+        return multipath_name
 
     def flush_device_io(self, device):
         """This is used to flush any remaining IO in the buffers."""
-        try:
-            LOG.debug("Flushing IO for device %s", device)
-            self._execute('blockdev', '--flushbufs', device, run_as_root=True,
-                          root_helper=self._root_helper)
-        except putils.ProcessExecutionError as exc:
-            LOG.warning("Failed to flush IO buffers prior to removing "
-                        "device: %(code)s", {'code': exc.exit_code})
-
-    @utils.retry(exceptions=putils.ProcessExecutionError)
-    def flush_multipath_device(self, device):
-        try:
-            LOG.debug("Flush multipath device %s", device)
-            self._execute('multipath', '-f', device, run_as_root=True,
-                          root_helper=self._root_helper)
-        except putils.ProcessExecutionError as exc:
-            if exc.exit_code == 1 and 'map in use' in exc.stdout:
-                LOG.debug('Multipath is in use, cannot be flushed yet.')
+        if os.path.exists(device):
+            try:
+                # NOTE(geguileo): With 30% connection error rates flush can get
+                # stuck, set timeout to prevent it from hanging here forever.
+                # Retry twice after 20 and 40 seconds.
+                LOG.debug("Flushing IO for device %s", device)
+                self._execute('blockdev', '--flushbufs', device,
+                              run_as_root=True, attempts=3, timeout=300,
+                              interval=10, root_helper=self._root_helper)
+            except putils.ProcessExecutionError as exc:
+                LOG.warning("Failed to flush IO buffers prior to removing "
+                            "device: %(code)s", {'code': exc.exit_code})
                 raise
-            LOG.warning("multipath call failed exit %(code)s",
-                        {'code': exc.exit_code})
 
-    def flush_multipath_devices(self):
-        try:
-            self._execute('multipath', '-F', run_as_root=True,
-                          root_helper=self._root_helper)
-        except putils.ProcessExecutionError as exc:
-            LOG.warning("multipath call failed exit %(code)s",
-                        {'code': exc.exit_code})
+    def flush_multipath_device(self, device_map_name):
+        LOG.debug("Flush multipath device %s", device_map_name)
+        # NOTE(geguileo): With 30% connection error rates flush can get stuck,
+        # set timeout to prevent it from hanging here forever.  Retry twice
+        # after 20 and 40 seconds.
+        self._execute('multipath', '-f', device_map_name, run_as_root=True,
+                      attempts=3, timeout=300, interval=10,
+                      root_helper=self._root_helper)
 
     @utils.retry(exceptions=exception.VolumeDeviceNotFound)
     def wait_for_path(self, volume_path):

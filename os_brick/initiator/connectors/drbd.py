@@ -90,7 +90,8 @@ class DRBDConnector(base.BaseLinuxConnector):
         return device_info
 
     @utils.trace
-    def disconnect_volume(self, connection_properties, device_info):
+    def disconnect_volume(self, connection_properties, device_info,
+                          force=False, ignore_errors=False):
         """Detach the volume."""
 
         self._drbdadm_command("down", connection_properties,

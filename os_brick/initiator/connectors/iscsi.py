@@ -17,7 +17,6 @@ import collections
 import copy
 import glob
 import os
-import re
 import time
 
 from oslo_concurrency import lockutils
@@ -106,27 +105,63 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
 
         return volume_paths
 
-    def _get_iscsi_sessions(self):
+    def _get_iscsi_sessions_full(self):
+        """Get iSCSI session information as a list of tuples.
+
+        Uses iscsiadm -m session and from a command output like
+            tcp: [1] 192.168.121.250:3260,1 iqn.2010-10.org.openstack:volume-
+
+        This method will drop the node type and return a list like this:
+            [('tcp:', '1', '192.168.121.250:3260', '1',
+              'iqn.2010-10.org.openstack:volume-')]
+        """
         out, err = self._run_iscsi_session()
-
-        iscsi_sessions = []
-
         if err:
             LOG.warning("Couldn't find iscsi sessions because "
-                        "iscsiadm err: %s",
-                        err)
-        else:
-            # parse the output from iscsiadm
-            # lines are in the format of
-            # tcp: [1] 192.168.121.250:3260,1 iqn.2010-10.org.openstack:volume-
-            lines = out.split('\n')
-            for line in lines:
-                if line:
-                    entries = line.split()
-                    portal = entries[2].split(',')
-                    iscsi_sessions.append(portal[0])
+                        "iscsiadm err: %s", err)
+            return []
 
-        return iscsi_sessions
+        # Parse and clean the output from iscsiadm, which is in the form of:
+        # transport_name: [session_id] ip_address:port,tpgt iqn node_type
+        lines = []
+        for line in out.splitlines():
+            if line:
+                info = line.split()
+                sid = info[1][1:-1]
+                portal, tpgt = info[2].split(',')
+                lines.append((info[0], sid, portal, tpgt, info[3]))
+        return lines
+
+    def _get_iscsi_nodes(self):
+        """Get iSCSI node information (portal, iqn) as a list of tuples.
+
+        Uses iscsi_adm -m node and from a command output like
+            192.168.121.250:3260,1 iqn.2010-10.org.openstack:volume
+
+        This method will drop the tpgt and return a list like this:
+            [('192.168.121.250:3260', 'iqn.2010-10.org.openstack:volume')]
+        """
+        out, err = self._execute('iscsiadm', '-m', 'node', run_as_root=True,
+                                 root_helper=self._root_helper,
+                                 check_exit_code=False)
+        if err:
+            LOG.warning("Couldn't find iSCSI nodes because iscsiadm err: %s",
+                        err)
+            return []
+
+        # Parse and clean the output from iscsiadm which is in the form of:
+        # ip_addresss:port,tpgt iqn
+        lines = []
+        for line in out.splitlines():
+            if line:
+                info = line.split()
+                lines.append((info[0].split(',')[0], info[1]))
+        return lines
+
+    def _get_iscsi_sessions(self):
+        """Return portals for all existing sessions."""
+        # entry: [tcp, [1], 192.168.121.250:3260,1 ...]
+        return [entry[2] for entry in self._get_iscsi_sessions_full()]
 
     def _get_potential_volume_paths(self, connection_properties,
                                     connect_to_portal=True,
@@ -471,85 +506,103 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         LOG.debug("connect_volume returning %s", device_info)
         return device_info
 
+    def _get_connection_devices(self, connection_properties):
+        """Get map of devices by sessions from our connection.
+
+        For each of the TCP sessions that correspond to our connection
+        properties we generate a map of (ip, iqn) to (belong, other) where
+        belong is a set of devices in that session that populated our system
+        when we did a connection using connection properties, and other are
+        any other devices that share that same session but are the result of
+        connecting with different connection properties.
+
+        We also include all nodes from our connection that don't have a
+        session.
+        """
+        ips_iqns_luns = self._get_all_targets(connection_properties)
+        nodes = self._get_iscsi_nodes()
+        sessions = self._get_iscsi_sessions_full()
+        # Use (portal, iqn) to map the session value
+        sessions_map = {(s[2], s[4]): s[1] for s in sessions if s[0] == 'tcp:'}
+        # device_map will keep a tuple with devices from the connection and
+        # others that don't belong to this connection" (belong, others)
+        device_map = collections.defaultdict(lambda: (set(), set()))
+
+        for ip, iqn, lun in ips_iqns_luns:
+            session = sessions_map.get((ip, iqn))
+            # Our nodes that don't have a session will be returned as empty
+            if not session:
+                if (ip, iqn) in nodes:
+                    device_map[(ip, iqn)] = (set(), set())
+                continue
+
+            # Get all devices for the session
+            paths = glob.glob('/sys/class/scsi_host/host*/device/session' +
+                              session + '/target*/*:*:*:*/block/*')
+            belong, others = device_map[(ip, iqn)]
+            for path in paths:
+                __, hctl, __, device = path.rsplit('/', 3)
+                lun_path = int(hctl.rsplit(':', 1)[-1])
+                # For partitions turn them into the whole device: sde1 -> sde
+                device = device.strip('0123456789')
+                if lun_path == lun:
+                    belong.add(device)
+                else:
+                    others.add(device)
+
+        return device_map
+
     @utils.trace
     @synchronized('connect_volume')
-    def disconnect_volume(self, connection_properties, device_info):
+    def disconnect_volume(self, connection_properties, device_info,
+                          force=False, ignore_errors=False):
         """Detach the volume from instance_name.
 
         :param connection_properties: The dictionary that describes all
                                       of the target volume attributes.
-        :type connection_properties: dict
+        :type connection_properties: dict that must include:
+                                     target_portal(s) - IP and optional port
+                                     target_iqn(s) - iSCSI Qualified Name
+                                     target_lun(s) - LUN id of the volume
         :param device_info: historical difference, but same as connection_props
         :type device_info: dict
-
-        connection_properties for iSCSI must include:
-        target_portal(s) - IP and optional port
-        target_iqn(s) - iSCSI Qualified Name
-        target_lun(s) - LUN id of the volume
+        :param force: Whether to forcefully disconnect even if flush fails.
+        :type force: bool
+        :param ignore_errors: When force is True, this will decide whether to
+                              ignore errors or raise an exception once finished
+                              the operation.  Default is False.
+        :type ignore_errors: bool
         """
-        if self.use_multipath:
-            host_device = multipath_device = None
-            host_devices = self._get_device_path(connection_properties)
-            # Choose an accessible host device
-            for dev in host_devices:
-                if os.path.exists(dev):
-                    host_device = dev
-                    device_wwn = self._linuxscsi.get_scsi_wwn(dev)
-                    (multipath_device, multipath_id) = (super(
-                        ISCSIConnector, self)._discover_mpath_device(
-                            device_wwn, connection_properties, dev))
-                    if multipath_device:
-                        break
-            if not host_device:
-                LOG.error("No accessible volume device: %(host_devices)s",
-                          {'host_devices': host_devices})
-                raise exception.VolumeDeviceNotFound(device=host_devices)
+        exc = exception.ExceptionChainer()
+        devices_map = self._get_connection_devices(connection_properties)
 
-            if multipath_device:
-                device_realpath = os.path.realpath(host_device)
-                self._linuxscsi.remove_multipath_device(device_realpath)
-                return self._disconnect_volume_multipath_iscsi(
-                    connection_properties, multipath_device)
+        # Remove devices and multipath from this connection
+        remove_devices = set()
+        for remove, __ in devices_map.values():
+            remove_devices.update(remove)
+        multipath_name = self._linuxscsi.remove_connection(remove_devices,
+                                                           self.use_multipath,
+                                                           force, exc)
 
-        # When multiple portals/iqns/luns are specified, we need to remove
-        # unused devices created by logging into other LUNs' session.
-        for props in self._iterate_all_targets(connection_properties):
-            self._disconnect_volume_iscsi(props)
+        # Disconnect sessions and remove nodes that are left without devices
+        disconnect = [conn for conn, (__, keep) in devices_map.items()
+                      if not keep]
+        self._disconnect_connection(connection_properties, disconnect, force,
+                                    exc)
 
-    def _disconnect_volume_iscsi(self, connection_properties):
-        # remove the device from the scsi subsystem
-        # this eliminates any stale entries until logout
-        host_devices = self._get_device_path(connection_properties)
+        # If flushing the multipath failed before, try now after we have
+        # removed the devices and we may have even logged off (only reaches
+        # here with multipath_name if force=True).
+        if multipath_name:
+            LOG.debug('Flushing again multipath %s now that we removed the '
+                      'devices.', multipath_name)
+            self._linuxscsi.flush_multipath_device(multipath_name)
 
-        if host_devices:
-            host_device = host_devices[0]
-        else:
-            return
-
-        dev_name = self._linuxscsi.get_name_from_path(host_device)
-        if dev_name:
-            self._linuxscsi.remove_scsi_device(dev_name)
-
-            # NOTE(jdg): On busy systems we can have a race here
-            # where remove_iscsi_device is called before the device file
-            # has actually been removed.   The result is an orphaned
-            # iscsi session that never gets logged out.  The following
-            # call to wait addresses that issue.
-            self._linuxscsi.wait_for_volume_removal(host_device)
-
-        # NOTE(vish): Only disconnect from the target if no luns from the
-        #             target are in use.
-        device_byname = ("ip-%(portal)s-iscsi-%(iqn)s-lun-" %
-                         {'portal': connection_properties['target_portal'],
-                          'iqn': connection_properties['target_iqn']})
-        devices = self.driver.get_all_block_devices()
-        devices = [dev for dev in devices if (device_byname in dev
-                                              and
-                                              dev.startswith(
-                                                  '/dev/disk/by-path/'))
-                   and os.path.exists(dev)]
-        if not devices:
-            self._disconnect_from_iscsi_portal(connection_properties)
+        if exc:
+            LOG.warning('There were errors removing %s, leftovers may remain '
+                        'in the system', remove_devices)
+            if not ignore_errors:
+                raise exc
 
     def _munge_portal(self, target):
         """Remove brackets from portal.
@@ -635,65 +688,6 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                 iqns.append(data[1])
         return ips, iqns
 
-    def _disconnect_volume_multipath_iscsi(self, connection_properties,
-                                           multipath_name):
-        """This removes a multipath device and it's LUNs."""
-        LOG.debug("Disconnect multipath device %s", multipath_name)
-        mpath_map = self._get_multipath_device_map()
-        block_devices = self.driver.get_all_block_devices()
-        devices = []
-        for dev in block_devices:
-            if os.path.exists(dev):
-                if "/mapper/" in dev:
-                    devices.append(dev)
-                else:
-                    mpdev = mpath_map.get(dev)
-                    if mpdev:
-                        devices.append(mpdev)
-
-        # Do a discovery to find all targets.
-        # Targets for multiple paths for the same multipath device
-        # may not be the same.
-        all_ips_iqns_luns = self._discover_iscsi_portals(connection_properties)
-
-        # As discovery result may contain other targets' iqns, extract targets
-        # to be disconnected whose block devices are already deleted here.
-        ips_iqns = []
-        entries = [device.lstrip('ip-').split('-lun-')[0]
-                   for device in self._get_iscsi_devices()]
-        for ip, iqn, lun in all_ips_iqns_luns:
-            ip_iqn = "%s-iscsi-%s" % (ip.split(",")[0], iqn)
-            if ip_iqn not in entries:
-                ips_iqns.append([ip, iqn])
-
-        if not devices:
-            # disconnect if no other multipath devices
-            self._disconnect_mpath(connection_properties, ips_iqns)
-            return
-
-        # Get a target for all other multipath devices
-        other_iqns = self._get_multipath_iqns(devices, mpath_map)
-
-        # Get all the targets for the current multipath device
-        current_iqns = [iqn for ip, iqn in ips_iqns]
-
-        in_use = False
-        for current in current_iqns:
-            if current in other_iqns:
-                in_use = True
-                break
-
-        # If no other multipath device attached has the same iqn
-        # as the current device
-        if not in_use:
-            # disconnect if no other multipath devices with same iqn
-            self._disconnect_mpath(connection_properties, ips_iqns)
-            return
-
-        # else do not disconnect iscsi portals,
-        # as they are used for other luns
-        return
-
     def _connect_to_iscsi_portal(self, connection_properties):
         # NOTE(vish): If we are on the same host as nova volume, the
         #             discovery makes the target so we don't need to
@@ -774,54 +768,15 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                            attempts=5,
                            delay_on_retry=True)
 
-    def _get_iscsi_devices(self):
-        try:
-            devices = list(os.walk('/dev/disk/by-path'))[0][-1]
-        except IndexError:
-            return []
-        # For iSCSI HBAs, look at an offset of len('pci-0000:00:00.0')
-        return [entry for entry in devices if (entry.startswith("ip-")
-                                               or (entry.startswith("pci-")
-                                                   and
-                                                   entry.find("ip-", 16, 21)
-                                                   >= 16))]
-
-    def _disconnect_mpath(self, connection_properties, ips_iqns):
-        for ip, iqn in ips_iqns:
-            props = copy.deepcopy(connection_properties)
+    def _disconnect_connection(self, connection_properties, connections, force,
+                               exc):
+        LOG.debug('Disconnecting from: %s', connections)
+        props = connection_properties.copy()
+        for ip, iqn in connections:
             props['target_portal'] = ip
             props['target_iqn'] = iqn
-            self._disconnect_from_iscsi_portal(props)
-
-    def _get_multipath_iqns(self, multipath_devices, mpath_map):
-        entries = self._get_iscsi_devices()
-        iqns = []
-        for entry in entries:
-            entry_real_path = os.path.realpath("/dev/disk/by-path/%s" % entry)
-            entry_multipath = mpath_map.get(entry_real_path)
-            if entry_multipath and entry_multipath in multipath_devices:
-                iqns.append(entry.split("iscsi-")[1].split("-lun")[0])
-        return iqns
-
-    def _get_multipath_device_map(self):
-        out = self._run_multipath(['-ll'], check_exit_code=[0, 1])[0]
-        mpath_line = [line for line in out.splitlines()
-                      if not re.match(initiator.MULTIPATH_ERROR_REGEX, line)]
-        mpath_dev = None
-        mpath_map = {}
-        for line in out.splitlines():
-            m = initiator.MULTIPATH_DEV_CHECK_REGEX.split(line)
-            if len(m) >= 2:
-                mpath_dev = '/dev/mapper/' + m[0].split(" ")[0]
-                continue
-            m = initiator.MULTIPATH_PATH_CHECK_REGEX.split(line)
-            if len(m) >= 2:
-                mpath_map['/dev/' + m[1].split(" ")[0]] = mpath_dev
-
-        if mpath_line and not mpath_map:
-            LOG.warning("Failed to parse the output of multipath -ll. "
-                        "stdout: %s", out)
-        return mpath_map
+            with exc.context(force, 'Disconnect from %s %s failed', ip, iqn):
+                self._disconnect_from_iscsi_portal(props)
 
     def _run_iscsi_session(self):
         (out, err) = self._run_iscsiadm_bare(('-m', 'session'),

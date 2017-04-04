@@ -36,12 +36,124 @@ the urgency of (1)), then work on the larger refactor that addresses
 
 """
 
+import signal
 import six
+import threading
+import time
 
 from oslo_concurrency import processutils as putils
+from oslo_log import log as logging
 from oslo_utils import strutils
 
+from os_brick import exception
 from os_brick import privileged
+
+
+LOG = logging.getLogger(__name__)
+
+
+def custom_execute(*cmd, **kwargs):
+    """Custom execute with additional functionality on top of Oslo's.
+
+    Additional features are timeouts and exponential backoff retries.
+
+    The exponential backoff retries replaces standard Oslo random sleep times
+    that range from 200ms to 2seconds when attempts is greater than 1, but it
+    is disabled if delay_on_retry is passed as a parameter.
+
+    Exponential backoff is controlled via interval and backoff_rate parameters,
+    just like the os_brick.utils.retry decorator.
+
+    To use the timeout mechanism to stop the subprocess with a specific signal
+    after a number of seconds we must pass a non-zero timeout value in the
+    call.
+
+    When using multiple attempts and timeout at the same time the method will
+    only raise the timeout exception to the caller if the last try timeouts.
+
+    Timeout mechanism is controlled with timeout, signal, and raise_timeout
+    parameters.
+
+    :param interval: The multiplier
+    :param backoff_rate: Base used for the exponential backoff
+    :param timeout: Timeout defined in seconds
+    :param signal: Signal to use to stop the process on timeout
+    :param raise_timeout: Raise and exception on timeout or return error as
+                          stderr.  Defaults to raising if check_exit_code is
+                          not False.
+    :returns: Tuple with stdout and stderr
+    """
+    # Since python 2 doesn't have nonlocal we use a mutable variable to store
+    # the previous attempt number, the timeout handler, and the process that
+    # timed out
+    shared_data = [0, None, None]
+
+    def on_timeout(proc):
+        sanitized_cmd = strutils.mask_password(' '.join(cmd))
+        LOG.warning('Stopping %(cmd)s with signal %(signal)s after %(time)ss.',
+                    {'signal': sig_end, 'cmd': sanitized_cmd, 'time': timeout})
+        shared_data[2] = proc
+        proc.send_signal(sig_end)
+
+    def on_execute(proc):
+        # Call user's on_execute method
+        if on_execute_call:
+            on_execute_call(proc)
+        # Sleep if this is not the first try and we have a timeout interval
+        if shared_data[0] and interval:
+            exp = backoff_rate ** shared_data[0]
+            wait_for = max(0, interval * exp)
+            LOG.debug('Sleeping for %s seconds', wait_for)
+            time.sleep(wait_for)
+        # Increase the number of tries and start the timeout timer
+        shared_data[0] += 1
+        if timeout:
+            shared_data[2] = None
+            shared_data[1] = threading.Timer(timeout, on_timeout, (proc,))
+            shared_data[1].start()
+
+    def on_completion(proc):
+        # This is always called regardless of success or failure
+        # Cancel the timeout timer
+        if shared_data[1]:
+            shared_data[1].cancel()
+        # Call user's on_completion method
+        if on_completion_call:
+            on_completion_call(proc)
+
+    # We will be doing the wait ourselves in on_execute
+    if 'delay_on_retry' in kwargs:
+        interval = None
+    else:
+        kwargs['delay_on_retry'] = False
+        interval = kwargs.pop('interval', 1)
+        backoff_rate = kwargs.pop('backoff_rate', 2)
+
+    timeout = kwargs.pop('timeout', None)
+    sig_end = kwargs.pop('signal', signal.SIGTERM)
+    default_raise_timeout = kwargs.get('check_exit_code', True)
+    raise_timeout = kwargs.pop('raise_timeout', default_raise_timeout)
+
+    on_execute_call = kwargs.pop('on_execute', None)
+    on_completion_call = kwargs.pop('on_completion', None)
+
+    try:
+        return putils.execute(on_execute=on_execute,
+                              on_completion=on_completion, *cmd, **kwargs)
+    except putils.ProcessExecutionError:
+        # proc is only stored if a timeout happened
+        proc = shared_data[2]
+        if proc:
+            sanitized_cmd = strutils.mask_password(' '.join(cmd))
+            msg = ('Time out on proc %(pid)s after waiting %(time)s seconds '
+                   'when running %(cmd)s' %
+                   {'pid': proc.pid, 'time': timeout, 'cmd': sanitized_cmd})
+            LOG.debug(msg)
+            if raise_timeout:
+                raise exception.ExecutionTimeout(stdout='', stderr=msg,
+                                                 cmd=sanitized_cmd)
+            return '', msg
+        raise
 
 
 # Entrypoint used for rootwrap.py transition code.  Don't use this for
@@ -51,12 +163,11 @@ def execute(*cmd, **kwargs):
     """NB: Raises processutils.ProcessExecutionError on failure."""
     run_as_root = kwargs.pop('run_as_root', False)
     kwargs.pop('root_helper', None)
-
     try:
         if run_as_root:
             return execute_root(*cmd, **kwargs)
         else:
-            return putils.execute(*cmd, **kwargs)
+            return custom_execute(*cmd, **kwargs)
     except OSError as e:
         # Note:
         #  putils.execute('bogus', run_as_root=True)
@@ -79,4 +190,4 @@ def execute(*cmd, **kwargs):
 @privileged.default.entrypoint
 def execute_root(*cmd, **kwargs):
     """NB: Raises processutils.ProcessExecutionError/OSError on failure."""
-    return putils.execute(*cmd, shell=False, run_as_root=False, **kwargs)
+    return custom_execute(*cmd, shell=False, run_as_root=False, **kwargs)
