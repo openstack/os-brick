@@ -39,6 +39,9 @@ MULTIPATH_DEVICE_ACTIONS = ['unchanged:', 'reject:', 'reload:',
 
 
 class LinuxSCSI(executor.Executor):
+    # As found in drivers/scsi/scsi_lib.c
+    WWN_TYPES = {'t10.': '1', 'eui.': '2', 'naa.': '3'}
+
     def echo_scsi_command(self, path, content):
         """Used to echo strings to scsi subsystem."""
 
@@ -102,6 +105,41 @@ class LinuxSCSI(executor.Executor):
                     dev_info['host'] = item.replace('scsi', '')
 
         return dev_info
+
+    def get_sysfs_wwn(self, device_names):
+        """Return the wwid from sysfs in any of devices in udev format."""
+        wwid = self.get_sysfs_wwid(device_names)
+        glob_str = '/dev/disk/by-id/scsi-'
+        wwn_paths = glob.glob(glob_str + '*')
+        # If we don't have multiple designators on page 0x83
+        if wwid and glob_str + wwid in wwn_paths:
+            return wwid
+
+        # If we have multiple designators follow the symlinks
+        for wwn_path in wwn_paths:
+            try:
+                if os.path.islink(wwn_path) and os.stat(wwn_path):
+                    path = os.path.realpath(wwn_path)
+                    if path.startswith('/dev/') and path[5:] in device_names:
+                        return wwn_path[len(glob_str):]
+            except OSError:
+                continue
+        return ''
+
+    def get_sysfs_wwid(self, device_names):
+        """Return the wwid from sysfs in any of devices in udev format."""
+        for device_name in device_names:
+            try:
+                with open('/sys/block/%s/device/wwid' % device_name) as f:
+                    wwid = f.read().strip()
+            except IOError:
+                continue
+            # The sysfs wwid has the wwn type in string format as a prefix,
+            # but udev uses its numerical representation as returned by
+            # scsi_id's page 0x83, so we need to map it
+            udev_wwid = self.WWN_TYPES.get(wwid[:4], '8') + wwid[4:]
+            return udev_wwid
+        return ''
 
     def get_scsi_wwn(self, path):
         """Read the WWN from page 0x83 value for a SCSI device."""
@@ -186,9 +224,21 @@ class LinuxSCSI(executor.Executor):
 
         # Wait until the symlinks are removed
         with exc.context(force, 'Some devices remain from %s', devices_names):
-            self.wait_for_volumes_removal(devices_names)
-
+            try:
+                self.wait_for_volumes_removal(devices_names)
+            finally:
+                # Since we use /dev/disk/by-id/scsi- links to get the wwn we
+                # must ensure they are always removed.
+                self._remove_scsi_symlinks(devices_names)
         return multipath_name
+
+    def _remove_scsi_symlinks(self, devices_names):
+        devices = ['/dev/' + dev for dev in devices_names]
+        links = glob.glob('/dev/disk/by-id/scsi-*')
+        unlink = [link for link in links
+                  if os.path.realpath(link) in devices]
+        if unlink:
+            priv_rootwrap.unlink_root(no_errors=True, *unlink)
 
     def flush_device_io(self, device):
         """This is used to flush any remaining IO in the buffers."""
@@ -486,3 +536,82 @@ class LinuxSCSI(executor.Executor):
         else:
             return ("0x%04x%04x00000000" %
                     (lun_id & 0xffff, lun_id >> 16 & 0xffff))
+
+    def get_hctl(self, session, lun):
+        """Given an iSCSI session return the host, channel, target, and lun."""
+        glob_str = '/sys/class/iscsi_host/host*/device/session' + session
+        paths = glob.glob(glob_str + '/target*')
+        if paths:
+            __, channel, target = os.path.split(paths[0])[1].split(':')
+        # Check if we can get the host
+        else:
+            target = channel = '-'
+            paths = glob.glob(glob_str)
+
+        if not paths:
+            LOG.debug('No hctl found on session %s with lun %s', session, lun)
+            return None
+
+        # Extract the host number from the path
+        host = paths[0][26:paths[0].index('/', 26)]
+        res = (host, channel, target, lun)
+        LOG.debug('HCTL %s found on session %s with lun %s', res, session, lun)
+        return res
+
+    def device_name_by_hctl(self, session, hctl):
+        """Find the device name given a session and the hctl.
+
+        :param session: A string with the session number
+        "param hctl: An iterable with the host, channel, target, and lun as
+                     passed to scan.  ie: ('5', '-', '-', '0')
+        """
+        if '-' in hctl:
+            hctl = ['*' if x == '-' else x for x in hctl]
+        path = ('/sys/class/scsi_host/host%(h)s/device/session%(s)s/target'
+                '%(h)s:%(c)s:%(t)s/%(h)s:%(c)s:%(t)s:%(l)s/block/*' %
+                {'h': hctl[0], 'c': hctl[1], 't': hctl[2], 'l': hctl[3],
+                 's': session})
+        # Sort devices and return the first so we don't return a partition
+        devices = sorted(glob.glob(path))
+        device = os.path.split(devices[0])[1] if devices else None
+        LOG.debug('Searching for a device in session %s and hctl %s yield: %s',
+                  session, hctl, device)
+        return device
+
+    def scan_iscsi(self, host, channel='-', target='-', lun='-'):
+        """Send an iSCSI scan request given the host and optionally the ctl."""
+        LOG.debug('Scanning host %(host)s c: %(channel)s, '
+                  't: %(target)s, l: %(lun)s)',
+                  {'host': host, 'channel': channel,
+                   'target': target, 'lun': lun})
+        self.echo_scsi_command('/sys/class/scsi_host/host%s/scan' % host,
+                               '%(c)s %(t)s %(l)s' % {'c': channel,
+                                                      't': target,
+                                                      'l': lun})
+
+    def multipath_add_wwid(self, wwid):
+        """Add a wwid to the list of know multipath wwids.
+
+        This has the effect of multipathd being willing to create a dm for a
+        multipath even when there's only 1 device.
+        """
+        out, err = self._execute('multipath', '-a', wwid,
+                                 run_as_root=True,
+                                 check_exit_code=False,
+                                 root_helper=self._root_helper)
+        return out.strip() == "wwid '" + wwid + "' added"
+
+    def multipath_add_path(self, realpath):
+        """Add a path to multipathd for monitoring.
+
+        This has the effect of multipathd checking an already checked device
+        for multipath.
+
+        Together with `multipath_add_wwid` we can create a multipath when
+        there's only 1 path.
+        """
+        stdout, stderr = self._execute('multipathd', 'add', 'path', realpath,
+                                       run_as_root=True, timeout=5,
+                                       check_exit_code=False,
+                                       root_helper=self._root_helper)
+        return stdout.strip() == 'ok'

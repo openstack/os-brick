@@ -12,19 +12,14 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 import collections
-import glob
 import mock
 import os
-import testtools
-import time
 
 import ddt
 from oslo_concurrency import processutils as putils
 
 from os_brick import exception
-from os_brick.initiator.connectors import base
 from os_brick.initiator.connectors import iscsi
-from os_brick.initiator import host_driver
 from os_brick.initiator import linuxscsi
 from os_brick.privileged import rootwrap as priv_rootwrap
 from os_brick.tests.initiator import test_connector
@@ -141,6 +136,41 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
                     ('ip2:port2', 'tgt2'): ({'sdb'}, {'sdc'}),
                     ('ip3:port3', 'tgt3'): (set(), set())}
         self.assertDictEqual(expected, res)
+
+    @mock.patch('glob.glob')
+    @mock.patch.object(iscsi.ISCSIConnector, '_get_iscsi_sessions_full')
+    @mock.patch.object(iscsi.ISCSIConnector, '_get_iscsi_nodes')
+    def test_get_connection_devices_with_iqns(self, nodes_mock, sessions_mock,
+                                              glob_mock):
+        ips_iqns_luns = self.connector._get_all_targets(self.CON_PROPS)
+
+        # List sessions from other targets and non tcp sessions
+        sessions_mock.return_value = [
+            ('non-tcp:', '0', 'ip1:port1', '1', 'tgt1'),
+            ('tcp:', '1', 'ip1:port1', '1', 'tgt1'),
+            ('tcp:', '2', 'ip2:port2', '-1', 'tgt2'),
+            ('tcp:', '3', 'ip1:port1', '1', 'tgt4'),
+            ('tcp:', '4', 'ip2:port2', '-1', 'tgt5')]
+        # List 1 node without sessions
+        nodes_mock.return_value = [('ip1:port1', 'tgt1'),
+                                   ('ip2:port2', 'tgt2'),
+                                   ('ip3:port3', 'tgt3')]
+        sys_cls = '/sys/class/scsi_host/host'
+        glob_mock.side_effect = [
+            [sys_cls + '1/device/session1/target6/1:2:6:4/block/sda',
+             sys_cls + '1/device/session1/target6/1:2:6:4/block/sda1'],
+            [sys_cls + '2/device/session2/target7/2:2:7:5/block/sdb',
+             sys_cls + '2/device/session2/target7/2:2:7:4/block/sdc'],
+        ]
+        with mock.patch.object(iscsi.ISCSIConnector,
+                               '_get_all_targets') as get_targets_mock:
+            res = self.connector._get_connection_devices(mock.sentinel.props,
+                                                         ips_iqns_luns)
+        expected = {('ip1:port1', 'tgt1'): ({'sda'}, set()),
+                    ('ip2:port2', 'tgt2'): ({'sdb'}, {'sdc'}),
+                    ('ip3:port3', 'tgt3'): (set(), set())}
+        self.assertDictEqual(expected, res)
+        get_targets_mock.assert_not_called()
 
     def generate_device(self, location, iqn, transport=None, lun=1):
         dev_format = "ip-%s-iscsi-%s-lun-%s" % (location, iqn, lun)
@@ -264,10 +294,9 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
 
         fake_path = ("/dev/disk/by-path/ip-%(ip)s-iscsi-%(iqn)s-lun-%(lun)s" %
                      {'ip': '10.0.2.15', 'iqn': iqn, 'lun': 1})
-        fake_props = {}
         fake_devices = [fake_path]
         expected = fake_devices
-        mock_potential_paths.return_value = (fake_devices, fake_props)
+        mock_potential_paths.return_value = fake_devices
 
         connection_properties = self.iscsi_connection(vol, [location],
                                                       [iqn])
@@ -336,129 +365,53 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
                            'multipath_id': FAKE_SCSI_WWN}
         self.assertEqual(expected_result, result)
 
-    @mock.patch('time.sleep', mock.Mock())
-    @mock.patch.object(iscsi.ISCSIConnector, 'disconnect_volume')
-    def _test_connect_volume(self, extra_props, additional_commands,
-                             disconnect_vol_mock, transport=None):
-        # for making sure the /dev/disk/by-path is gone
-        exists_mock = mock.Mock()
-        exists_mock.return_value = True
-        os.path.exists = exists_mock
+    @mock.patch.object(iscsi.ISCSIConnector, '_cleanup_connection')
+    @mock.patch.object(iscsi.ISCSIConnector, '_connect_multipath_volume')
+    @mock.patch.object(iscsi.ISCSIConnector, '_connect_single_volume')
+    def test_connect_volume_mp(self, con_single_mock, con_mp_mock, clean_mock):
+        self.connector.use_multipath = True
+        res = self.connector.connect_volume(self.CON_PROPS)
+        self.assertEqual(con_mp_mock.return_value, res)
+        con_single_mock.assert_not_called()
+        con_mp_mock.assert_called_once_with(self.CON_PROPS)
+        clean_mock.assert_not_called()
 
-        vol = {'id': 1, 'name': self._name}
-        connection_info = self.iscsi_connection(vol, self._location, self._iqn)
-        for key, value in extra_props.items():
-            connection_info['data'][key] = value
-        if transport is not None:
-            dev_list = self.generate_device(self._location, self._iqn,
-                                            transport)
-            with mock.patch.object(glob, 'glob', return_value=[dev_list]):
-                device = self.connector.connect_volume(connection_info['data'])
-        else:
-            device = self.connector.connect_volume(connection_info['data'])
+    @mock.patch.object(iscsi.ISCSIConnector, '_cleanup_connection')
+    @mock.patch.object(iscsi.ISCSIConnector, '_connect_multipath_volume')
+    @mock.patch.object(iscsi.ISCSIConnector, '_connect_single_volume')
+    def test_connect_volume_mp_failure(self, con_single_mock, con_mp_mock,
+                                       clean_mock):
+        self.connector.use_multipath = True
+        con_mp_mock.side_effect = exception.BrickException
+        self.assertRaises(exception.BrickException,
+                          self.connector.connect_volume, self.CON_PROPS)
+        con_single_mock.assert_not_called()
+        con_mp_mock.assert_called_once_with(self.CON_PROPS)
+        clean_mock.assert_called_once_with(self.CON_PROPS, force=True)
 
-        dev_str = self.generate_device(self._location, self._iqn, transport)
-        self.assertEqual(device['type'], 'block')
-        self.assertEqual(device['path'], dev_str)
+    @mock.patch.object(iscsi.ISCSIConnector, '_cleanup_connection')
+    @mock.patch.object(iscsi.ISCSIConnector, '_connect_multipath_volume')
+    @mock.patch.object(iscsi.ISCSIConnector, '_connect_single_volume')
+    def test_connect_volume_sp(self, con_single_mock, con_mp_mock, clean_mock):
+        self.connector.use_multipath = False
+        res = self.connector.connect_volume(self.CON_PROPS)
+        self.assertEqual(con_single_mock.return_value, res)
+        con_mp_mock.assert_not_called()
+        con_single_mock.assert_called_once_with(self.CON_PROPS)
+        clean_mock.assert_not_called()
 
-        self.count = 0
-
-        # Disconnect has its own tests, should not be tested here
-        expected_commands = [
-            ('iscsiadm -m node -T %s -p %s' % (self._iqn, self._location)),
-            ('iscsiadm -m session'),
-            ('iscsiadm -m node -T %s -p %s --login' % (self._iqn,
-                                                       self._location)),
-            ('iscsiadm -m node -T %s -p %s --op update'
-             ' -n node.startup -v automatic' % (self._iqn,
-                                                self._location)),
-            ('/lib/udev/scsi_id --page 0x83 --whitelisted %s' % dev_str),
-        ] + additional_commands
-
-        self.assertEqual(expected_commands, self.cmds)
-
-    @testtools.skipUnless(os.path.exists('/dev/disk/by-path'),
-                          'Test requires /dev/disk/by-path')
-    def test_connect_volume(self):
-        self._test_connect_volume({}, [])
-
-    @testtools.skipUnless(os.path.exists('/dev/disk/by-path'),
-                          'Test requires /dev/disk/by-path')
-    @mock.patch.object(iscsi.ISCSIConnector, '_get_transport')
-    def test_connect_volume_with_transport(self, mock_transport):
-        mock_transport.return_value = 'fake_transport'
-        self._test_connect_volume({}, [], transport='fake_transport')
-
-    @testtools.skipUnless(os.path.exists('/dev/disk/by-path'),
-                          'Test requires /dev/disk/by-path')
-    @mock.patch('os.path.exists', side_effect=(True,) * 4 + (False, False))
-    @mock.patch.object(iscsi.ISCSIConnector, '_run_iscsiadm')
-    def test_connect_volume_with_alternative_targets_primary_error(
-            self, mock_iscsiadm, mock_exists):
-        location2 = '[2001:db8::1]:3260'
-        dev_loc2 = '2001:db8::1:3260'  # udev location2
-        iqn2 = 'iqn.2010-10.org.openstack:%s-2' % self._name
-        vol = {'id': 1, 'name': self._name}
-        connection_info = self.iscsi_connection(vol, self._location, self._iqn)
-        connection_info['data']['target_portals'] = [self._location, location2]
-        connection_info['data']['target_iqns'] = [self._iqn, iqn2]
-        connection_info['data']['target_luns'] = [self._lun, 2]
-        dev_str2 = '/dev/disk/by-path/ip-%s-iscsi-%s-lun-2' % (dev_loc2, iqn2)
-
-        def fake_run_iscsiadm(iscsi_properties, iscsi_command, **kwargs):
-            if iscsi_properties['target_portal'] == self._location:
-                if iscsi_command == ('--login',):
-                    raise putils.ProcessExecutionError(None, None, 21)
-            return mock.DEFAULT
-
-        mock_iscsiadm.side_effect = fake_run_iscsiadm
-        mock_exists.side_effect = lambda x: x == dev_str2
-        device = self.connector.connect_volume(connection_info['data'])
-        self.assertEqual('block', device['type'])
-        self.assertEqual(dev_str2, device['path'])
-        props = connection_info['data'].copy()
-        for key in ('target_portals', 'target_iqns', 'target_luns'):
-            props.pop(key, None)
-        props['target_portal'] = location2
-        props['target_iqn'] = iqn2
-        props['target_lun'] = 2
-        mock_iscsiadm.assert_any_call(props, ('--login',),
-                                      check_exit_code=[0, 255])
-
-    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_scsi_wwn')
-    @mock.patch.object(iscsi.ISCSIConnector, '_run_iscsiadm_bare')
-    @mock.patch.object(iscsi.ISCSIConnector,
-                       '_get_target_portals_from_iscsiadm_output')
-    @mock.patch.object(iscsi.ISCSIConnector, '_connect_to_iscsi_portal')
-    @mock.patch.object(iscsi.ISCSIConnector, '_rescan_iscsi')
-    @mock.patch.object(os.path, 'exists', return_value=True)
-    @mock.patch.object(base.BaseLinuxConnector, '_discover_mpath_device')
-    def test_connect_volume_with_multipath(
-            self, mock_discover_mpath_device, exists_mock,
-            rescan_iscsi_mock, connect_to_mock,
-            portals_mock, iscsiadm_mock, mock_iscsi_wwn):
-        mock_iscsi_wwn.return_value = test_connector.FAKE_SCSI_WWN
-        location = '10.0.2.15:3260'
-        name = 'volume-00000001'
-        iqn = 'iqn.2010-10.org.openstack:%s' % name
-        vol = {'id': 1, 'name': name}
-        connection_properties = self.iscsi_connection(vol, location, iqn)
-        mock_discover_mpath_device.return_value = (
-            'iqn.2010-10.org.openstack:%s' % name,
-            test_connector.FAKE_SCSI_WWN)
-
-        self.connector_with_multipath = \
-            iscsi.ISCSIConnector(None, use_multipath=True)
-        iscsiadm_mock.return_value = "%s %s" % (location, iqn)
-        portals_mock.return_value = ([location], [iqn])
-
-        result = self.connector_with_multipath.connect_volume(
-            connection_properties['data'])
-        expected_result = {'multipath_id': test_connector.FAKE_SCSI_WWN,
-                           'path': 'iqn.2010-10.org.openstack:volume-00000001',
-                           'type': 'block',
-                           'scsi_wwn': test_connector.FAKE_SCSI_WWN}
-        self.assertEqual(expected_result, result)
+    @mock.patch.object(iscsi.ISCSIConnector, '_cleanup_connection')
+    @mock.patch.object(iscsi.ISCSIConnector, '_connect_multipath_volume')
+    @mock.patch.object(iscsi.ISCSIConnector, '_connect_single_volume')
+    def test_connect_volume_sp_failure(self, con_single_mock, con_mp_mock,
+                                       clean_mock):
+        self.connector.use_multipath = False
+        con_single_mock.side_effect = exception.BrickException
+        self.assertRaises(exception.BrickException,
+                          self.connector.connect_volume, self.CON_PROPS)
+        con_mp_mock.assert_not_called()
+        con_single_mock.assert_called_once_with(self.CON_PROPS)
+        clean_mock.assert_called_once_with(self.CON_PROPS, force=True)
 
     def test_discover_iscsi_portals(self):
         location = '10.0.2.15:3260'
@@ -549,229 +502,6 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
                           self.connector_with_multipath.connect_volume,
                           connection_properties['data'])
 
-    @mock.patch.object(iscsi.ISCSIConnector,
-                       '_get_hosts_channels_targets_luns', return_value=[])
-    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_scsi_wwn')
-    @mock.patch('os.path.exists', side_effect=(True,) * 7 + (False, False))
-    @mock.patch.object(host_driver.HostDriver, 'get_all_block_devices')
-    @mock.patch.object(iscsi.ISCSIConnector, '_run_multipath')
-    @mock.patch.object(base.BaseLinuxConnector, '_discover_mpath_device')
-    @mock.patch.object(linuxscsi.LinuxSCSI, 'process_lun_id')
-    def test_connect_volume_with_multiple_portals(
-            self, mock_process_lun_id, mock_discover_mpath_device,
-            mock_run_multipath, mock_devices, mock_exists, mock_scsi_wwn,
-            mock_get_htcls):
-        mock_scsi_wwn.return_value = test_connector.FAKE_SCSI_WWN
-        location2 = '[2001:db8::1]:3260'
-        dev_loc2 = '2001:db8::1:3260'  # udev location2
-        name2 = 'volume-00000001-2'
-        iqn2 = 'iqn.2010-10.org.openstack:%s' % name2
-        lun2 = 2
-
-        fake_multipath_dev = '/dev/mapper/fake-multipath-dev'
-        vol = {'id': 1, 'name': self._name}
-        connection_properties = self.iscsi_connection_multipath(
-            vol, [self._location, location2], [self._iqn, iqn2], [self._lun,
-                                                                  lun2])
-        devs = ['/dev/disk/by-path/ip-%s-iscsi-%s-lun-1' % (self._location,
-                                                            self._iqn),
-                '/dev/disk/by-path/ip-%s-iscsi-%s-lun-2' % (dev_loc2, iqn2)]
-        mock_devices.return_value = devs
-        # mock_iscsi_devices.return_value = devs
-        # mock_get_iqn.return_value = [self._iqn, iqn2]
-        mock_discover_mpath_device.return_value = (
-            fake_multipath_dev, test_connector.FAKE_SCSI_WWN)
-        mock_process_lun_id.return_value = [self._lun, lun2]
-
-        result = self.connector_with_multipath.connect_volume(
-            connection_properties['data'])
-        expected_result = {'multipath_id': test_connector.FAKE_SCSI_WWN,
-                           'path': fake_multipath_dev, 'type': 'block',
-                           'scsi_wwn': test_connector.FAKE_SCSI_WWN}
-        cmd_format = 'iscsiadm -m node -T %s -p %s --%s'
-        expected_commands = [cmd_format % (self._iqn, self._location, 'login'),
-                             cmd_format % (iqn2, location2, 'login')]
-        self.assertEqual(expected_result, result)
-        for command in expected_commands:
-            self.assertIn(command, self.cmds)
-
-        mock_get_htcls.assert_called_once_with([(self._location, self._iqn,
-                                                 self._lun),
-                                                (location2, iqn2, lun2)])
-
-    @mock.patch.object(iscsi.ISCSIConnector,
-                       '_get_hosts_channels_targets_luns', return_value=[])
-    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_scsi_wwn')
-    @mock.patch.object(os.path, 'exists')
-    @mock.patch.object(host_driver.HostDriver, 'get_all_block_devices')
-    @mock.patch.object(iscsi.ISCSIConnector, '_run_multipath')
-    @mock.patch.object(iscsi.ISCSIConnector, '_run_iscsiadm')
-    @mock.patch.object(base.BaseLinuxConnector, '_discover_mpath_device')
-    @mock.patch.object(linuxscsi.LinuxSCSI, 'process_lun_id')
-    def test_connect_volume_with_multiple_portals_primary_error(
-            self, mock_process_lun_id, mock_discover_mpath_device,
-            mock_iscsiadm, mock_run_multipath, mock_devices, mock_exists,
-            mock_scsi_wwn, mock_get_htcls):
-        mock_scsi_wwn.return_value = test_connector.FAKE_SCSI_WWN
-        location1 = '10.0.2.15:3260'
-        location2 = '[2001:db8::1]:3260'
-        dev_loc2 = '2001:db8::1:3260'  # udev location2
-        name1 = 'volume-00000001-1'
-        name2 = 'volume-00000001-2'
-        iqn1 = 'iqn.2010-10.org.openstack:%s' % name1
-        iqn2 = 'iqn.2010-10.org.openstack:%s' % name2
-        fake_multipath_dev = '/dev/mapper/fake-multipath-dev'
-        vol = {'id': 1, 'name': name1}
-        connection_properties = self.iscsi_connection_multipath(
-            vol, [location1, location2], [iqn1, iqn2], [1, 2])
-        dev1 = '/dev/disk/by-path/ip-%s-iscsi-%s-lun-1' % (location1, iqn1)
-        dev2 = '/dev/disk/by-path/ip-%s-iscsi-%s-lun-2' % (dev_loc2, iqn2)
-
-        def fake_run_iscsiadm(iscsi_properties, iscsi_command, **kwargs):
-            if iscsi_properties['target_portal'] == location1:
-                if iscsi_command == ('--login',):
-                    raise putils.ProcessExecutionError(None, None, 21)
-            return mock.DEFAULT
-
-        mock_exists.side_effect = lambda x: x != dev1
-        mock_devices.return_value = [dev2]
-        mock_iscsiadm.side_effect = fake_run_iscsiadm
-
-        mock_discover_mpath_device.return_value = (
-            fake_multipath_dev, test_connector.FAKE_SCSI_WWN)
-        mock_process_lun_id.return_value = [1, 2]
-
-        props = connection_properties['data'].copy()
-        result = self.connector_with_multipath.connect_volume(
-            connection_properties['data'])
-
-        expected_result = {'multipath_id': test_connector.FAKE_SCSI_WWN,
-                           'path': fake_multipath_dev, 'type': 'block',
-                           'scsi_wwn': test_connector.FAKE_SCSI_WWN}
-        self.assertEqual(expected_result, result)
-        props['target_portal'] = location1
-        props['target_iqn'] = iqn1
-        mock_iscsiadm.assert_any_call(props, ('--login',),
-                                      check_exit_code=[0, 255])
-        props['target_portal'] = location2
-        props['target_iqn'] = iqn2
-        mock_iscsiadm.assert_any_call(props, ('--login',),
-                                      check_exit_code=[0, 255])
-
-        lun1, lun2 = connection_properties['data']['target_luns']
-        mock_get_htcls.assert_called_once_with([(location1, iqn1, lun1),
-                                               (location2, iqn2, lun2)])
-
-    @mock.patch.object(iscsi.ISCSIConnector,
-                       '_get_hosts_channels_targets_luns', return_value=[])
-    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_scsi_wwn')
-    @mock.patch.object(os.path, 'exists', return_value=True)
-    @mock.patch.object(iscsi.ISCSIConnector,
-                       '_get_target_portals_from_iscsiadm_output')
-    @mock.patch.object(iscsi.ISCSIConnector, '_connect_to_iscsi_portal')
-    @mock.patch.object(host_driver.HostDriver, 'get_all_block_devices')
-    @mock.patch.object(iscsi.ISCSIConnector, '_run_multipath')
-    @mock.patch.object(base.BaseLinuxConnector, '_discover_mpath_device')
-    def test_connect_volume_with_multipath_connecting(
-            self, mock_discover_mpath_device, mock_run_multipath,
-            mock_devices,
-            mock_connect, mock_portals, mock_exists, mock_scsi_wwn,
-            mock_get_htcls):
-        mock_scsi_wwn.return_value = test_connector.FAKE_SCSI_WWN
-        location1 = '10.0.2.15:3260'
-        location2 = '[2001:db8::1]:3260'
-        dev_loc2 = '2001:db8::1:3260'  # udev location2
-        name1 = 'volume-00000001-1'
-        name2 = 'volume-00000001-2'
-        iqn1 = 'iqn.2010-10.org.openstack:%s' % name1
-        iqn2 = 'iqn.2010-10.org.openstack:%s' % name2
-        fake_multipath_dev = '/dev/mapper/fake-multipath-dev'
-        vol = {'id': 1, 'name': name1}
-        connection_properties = self.iscsi_connection(vol, location1, iqn1)
-        devs = ['/dev/disk/by-path/ip-%s-iscsi-%s-lun-1' % (location1, iqn1),
-                '/dev/disk/by-path/ip-%s-iscsi-%s-lun-2' % (dev_loc2, iqn2)]
-        mock_devices.return_value = devs
-        mock_portals.return_value = ([location1, location2, location2],
-                                     [iqn1, iqn1, iqn2])
-        mock_discover_mpath_device.return_value = (
-            fake_multipath_dev, test_connector.FAKE_SCSI_WWN)
-
-        result = self.connector_with_multipath.connect_volume(
-            connection_properties['data'])
-        expected_result = {'multipath_id': test_connector.FAKE_SCSI_WWN,
-                           'path': fake_multipath_dev, 'type': 'block',
-                           'scsi_wwn': test_connector.FAKE_SCSI_WWN}
-        props1 = connection_properties['data'].copy()
-        props2 = connection_properties['data'].copy()
-        locations = list(set([location1, location2]))  # order may change
-        props1['target_portal'] = locations[0]
-        props2['target_portal'] = locations[1]
-        expected_calls = [mock.call(props1), mock.call(props2)]
-        self.assertEqual(expected_result, result)
-        mock_connect.assert_has_calls(expected_calls, any_order=True)
-        self.assertEqual(len(expected_calls), mock_connect.call_count)
-        lun = connection_properties['data']['target_lun']
-        self.assertEqual(1, mock_get_htcls.call_count)
-        # Order of elements in the list is randomized because it comes from
-        # a set.
-        self.assertSetEqual({(location1, iqn1, lun), (location2, iqn1, lun)},
-                            set(mock_get_htcls.call_args[0][0]))
-
-    @mock.patch('retrying.time.sleep', mock.Mock())
-    @mock.patch.object(os.path, 'exists', return_value=True)
-    @mock.patch.object(iscsi.ISCSIConnector,
-                       '_get_target_portals_from_iscsiadm_output')
-    @mock.patch.object(iscsi.ISCSIConnector, '_connect_to_iscsi_portal')
-    @mock.patch.object(host_driver.HostDriver, 'get_all_block_devices')
-    @mock.patch.object(iscsi.ISCSIConnector, '_run_multipath')
-    def test_connect_volume_multipath_failed_iscsi_login(
-            self, mock_run_multipath, mock_devices, mock_connect, mock_portals,
-            mock_exists):
-        location1 = '10.0.2.15:3260'
-        location2 = '10.0.3.15:3260'
-        name1 = 'volume-00000001-1'
-        name2 = 'volume-00000001-2'
-        iqn1 = 'iqn.2010-10.org.openstack:%s' % name1
-        iqn2 = 'iqn.2010-10.org.openstack:%s' % name2
-        vol = {'id': 1, 'name': name1}
-        connection_properties = self.iscsi_connection(vol, location1, iqn1)
-        devs = ['/dev/disk/by-path/ip-%s-iscsi-%s-lun-1' % (location1, iqn1),
-                '/dev/disk/by-path/ip-%s-iscsi-%s-lun-2' % (location2, iqn2)]
-        mock_devices.return_value = devs
-        mock_portals.return_value = ([location1, location2, location2],
-                                     [iqn1, iqn1, iqn2])
-
-        mock_connect.return_value = False
-        self.assertRaises(exception.FailedISCSITargetPortalLogin,
-                          self.connector_with_multipath.connect_volume,
-                          connection_properties['data'])
-
-    @mock.patch.object(iscsi.ISCSIConnector, '_connect_to_iscsi_portal')
-    def test_connect_volume_failed_iscsi_login(self, mock_connect):
-        location1 = '10.0.2.15:3260'
-        name1 = 'volume-00000001-1'
-        iqn1 = 'iqn.2010-10.org.openstack:%s' % name1
-        vol = {'id': 1, 'name': name1}
-        connection_properties = self.iscsi_connection(vol, location1, iqn1)
-
-        mock_connect.return_value = False
-        self.assertRaises(exception.FailedISCSITargetPortalLogin,
-                          self.connector.connect_volume,
-                          connection_properties['data'])
-
-    @mock.patch.object(time, 'sleep')
-    @mock.patch.object(os.path, 'exists', return_value=False)
-    def test_connect_volume_with_not_found_device(self, exists_mock,
-                                                  sleep_mock):
-        location = '10.0.2.15:3260'
-        name = 'volume-00000001'
-        iqn = 'iqn.2010-10.org.openstack:%s' % name
-        vol = {'id': 1, 'name': name}
-        connection_info = self.iscsi_connection(vol, location, iqn)
-        self.assertRaises(exception.VolumeDeviceNotFound,
-                          self.connector.connect_volume,
-                          connection_info['data'])
-
     def test_get_target_portals_from_iscsiadm_output(self):
         connector = self.connector
         test_output = '''10.15.84.19:3260 iqn.1992-08.com.netapp:sn.33615311
@@ -783,13 +513,25 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
         expected = (ips, iqns)
         self.assertEqual(expected, res)
 
+    @mock.patch.object(iscsi.ISCSIConnector, '_cleanup_connection')
+    def test_disconnect_volume(self, cleanup_mock):
+        res = self.connector.disconnect_volume(mock.sentinel.con_props,
+                                               mock.sentinel.dev_info,
+                                               mock.sentinel.Force,
+                                               mock.sentinel.ignore_errors)
+        self.assertEqual(cleanup_mock.return_value, res)
+        cleanup_mock.assert_called_once_with(
+            mock.sentinel.con_props,
+            force=mock.sentinel.Force,
+            ignore_errors=mock.sentinel.ignore_errors)
+
     @mock.patch.object(iscsi.ISCSIConnector, '_disconnect_connection')
     @mock.patch.object(iscsi.ISCSIConnector, '_get_connection_devices')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'flush_multipath_device')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'remove_connection',
                        return_value=None)
-    def test_disconnect_volume(self, remove_mock, flush_mock, con_devs_mock,
-                               discon_mock):
+    def test_cleanup_connection(self, remove_mock, flush_mock, con_devs_mock,
+                                discon_mock):
         # Return an ordered dicts instead of normal dict for discon_mock.assert
         con_devs_mock.return_value = collections.OrderedDict((
             (('ip1:port1', 'tgt1'), ({'sda'}, set())),
@@ -798,10 +540,12 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
 
         with mock.patch.object(self.connector,
                                'use_multipath') as use_mp_mock:
-            self.connector.disconnect_volume(self.CON_PROPS,
-                                             mock.sentinel.dev_info)
+            self.connector._cleanup_connection(
+                self.CON_PROPS, ips_iqns_luns=mock.sentinel.ips_iqns_luns,
+                force=False, ignore_errors=False)
 
-        con_devs_mock.assert_called_once_with(self.CON_PROPS)
+        con_devs_mock.assert_called_once_with(self.CON_PROPS,
+                                              mock.sentinel.ips_iqns_luns)
         remove_mock.assert_called_once_with({'sda', 'sdb'}, use_mp_mock,
                                             False, mock.ANY)
         discon_mock.assert_called_once_with(
@@ -819,8 +563,9 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(linuxscsi.LinuxSCSI, 'flush_multipath_device')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'remove_connection',
                        return_value=mock.sentinel.mp_name)
-    def test_disconnect_volume_force_failure(self, remove_mock, flush_mock,
-                                             con_devs_mock, discon_mock):
+    def test_cleanup_connection_force_failure(self, remove_mock, flush_mock,
+                                              con_devs_mock, discon_mock):
+
         # Return an ordered dicts instead of normal dict for discon_mock.assert
         con_devs_mock.return_value = collections.OrderedDict((
             (('ip1:port1', 'tgt1'), ({'sda'}, set())),
@@ -830,11 +575,13 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
         with mock.patch.object(self.connector, 'use_multipath',
                                wraps=True) as use_mp_mock:
             self.assertRaises(exception.ExceptionChainer,
-                              self.connector.disconnect_volume,
-                              self.CON_PROPS, mock.sentinel.dev_info,
-                              mock.sentinel.force, ignore_errors=False)
+                              self.connector._cleanup_connection,
+                              self.CON_PROPS,
+                              ips_iqns_luns=mock.sentinel.ips_iqns_luns,
+                              force=mock.sentinel.force, ignore_errors=False)
 
-        con_devs_mock.assert_called_once_with(self.CON_PROPS)
+        con_devs_mock.assert_called_once_with(self.CON_PROPS,
+                                              mock.sentinel.ips_iqns_luns)
         remove_mock.assert_called_once_with({'sda', 'sdb'}, use_mp_mock,
                                             mock.sentinel.force, mock.ANY)
         discon_mock.assert_called_once_with(
@@ -1020,128 +767,471 @@ Setting up iSCSI targets: unused
         actual = self.connector.get_all_available_volumes()
         self.assertItemsEqual(expected, actual)
 
-    @mock.patch.object(iscsi.ISCSIConnector, '_discover_iscsi_portals')
-    def test_get_potential_paths_failure_mpath_single_target(self,
-                                                             mock_discover):
-        connection_properties = {
-            'target_portal': '10.0.2.15:3260'
-        }
+    @mock.patch.object(iscsi.ISCSIConnector, '_get_device_path')
+    def test_get_potential_paths_mpath(self, get_path_mock):
         self.connector.use_multipath = True
-        mock_discover.side_effect = exception.BrickException()
-        self.assertRaises(exception.TargetPortalNotFound,
-                          self.connector._get_potential_volume_paths,
-                          connection_properties)
+        res = self.connector._get_potential_volume_paths(self.CON_PROPS)
+        get_path_mock.assert_called_once_with(self.CON_PROPS)
+        self.assertEqual(get_path_mock.return_value, res)
+        self.assertEqual([], self.cmds)
+
+    @mock.patch.object(iscsi.ISCSIConnector, '_get_iscsi_sessions')
+    @mock.patch.object(iscsi.ISCSIConnector, '_get_device_path')
+    def test_get_potential_paths_single_path(self, get_path_mock,
+                                             get_sessions_mock):
+        get_path_mock.side_effect = [['path1'], ['path2'], ['path3', 'path4']]
+        get_sessions_mock.return_value = [
+            ('tcp:', 'session1', 'ip1:port1', '1', 'tgt1'),
+            ('tcp:', 'session2', 'ip2:port2', '-1', 'tgt2'),
+            ('tcp:', 'session3', 'ip3:port3', '1', 'tgt3')]
+
+        self.connector.use_multipath = False
+        res = self.connector._get_potential_volume_paths(self.CON_PROPS)
+        self.assertEqual({'path1', 'path2', 'path3', 'path4'}, set(res))
+        get_sessions_mock.assert_called_once_with()
 
     @mock.patch.object(iscsi.ISCSIConnector, '_discover_iscsi_portals')
-    def test_get_potential_paths_failure_mpath_multi_target(self,
-                                                            mock_discover):
-        connection_properties = {
-            'target_portals': ['10.0.2.15:3260', '10.0.3.15:3260']
-        }
-        self.connector.use_multipath = True
-        mock_discover.side_effect = exception.BrickException()
-        self.assertRaises(exception.TargetPortalsNotFound,
-                          self.connector._get_potential_volume_paths,
-                          connection_properties)
+    def test_get_ips_iqns_luns_with_target_iqns(self, discover_mock):
+        res = self.connector._get_ips_iqns_luns(self.CON_PROPS)
+        self.assertEqual(discover_mock.return_value, res)
 
-    @mock.patch.object(iscsi.ISCSIConnector,
-                       '_get_hosts_channels_targets_luns')
-    def test_rescan_iscsi_no_hctls(self, mock_get_htcls):
-        mock_get_htcls.side_effect = exception.HostChannelsTargetsNotFound(
-            iqns=['iqn1', 'iqn2'], found=[])
-        with mock.patch.object(self.connector, '_linuxscsi') as mock_linuxscsi:
-            self.connector._rescan_iscsi(mock.sentinel.input)
-            mock_linuxscsi.echo_scsi_command.assert_not_called()
-        mock_get_htcls.assert_called_once_with(mock.sentinel.input)
+    @mock.patch.object(iscsi.ISCSIConnector, '_discover_iscsi_portals')
+    def test_get_ips_iqns_luns_no_target_iqns_share_iqn(self, discover_mock):
+        con_props = {'volume_id': 'vol_id',
+                     'target_portal': 'ip1:port1',
+                     'target_iqn': 'tgt1',
+                     'target_lun': '1'}
+        discover_mock.return_value = [('ip1:port1', 'tgt1', '1'),
+                                      ('ip1:port1', 'tgt2', '1'),
+                                      ('ip2:port2', 'tgt1', '2'),
+                                      ('ip2:port2', 'tgt2', '2')]
+        res = self.connector._get_ips_iqns_luns(con_props)
+        expected = {('ip1:port1', 'tgt1', '1'),
+                    ('ip2:port2', 'tgt1', '2')}
+        self.assertEqual(expected, set(res))
 
-    @mock.patch.object(iscsi.ISCSIConnector,
-                       '_get_hosts_channels_targets_luns')
-    def test_rescan_iscsi_partial_hctls(self, mock_get_htcls):
-        mock_get_htcls.side_effect = exception.HostChannelsTargetsNotFound(
-            iqns=['iqn1'], found=[('h', 'c', 't', 'l')])
-        with mock.patch.object(self.connector, '_linuxscsi') as mock_linuxscsi:
-            self.connector._rescan_iscsi(mock.sentinel.input)
-            mock_linuxscsi.echo_scsi_command.assert_called_once_with(
-                'h/scan', 'c t l')
-        mock_get_htcls.assert_called_once_with(mock.sentinel.input)
+    @mock.patch.object(iscsi.ISCSIConnector, '_discover_iscsi_portals')
+    def test_get_ips_iqns_luns_no_target_iqns_diff_iqn(self, discover_mock):
+        con_props = {'volume_id': 'vol_id',
+                     'target_portal': 'ip1:port1',
+                     'target_iqn': 'tgt1',
+                     'target_lun': '1'}
+        discover_mock.return_value = [('ip1:port1', 'tgt1', '1'),
+                                      ('ip2:port2', 'tgt2', '2')]
+        res = self.connector._get_ips_iqns_luns(con_props)
+        self.assertEqual(discover_mock.return_value, res)
 
-    @mock.patch.object(iscsi.ISCSIConnector,
-                       '_get_hosts_channels_targets_luns')
-    @mock.patch.object(iscsi.ISCSIConnector, '_run_iscsiadm_bare')
-    def test_rescan_iscsi_hctls(self, mock_iscsiadm, mock_get_htcls):
-        mock_get_htcls.return_value = [
-            ('/sys/class/iscsi_host/host4', '0', '0', '1'),
-            ('/sys/class/iscsi_host/host5', '0', '0', '2'),
+    @mock.patch.object(iscsi.ISCSIConnector, '_get_iscsi_sessions_full')
+    def test_connect_to_iscsi_portal_all_new(self, get_sessions_mock):
+        """Connect creating node and session."""
+        session = 'session2'
+        get_sessions_mock.side_effect = [
+            [('tcp:', 'session1', 'ip1:port1', '1', 'tgt')],
+            [('tcp:', 'session1', 'ip1:port1', '1', 'tgt'),
+             ('tcp:', session, 'ip1:port1', '-1', 'tgt1')]
         ]
-
-        with mock.patch.object(self.connector, '_linuxscsi') as mock_linuxscsi:
-            self.connector._rescan_iscsi(mock.sentinel.input)
-            mock_linuxscsi.echo_scsi_command.assert_has_calls((
-                mock.call('/sys/class/iscsi_host/host4/scan', '0 0 1'),
-                mock.call('/sys/class/iscsi_host/host5/scan', '0 0 2'),
-            ))
-        mock_get_htcls.assert_called_once_with(mock.sentinel.input)
-        mock_iscsiadm.assert_not_called()
-
-    @mock.patch('six.moves.builtins.open', create=True)
-    @mock.patch('glob.glob')
-    def test_get_hctls(self, mock_glob, mock_open):
-        host4 = '/sys/class/scsi_host/host4'
-        host5 = '/sys/class/scsi_host/host5'
-        host6 = '/sys/class/scsi_host/host6'
-        host7 = '/sys/class/scsi_host/host7'
-
-        mock_glob.side_effect = (
-            (host4 + '/device/session5/target0:1:2',
-             host5 + '/device/session6/target3:4:5',
-             host6 + '/device/session7/target6:7:8',
-             host7 + '/device/session8/target9:10:11'),
-            (host4 + '/device/session5/iscsi_session/session5/targetname',
-             host5 + '/device/session6/iscsi_session/session6/targetname',
-             host6 + '/device/session7/iscsi_session/session7/targetname',
-             host7 + '/device/session8/iscsi_session/session8/targetname'),
-        )
-
-        mock_open.side_effect = (
-            mock.mock_open(read_data='iqn0\n').return_value,
-            mock.mock_open(read_data='iqn1\n').return_value,
-            mock.mock_open(read_data='iqn2\n').return_value,
-            mock.mock_open(read_data='iqn3\n').return_value,
-        )
-
-        ips_iqns_luns = [('ip1', 'iqn1', 'lun1'), ('ip2', 'iqn2', 'lun2')]
-        result = self.connector._get_hosts_channels_targets_luns(ips_iqns_luns)
-        self.assertEqual(
-            [(host5, '4', '5', 'lun1'), (host6, '7', '8', 'lun2')],
-            result)
-        mock_glob.assert_has_calls((
-            mock.call('/sys/class/scsi_host/host*/device/session*/target*'),
-            mock.call('/sys/class/scsi_host/host*/device/session*/'
-                      'iscsi_session/session*/targetname'),
-        ))
-        self.assertEqual(3, mock_open.call_count)
-
-    @mock.patch('retrying.time.sleep', mock.Mock())
-    @mock.patch('six.moves.builtins.open', create=True)
-    @mock.patch('glob.glob', return_value=[])
-    def test_get_hctls_not_found(self, mock_glob, mock_open):
-        host4 = '/sys/class/scsi_host/host4'
-        mock_glob.side_effect = [
-            [(host4 + '/device/session5/target0:1:2')],
-            [(host4 + '/device/session5/iscsi_session/session5/targetname')],
-        ] * 3
-        # Test exception on open as well as having only half of the htcls
-        mock_open.side_effect = [
-            mock.Mock(side_effect=Exception()),
-            mock.mock_open(read_data='iqn1\n').return_value,
-            mock.mock_open(read_data='iqn1\n').return_value,
+        with mock.patch.object(self.connector, '_execute') as exec_mock:
+            exec_mock.side_effect = [('', 'error'), ('', None), ('', None),
+                                     ('', None)]
+            res = self.connector._connect_to_iscsi_portal(self.CON_PROPS)
+        self.assertEqual(session, res)
+        prefix = 'iscsiadm -m node -T tgt1 -p ip1:port1'
+        expected_cmds = [
+            prefix,
+            prefix + ' --interface default --op new',
+            prefix + ' --login',
+            prefix + ' --op update -n node.startup -v automatic'
         ]
+        actual_cmds = [' '.join(args[0]) for args in exec_mock.call_args_list]
+        self.assertListEqual(expected_cmds, actual_cmds)
+        self.assertEqual(2, get_sessions_mock.call_count)
 
-        ips_iqns_luns = [('ip1', 'iqn1', 'lun1'), ('ip2', 'iqn2', 'lun2')]
+    @mock.patch.object(iscsi.ISCSIConnector, '_get_iscsi_sessions_full')
+    def test_connect_to_iscsi_portal_all_exists_chap(self, get_sessions_mock):
+        """Node and session already exists and we use chap authentication."""
+        session = 'session2'
+        get_sessions_mock.return_value = [('tcp:', session, 'ip1:port1',
+                                           '-1', 'tgt1')]
+        con_props = self.CON_PROPS.copy()
+        con_props.update(auth_method='CHAP', auth_username='user',
+                         auth_password='pwd')
+        res = self.connector._connect_to_iscsi_portal(con_props)
+        self.assertEqual(session, res)
+        prefix = 'iscsiadm -m node -T tgt1 -p ip1:port1'
+        expected_cmds = [
+            prefix,
+            prefix + ' --op update -n node.session.auth.authmethod -v CHAP',
+            prefix + ' --op update -n node.session.auth.username -v user',
+            prefix + ' --op update -n node.session.auth.password -v pwd',
+        ]
+        self.assertListEqual(expected_cmds, self.cmds)
+        get_sessions_mock.assert_called_once_with()
 
-        exc = self.assertRaises(
-            exception.HostChannelsTargetsNotFound,
-            self.connector._get_hosts_channels_targets_luns, ips_iqns_luns)
+    @mock.patch.object(iscsi.ISCSIConnector, '_get_iscsi_sessions_full')
+    def test_connect_to_iscsi_portal_fail_login(self, get_sessions_mock):
+        get_sessions_mock.return_value = []
+        with mock.patch.object(self.connector, '_execute') as exec_mock:
+            exec_mock.side_effect = [('', None), putils.ProcessExecutionError]
+            res = self.connector._connect_to_iscsi_portal(self.CON_PROPS)
+        self.assertIsNone(res)
+        expected_cmds = ['iscsiadm -m node -T tgt1 -p ip1:port1',
+                         'iscsiadm -m node -T tgt1 -p ip1:port1 --login']
+        actual_cmds = [' '.join(args[0]) for args in exec_mock.call_args_list]
+        self.assertListEqual(expected_cmds, actual_cmds)
+        get_sessions_mock.assert_called_once_with()
 
-        # Verify exception contains found results
-        self.assertEqual([(host4, '1', '2', 'lun1')], exc.found)
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_sysfs_wwn',
+                       side_effect=(None, 'tgt2'))
+    @mock.patch.object(iscsi.ISCSIConnector, '_connect_vol')
+    @mock.patch.object(iscsi.ISCSIConnector, '_cleanup_connection')
+    @mock.patch('time.sleep')
+    def test_connect_single_volume(self, sleep_mock, cleanup_mock,
+                                   connect_mock, get_wwn_mock):
+        def my_connect(rescans, props, data):
+            if props['target_iqn'] == 'tgt2':
+                # Succeed on second call
+                data['found_devices'].append('sdz')
+
+        connect_mock.side_effect = my_connect
+
+        res = self.connector._connect_single_volume(self.CON_PROPS)
+
+        expected = {'type': 'block', 'scsi_wwn': 'tgt2', 'path': '/dev/sdz'}
+        self.assertEqual(expected, res)
+        get_wwn_mock.assert_has_calls([mock.call(['sdz']), mock.call(['sdz'])])
+        sleep_mock.assert_called_once_with(1)
+        cleanup_mock.assert_called_once_with(
+            {'target_lun': 4, 'volume_id': 'vol_id',
+             'target_portal': 'ip1:port1', 'target_iqn': 'tgt1'},
+            (('ip1:port1', 'tgt1', 4),),
+            force=True, ignore_errors=True)
+
+    @staticmethod
+    def _get_connect_vol_data():
+        return {'stop_connecting': False, 'num_logins': 0, 'failed_logins': 0,
+                'stopped_threads': 0, 'found_devices': [],
+                'just_added_devices': []}
+
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_sysfs_wwn',
+                       side_effect=(None, 'tgt2'))
+    @mock.patch.object(iscsi.ISCSIConnector, '_connect_vol')
+    @mock.patch.object(iscsi.ISCSIConnector, '_cleanup_connection')
+    @mock.patch('time.sleep')
+    def test_connect_single_volume_not_found(self, sleep_mock, cleanup_mock,
+                                             connect_mock, get_wwn_mock):
+
+        self.assertRaises(exception.VolumeDeviceNotFound,
+                          self.connector._connect_single_volume,
+                          self.CON_PROPS)
+
+        get_wwn_mock.assert_not_called()
+
+        # Called twice by the retry mechanism
+        self.assertEqual(2, sleep_mock.call_count)
+
+        props = list(self.connector._get_all_targets(self.CON_PROPS))
+        calls_per_try = [
+            mock.call({'target_portal': prop[0], 'target_iqn': prop[1],
+                       'target_lun': prop[2], 'volume_id': 'vol_id'},
+                      (prop,), force=True, ignore_errors=True)
+            for prop in props
+        ]
+        cleanup_mock.assert_has_calls(calls_per_try * 3)
+
+        data = self._get_connect_vol_data()
+        calls_per_try = [mock.call(self.connector.device_scan_attempts,
+                                   {'target_portal': prop[0],
+                                    'target_iqn': prop[1],
+                                    'target_lun': prop[2],
+                                    'volume_id': 'vol_id'},
+                                   data)
+                         for prop in props]
+        connect_mock.assert_has_calls(calls_per_try * 3)
+
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'find_sysfs_multipath_dm',
+                       side_effect=[None, 'dm-0'])
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_sysfs_wwn',
+                       return_value='wwn')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'multipath_add_path')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'multipath_add_wwid')
+    @mock.patch.object(iscsi.ISCSIConnector, '_connect_vol')
+    @mock.patch('time.sleep')
+    def test_connect_multipath_volume_all_succeed(self, sleep_mock,
+                                                  connect_mock, add_wwid_mock,
+                                                  add_path_mock, get_wwn_mock,
+                                                  find_dm_mock):
+        def my_connect(rescans, props, data):
+            devs = {'tgt1': 'sda', 'tgt2': 'sdb', 'tgt3': 'sdc', 'tgt4': 'sdd'}
+            data['stopped_threads'] += 1
+            data['num_logins'] += 1
+            dev = devs[props['target_iqn']]
+            data['found_devices'].append(dev)
+            data['just_added_devices'].append(dev)
+
+        connect_mock.side_effect = my_connect
+
+        res = self.connector._connect_multipath_volume(self.CON_PROPS)
+
+        expected = {'type': 'block', 'scsi_wwn': 'wwn', 'multipath_id': 'dm-0',
+                    'path': '/dev/dm-0'}
+        self.assertEqual(expected, res)
+
+        self.assertEqual(1, get_wwn_mock.call_count)
+        result = list(get_wwn_mock.call_args[0][0])
+        result.sort()
+        self.assertEqual(['sda', 'sdb', 'sdc', 'sdd'], result)
+        add_wwid_mock.assert_called_once_with('wwn')
+        self.assertNotEqual(0, add_path_mock.call_count)
+        self.assertGreaterEqual(find_dm_mock.call_count, 2)
+        self.assertEqual(4, connect_mock.call_count)
+
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'find_sysfs_multipath_dm',
+                       side_effect=[None, 'dm-0'])
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_sysfs_wwn',
+                       return_value='wwn')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'multipath_add_path')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'multipath_add_wwid')
+    @mock.patch.object(iscsi.ISCSIConnector, '_connect_vol')
+    @mock.patch('time.sleep')
+    def test_connect_multipath_volume_all_fail(self, sleep_mock, connect_mock,
+                                               add_wwid_mock, add_path_mock,
+                                               get_wwn_mock, find_dm_mock):
+        def my_connect(rescans, props, data):
+            data['stopped_threads'] += 1
+            data['failed_logins'] += 1
+
+        connect_mock.side_effect = my_connect
+
+        self.assertRaises(exception.VolumeDeviceNotFound,
+                          self.connector._connect_multipath_volume,
+                          self.CON_PROPS)
+
+        get_wwn_mock.assert_not_called()
+        add_wwid_mock.assert_not_called()
+        add_path_mock.assert_not_called()
+        find_dm_mock.assert_not_called()
+        self.assertEqual(4 * 3, connect_mock.call_count)
+
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'find_sysfs_multipath_dm',
+                       side_effect=[None, 'dm-0'])
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_sysfs_wwn',
+                       return_value='wwn')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'multipath_add_path')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'multipath_add_wwid')
+    @mock.patch.object(iscsi.ISCSIConnector, '_connect_vol')
+    @mock.patch('time.sleep')
+    def test_connect_multipath_volume_some_fail_mp_found(self, sleep_mock,
+                                                         connect_mock,
+                                                         add_wwid_mock,
+                                                         add_path_mock,
+                                                         get_wwn_mock,
+                                                         find_dm_mock):
+        def my_connect(rescans, props, data):
+            devs = {'tgt1': '', 'tgt2': 'sdb', 'tgt3': '', 'tgt4': 'sdd'}
+            data['stopped_threads'] += 1
+            dev = devs[props['target_iqn']]
+            if dev:
+                data['num_logins'] += 1
+                data['found_devices'].append(dev)
+                data['just_added_devices'].append(dev)
+            else:
+                data['failed_logins'] += 1
+
+        connect_mock.side_effect = my_connect
+
+        res = self.connector._connect_multipath_volume(self.CON_PROPS)
+
+        expected = {'type': 'block', 'scsi_wwn': 'wwn', 'multipath_id': 'dm-0',
+                    'path': '/dev/dm-0'}
+        self.assertEqual(expected, res)
+        self.assertEqual(1, get_wwn_mock.call_count)
+        result = list(get_wwn_mock.call_args[0][0])
+        result.sort()
+        self.assertEqual(['sdb', 'sdd'], result)
+        add_wwid_mock.assert_called_once_with('wwn')
+        self.assertNotEqual(0, add_path_mock.call_count)
+        self.assertGreaterEqual(find_dm_mock.call_count, 2)
+        self.assertEqual(4, connect_mock.call_count)
+
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'find_sysfs_multipath_dm',
+                       return_value=None)
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_sysfs_wwn',
+                       return_value='wwn')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'multipath_add_path')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'multipath_add_wwid')
+    @mock.patch.object(iscsi.time, 'time', side_effect=(0, 0, 11, 0))
+    @mock.patch.object(iscsi.ISCSIConnector, '_connect_vol')
+    @mock.patch('time.sleep')
+    def test_connect_multipath_volume_some_fail_mp_not_found(self, sleep_mock,
+                                                             connect_mock,
+                                                             time_mock,
+                                                             add_wwid_mock,
+                                                             add_path_mock,
+                                                             get_wwn_mock,
+                                                             find_dm_mock):
+        def my_connect(rescans, props, data):
+            devs = {'tgt1': '', 'tgt2': 'sdb', 'tgt3': '', 'tgt4': 'sdd'}
+            data['stopped_threads'] += 1
+            dev = devs[props['target_iqn']]
+            if dev:
+                data['num_logins'] += 1
+                data['found_devices'].append(dev)
+                data['just_added_devices'].append(dev)
+            else:
+                data['failed_logins'] += 1
+
+        connect_mock.side_effect = my_connect
+
+        res = self.connector._connect_multipath_volume(self.CON_PROPS)
+
+        expected = [{'type': 'block', 'scsi_wwn': 'wwn', 'path': '/dev/sdb'},
+                    {'type': 'block', 'scsi_wwn': 'wwn', 'path': '/dev/sdd'}]
+        # It can only be one of the 2
+        self.assertIn(res, expected)
+        self.assertEqual(1, get_wwn_mock.call_count)
+        result = list(get_wwn_mock.call_args[0][0])
+        result.sort()
+        self.assertEqual(['sdb', 'sdd'], result)
+        add_wwid_mock.assert_called_once_with('wwn')
+        self.assertNotEqual(0, add_path_mock.call_count)
+        self.assertGreaterEqual(find_dm_mock.call_count, 4)
+        self.assertEqual(4, connect_mock.call_count)
+
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'find_sysfs_multipath_dm',
+                       return_value=None)
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_sysfs_wwn',
+                       return_value='wwn')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'multipath_add_path')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'multipath_add_wwid')
+    @mock.patch.object(iscsi.time, 'time', side_effect=(0, 0, 11, 0))
+    @mock.patch.object(iscsi.ISCSIConnector, '_connect_vol')
+    @mock.patch('time.sleep', mock.Mock())
+    def test_connect_multipath_volume_all_loging_not_found(self,
+                                                           connect_mock,
+                                                           time_mock,
+                                                           add_wwid_mock,
+                                                           add_path_mock,
+                                                           get_wwn_mock,
+                                                           find_dm_mock):
+        def my_connect(rescans, props, data):
+            data['stopped_threads'] += 1
+            data['num_logins'] += 1
+
+        connect_mock.side_effect = my_connect
+
+        self.assertRaises(exception.VolumeDeviceNotFound,
+                          self.connector._connect_multipath_volume,
+                          self.CON_PROPS)
+
+        get_wwn_mock.assert_not_called()
+        add_wwid_mock.assert_not_called()
+        add_path_mock.assert_not_called()
+        find_dm_mock.assert_not_called()
+        self.assertEqual(12, connect_mock.call_count)
+
+    @mock.patch('time.sleep', mock.Mock())
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'scan_iscsi')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'device_name_by_hctl',
+                       return_value='sda')
+    @mock.patch.object(iscsi.ISCSIConnector, '_connect_to_iscsi_portal')
+    def test_connect_vol(self, connect_mock, dev_name_mock, scan_mock):
+        lscsi = self.connector._linuxscsi
+        data = self._get_connect_vol_data()
+        hctl = [mock.sentinel.host, mock.sentinel.channel,
+                mock.sentinel.target, mock.sentinel.lun]
+
+        connect_mock.return_value = mock.sentinel.session
+
+        with mock.patch.object(lscsi, 'get_hctl',
+                               side_effect=(None, hctl)) as hctl_mock:
+            self.connector._connect_vol(3, self.CON_PROPS, data)
+
+        expected = self._get_connect_vol_data()
+        expected.update(num_logins=1, stopped_threads=1,
+                        found_devices=['sda'], just_added_devices=['sda'])
+        self.assertDictEqual(expected, data)
+
+        connect_mock.assert_called_once_with(self.CON_PROPS)
+        hctl_mock.assert_has_calls([mock.call(mock.sentinel.session,
+                                              self.CON_PROPS['target_lun']),
+                                    mock.call(mock.sentinel.session,
+                                              self.CON_PROPS['target_lun'])])
+
+        scan_mock.assert_called_once_with(*hctl)
+        dev_name_mock.assert_called_once_with(mock.sentinel.session, hctl)
+
+    @mock.patch.object(iscsi.ISCSIConnector, '_connect_to_iscsi_portal',
+                       return_value=None)
+    def test_connect_vol_no_session(self, connect_mock):
+        data = self._get_connect_vol_data()
+
+        self.connector._connect_vol(3, self.CON_PROPS, data)
+
+        expected = self._get_connect_vol_data()
+        expected.update(failed_logins=1, stopped_threads=1)
+        self.assertDictEqual(expected, data)
+
+    @mock.patch('time.sleep', mock.Mock())
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'scan_iscsi')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'device_name_by_hctl',
+                       return_value=None)
+    @mock.patch.object(iscsi.ISCSIConnector, '_connect_to_iscsi_portal')
+    def test_connect_vol_not_found(self, connect_mock, dev_name_mock,
+                                   scan_mock):
+        lscsi = self.connector._linuxscsi
+        data = self._get_connect_vol_data()
+        hctl = [mock.sentinel.host, mock.sentinel.channel,
+                mock.sentinel.target, mock.sentinel.lun]
+
+        connect_mock.return_value = mock.sentinel.session
+
+        with mock.patch.object(lscsi, 'get_hctl',
+                               side_effect=(None, hctl)) as hctl_mock:
+            self.connector._connect_vol(3, self.CON_PROPS, data)
+
+        expected = self._get_connect_vol_data()
+        expected.update(num_logins=1, stopped_threads=1)
+        self.assertDictEqual(expected, data)
+
+        hctl_mock.assert_has_calls([mock.call(mock.sentinel.session,
+                                              self.CON_PROPS['target_lun']),
+                                    mock.call(mock.sentinel.session,
+                                              self.CON_PROPS['target_lun'])])
+
+        scan_mock.assert_has_calls([mock.call(*hctl), mock.call(*hctl)])
+        dev_name_mock.assert_has_calls(
+            [mock.call(mock.sentinel.session, hctl),
+             mock.call(mock.sentinel.session, hctl)])
+
+    @mock.patch('time.sleep', mock.Mock())
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'scan_iscsi')
+    @mock.patch.object(iscsi.ISCSIConnector, '_connect_to_iscsi_portal')
+    def test_connect_vol_stop_connecting(self, connect_mock, scan_mock):
+        data = self._get_connect_vol_data()
+
+        def device_name_by_hctl(session, hctl):
+            data['stop_connecting'] = True
+            return None
+
+        lscsi = self.connector._linuxscsi
+        hctl = [mock.sentinel.host, mock.sentinel.channel,
+                mock.sentinel.target, mock.sentinel.lun]
+
+        connect_mock.return_value = mock.sentinel.session
+
+        with mock.patch.object(lscsi, 'get_hctl',
+                               return_value=hctl) as hctl_mock, \
+                mock.patch.object(
+                    lscsi, 'device_name_by_hctl',
+                    side_effect=device_name_by_hctl) as dev_name_mock:
+
+            self.connector._connect_vol(3, self.CON_PROPS, data)
+
+        expected = self._get_connect_vol_data()
+        expected.update(num_logins=1, stopped_threads=1, stop_connecting=True)
+        self.assertDictEqual(expected, data)
+
+        hctl_mock.assert_called_once_with(mock.sentinel.session,
+                                          self.CON_PROPS['target_lun'])
+        scan_mock.assert_not_called()
+        dev_name_mock.assert_called_once_with(mock.sentinel.session, hctl)

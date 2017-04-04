@@ -14,18 +14,18 @@
 
 
 import collections
-import copy
 import glob
 import os
+import threading
 import time
 
 from oslo_concurrency import lockutils
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
+from oslo_utils import excutils
 from oslo_utils import strutils
 
 from os_brick import exception
-from os_brick.i18n import _
 from os_brick import initiator
 from os_brick.initiator.connectors import base
 from os_brick.initiator.connectors import base_iscsi
@@ -94,11 +94,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         # didn't exist previously.
         # We are simply trying to find any existing volumes with
         # already connected sessions.
-        host_devices, target_props = self._get_potential_volume_paths(
-            connection_properties,
-            connect_to_portal=False,
-            use_rescan=False)
-
+        host_devices = self._get_potential_volume_paths(connection_properties)
         for path in host_devices:
             if os.path.exists(path):
                 volume_paths.append(path)
@@ -163,9 +159,45 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         # entry: [tcp, [1], 192.168.121.250:3260,1 ...]
         return [entry[2] for entry in self._get_iscsi_sessions_full()]
 
-    def _get_potential_volume_paths(self, connection_properties,
-                                    connect_to_portal=True,
-                                    use_rescan=True):
+    def _get_ips_iqns_luns(self, connection_properties):
+        """Build a list of ips, iqns, and luns.
+
+        :param connection_properties: The dictionary that describes all
+                                      of the target volume attributes.
+        :type connection_properties: dict
+        :returns: list of tuples of (ip, iqn, lun)
+        """
+        try:
+            ips_iqns_luns = self._discover_iscsi_portals(connection_properties)
+        except Exception:
+            if 'target_portals' in connection_properties:
+                raise exception.TargetPortalsNotFound(
+                    target_portals=connection_properties['target_portals'])
+            if 'target_portal' in connection_properties:
+                raise exception.TargetPortalNotFound(
+                    target_portal=connection_properties['target_portal'])
+            raise
+
+        if not connection_properties.get('target_iqns'):
+            # There are two types of iSCSI multipath devices. One which
+            # shares the same iqn between multiple portals, and the other
+            # which use different iqns on different portals.
+            # Try to identify the type by checking the iscsiadm output
+            # if the iqn is used by multiple portals. If it is, it's
+            # the former, so use the supplied iqn. Otherwise, it's the
+            # latter, so try the ip,iqn combinations to find the targets
+            # which constitutes the multipath device.
+            main_iqn = connection_properties['target_iqn']
+            all_portals = {(ip, lun) for ip, iqn, lun in ips_iqns_luns}
+            match_portals = {(ip, lun) for ip, iqn, lun in ips_iqns_luns
+                             if iqn == main_iqn}
+            if len(all_portals) == len(match_portals):
+                ips_iqns_luns = [(p[0], main_iqn, p[1])
+                                 for p in all_portals]
+
+        return ips_iqns_luns
+
+    def _get_potential_volume_paths(self, connection_properties):
         """Build a list of potential volume paths that exist.
 
         Given a list of target_portals in the connection_properties,
@@ -173,10 +205,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         This method's job is to build that list of potential paths
         for a volume that might show up.
 
-        This is used during connect_volume time, in which case we want
-        to connect to the iSCSI target portal.
-
-        During get_volume_paths time, we are looking to
+        This is only used during get_volume_paths time, we are looking to
         find a list of existing volume paths for the connection_properties.
         In this case, we don't want to connect to the portal.  If we
         blindly try and connect to a portal, it could create a new iSCSI
@@ -185,96 +214,28 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         :param connection_properties: The dictionary that describes all
                                       of the target volume attributes.
         :type connection_properties: dict
-        :param connect_to_portal: Do we want to try a new connection to the
-                                  target portal(s)?  Set this to False if you
-                                  want to search for existing volumes, not
-                                  discover new volumes.
-        :param connect_to_portal: bool
-        :param use_rescan: Issue iSCSI rescan during discovery?
-        :type use_rescan: bool
-        :returns: dict
+        :returns: list
         """
-
-        target_props = None
-        connected_to_portal = False
         if self.use_multipath:
             LOG.info("Multipath discovery for iSCSI enabled")
             # Multipath installed, discovering other targets if available
-            try:
-                ips_iqns_luns = self._discover_iscsi_portals(
-                    connection_properties)
-            except Exception:
-                if 'target_portals' in connection_properties:
-                    raise exception.TargetPortalsNotFound(
-                        target_portals=connection_properties['target_portals'])
-                elif 'target_portal' in connection_properties:
-                    raise exception.TargetPortalNotFound(
-                        target_portal=connection_properties['target_portal'])
-                else:
-                    raise
-
-            if not connection_properties.get('target_iqns'):
-                # There are two types of iSCSI multipath devices. One which
-                # shares the same iqn between multiple portals, and the other
-                # which use different iqns on different portals.
-                # Try to identify the type by checking the iscsiadm output
-                # if the iqn is used by multiple portals. If it is, it's
-                # the former, so use the supplied iqn. Otherwise, it's the
-                # latter, so try the ip,iqn combinations to find the targets
-                # which constitutes the multipath device.
-                main_iqn = connection_properties['target_iqn']
-                all_portals = {(ip, lun) for ip, iqn, lun in ips_iqns_luns}
-                match_portals = {(ip, lun) for ip, iqn, lun in ips_iqns_luns
-                                 if iqn == main_iqn}
-                if len(all_portals) == len(match_portals):
-                    ips_iqns_luns = [(p[0], main_iqn, p[1])
-                                     for p in all_portals]
-
-            for ip, iqn, lun in ips_iqns_luns:
-                props = copy.deepcopy(connection_properties)
-                props['target_portal'] = ip
-                props['target_iqn'] = iqn
-                if connect_to_portal:
-                    if self._connect_to_iscsi_portal(props):
-                        connected_to_portal = True
-
-            if use_rescan:
-                self._rescan_iscsi(ips_iqns_luns)
-
             host_devices = self._get_device_path(connection_properties)
         else:
             LOG.info("Multipath discovery for iSCSI not enabled.")
-            iscsi_sessions = []
-            if not connect_to_portal:
-                iscsi_sessions = self._get_iscsi_sessions()
+            iscsi_sessions = self._get_iscsi_sessions()
+            iscsi_portals_with_sessions = [s[2] for s in iscsi_sessions]
 
-            host_devices = []
-            target_props = connection_properties
+            host_devices = set()
             for props in self._iterate_all_targets(connection_properties):
-                if connect_to_portal:
-                    if self._connect_to_iscsi_portal(props):
-                        target_props = props
-                        connected_to_portal = True
-                        host_devices = self._get_device_path(props)
-                        break
-                    else:
-                        LOG.warning(
-                            'Failed to connect to iSCSI portal %(portal)s.',
-                            {'portal': props['target_portal']})
-                else:
-                    # If we aren't trying to connect to the portal, we
-                    # want to find ALL possible paths from all of the
-                    # alternate portals
-                    if props['target_portal'] in iscsi_sessions:
-                        paths = self._get_device_path(props)
-                        host_devices = list(set(paths + host_devices))
+                # If we aren't trying to connect to the portal, we
+                # want to find ALL possible paths from all of the
+                # alternate portals
+                if props['target_portal'] in iscsi_portals_with_sessions:
+                    paths = self._get_device_path(props)
+                    host_devices.update(paths)
+            host_devices = list(host_devices)
 
-        if connect_to_portal and not connected_to_portal:
-            msg = _("Could not login to any iSCSI portal.")
-            LOG.error(msg)
-            raise exception.FailedISCSITargetPortalLogin(message=msg)
-
-        return host_devices, target_props
+        return host_devices
 
     def set_execute(self, execute):
         super(ISCSIConnector, self).set_execute(execute)
@@ -424,7 +385,6 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
 
     @utils.trace
     @synchronized('connect_volume')
-    @utils.retry(exceptions=(exception.VolumeDeviceNotFound))
     def connect_volume(self, connection_properties):
         """Attach the volume to instance_name.
 
@@ -447,66 +407,224 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         target_lun(s) - LUN id of the volume
         Note that plural keys may be used when use_multipath=True
         """
-
-        device_info = {'type': 'block'}
-
-        # At this point the host_devices may be an empty list
-        host_devices, target_props = self._get_potential_volume_paths(
-            connection_properties)
-
-        # The /dev/disk/by-path/... node is not always present immediately
-        # TODO(justinsb): This retry-with-delay is a pattern, move to utils?
-        tries = 0
-        # Loop until at least 1 path becomes available
-        while all(not os.path.exists(x) for x in host_devices):
-            if tries >= self.device_scan_attempts:
-                raise exception.VolumeDeviceNotFound(device=host_devices)
-
-            LOG.info("ISCSI volume not yet found at: %(host_devices)s. "
-                     "Will rescan & retry.  Try number: %(tries)s.",
-                     {'host_devices': host_devices, 'tries': tries})
-
+        try:
             if self.use_multipath:
-                # We need to refresh the paths as the devices may be empty
-                host_devices, target_props = (
-                    self._get_potential_volume_paths(connection_properties))
-            else:
-                if tries:
-                    host_devices = self._get_device_path(target_props)
-                self._run_iscsiadm(target_props, ("--rescan",))
+                return self._connect_multipath_volume(connection_properties)
+            return self._connect_single_volume(connection_properties)
+        except Exception:
+            # NOTE(geguileo): By doing the cleanup here we ensure we only do
+            # the logins once for multipath if they succeed, but retry if they
+            # don't, which helps on bad network cases.
+            with excutils.save_and_reraise_exception():
+                self._cleanup_connection(connection_properties, force=True)
 
-            tries += 1
-            if all(not os.path.exists(x) for x in host_devices):
-                time.sleep(tries ** 2)
+    @utils.retry(exceptions=(exception.VolumeDeviceNotFound))
+    def _connect_single_volume(self, connection_properties):
+        """Connect to a volume using a single path."""
+        data = {'stop_connecting': False, 'num_logins': 0, 'failed_logins': 0,
+                'stopped_threads': 0, 'found_devices': [],
+                'just_added_devices': []}
+
+        for props in self._iterate_all_targets(connection_properties):
+            self._connect_vol(self.device_scan_attempts, props, data)
+            found_devs = data['found_devices']
+            if found_devs:
+                for __ in range(10):
+                    wwn = self._linuxscsi.get_sysfs_wwn(found_devs)
+                    if wwn:
+                        return {'type': 'block', 'scsi_wwn': wwn,
+                                'path': '/dev/' + found_devs[0]}
+                    time.sleep(1)
+                LOG.debug('Could not find the WWN for %s.', found_devs[0])
+
+            # If we failed we must cleanup the connection, as we could be
+            # leaving the node entry if it's not being used by another device.
+            ips_iqns_luns = ((props['target_portal'], props['target_iqn'],
+                              props['target_lun']), )
+            self._cleanup_connection(props, ips_iqns_luns, force=True,
+                                     ignore_errors=True)
+            # Reset connection result values for next try
+            data.update(num_logins=0, failed_logins=0, found_devices=[])
+
+        raise exception.VolumeDeviceNotFound(device='')
+
+    def _connect_vol(self, rescans, props, data):
+        """Make a connection to a volume, send scans and wait for the device.
+
+        This method is specifically designed to support multithreading and
+        share the results via a shared dictionary with fixed keys, which is
+        thread safe.
+
+        Since the heaviest operations are run via subprocesses we don't worry
+        too much about the GIL or how the eventlets will handle the context
+        switching.
+
+        The method will only try to log in once, since iscsid's initiator
+        already tries 8 times by default to do the login, or whatever value we
+        have as node.session.initial_login_retry_max in our system.
+
+        Shared dictionary has the following keys:
+        - stop_connecting: When the caller wants us to stop the rescans
+        - num_logins: Count of how many threads have successfully logged in
+        - failed_logins: Count of how many threads have failed to log in
+        - stopped_threads: How many threads have finished.  This may be
+                           different than num_logins + failed_logins, since
+                           some threads may still be waiting for a device.
+        - found_devices: List of devices the connections have found
+        - just_added_devices: Devices that have been found and still have not
+                              been processed by the main thread that manages
+                              all the connecting threads.
+
+        :param rescans: Number of rescans to perform before giving up.
+        :param props: Properties of the connection.
+        :param data: Shared data.
+        """
+        device = hctl = None
+        portal = props['target_portal']
+        session = self._connect_to_iscsi_portal(props)
+        do_scans = rescans > 0
+        retry = 1
+        if session:
+            data['num_logins'] += 1
+            LOG.debug('Connected to %s', portal)
+            while do_scans:
+                try:
+                    if not hctl:
+                        hctl = self._linuxscsi.get_hctl(session,
+                                                        props['target_lun'])
+                    # Scan is sent on connect by iscsid, so skip first rescan
+                    if hctl:
+                        if retry > 1:
+                            self._linuxscsi.scan_iscsi(*hctl)
+
+                        device = self._linuxscsi.device_name_by_hctl(session,
+                                                                     hctl)
+                        if device:
+                            break
+
+                except Exception:
+                    LOG.exception('Exception scanning %s', portal)
+                    pass
+                retry += 1
+                do_scans = (retry <= rescans and
+                            not (device or data['stop_connecting']))
+                if do_scans:
+                    time.sleep(retry ** 2)
+            if device:
+                LOG.debug('Connected to %s using %s', device,
+                          strutils.mask_password(props))
             else:
+                LOG.warning('LUN %(lun)s on iSCSI portal %(portal)s not found '
+                            'on sysfs after logging in.',
+                            {'lun': props['target_lun'], 'portal': portal})
+        else:
+            LOG.warning('Failed to connect to iSCSI portal %s.', portal)
+            data['failed_logins'] += 1
+
+        if device:
+            data['found_devices'].append(device)
+            data['just_added_devices'].append(device)
+        data['stopped_threads'] += 1
+
+    @utils.retry(exceptions=(exception.VolumeDeviceNotFound))
+    def _connect_multipath_volume(self, connection_properties):
+        """Connect to a multipathed volume launching parallel login requests.
+
+        We will be doing parallel login requests, which will considerably speed
+        up the process when we have flaky connections.
+
+        We'll always try to return a multipath device even if there's only one
+        path discovered, that way we can return once we have logged in in all
+        the portals, because the paths will come up later.
+
+        To make this possible we tell multipathd that the wwid is a multipath
+        as soon as we have one device, and then hint multipathd to reconsider
+        that volume for a multipath asking to add the path, because even if
+        it's already known by multipathd it would have been discarded if it
+        was the first time this volume was seen here.
+        """
+        wwn = mpath = None
+        wwn_added = last_try_on = False
+        found = []
+        just_added_devices = []
+        # Dict used to communicate with threads as detailed in _connect_vol
+        data = {'stop_connecting': False, 'num_logins': 0, 'failed_logins': 0,
+                'stopped_threads': 0, 'found_devices': found,
+                'just_added_devices': just_added_devices}
+
+        ips_iqns_luns = self._get_ips_iqns_luns(connection_properties)
+        # Launch individual threads for each session with the own properties
+        retries = self.device_scan_attempts
+        threads = []
+        for ip, iqn, lun in ips_iqns_luns:
+            props = connection_properties.copy()
+            props.update(target_portal=ip, target_iqn=iqn, target_lun=lun)
+            threads.append(threading.Thread(target=self._connect_vol,
+                                            args=(retries, props, data)))
+        for thread in threads:
+            thread.start()
+
+        # Continue until:
+        # - All connection attempts have finished and none has logged in
+        # - Multipath has been found and connection attempts have either
+        #   finished or have already logged in
+        # - We have finished in all threads, logged in, found some device, and
+        #   10 seconds have passed, which should be enough with up to 10%
+        #   network package drops.
+        while not ((len(ips_iqns_luns) == data['stopped_threads'] and
+                    not found) or
+                   (mpath and len(ips_iqns_luns) == data['num_logins'] +
+                    data['failed_logins'])):
+            # We have devices but we don't know the wwn yet
+            if not wwn and found:
+                wwn = self._linuxscsi.get_sysfs_wwn(found)
+            # We have the wwn but not a multipath
+            if wwn and not mpath:
+                mpath = self._linuxscsi.find_sysfs_multipath_dm(found)
+                if not (mpath or wwn_added):
+                    # Tell multipathd that this wwn is a multipath and hint
+                    # multipathd to recheck all the devices we have just
+                    # connected.  We only do this once, since for any new
+                    # device multipathd will already know it is a multipath.
+                    # This is only useful if we have multipathd configured with
+                    # find_multipaths set to yes, and has no effect if it's set
+                    # to no.
+                    wwn_added = self._linuxscsi.multipath_add_wwid(wwn)
+                    while not mpath and just_added_devices:
+                        device_path = '/dev/' + just_added_devices.pop(0)
+                        self._linuxscsi.multipath_add_path(device_path)
+                        mpath = self._linuxscsi.find_sysfs_multipath_dm(found)
+            # Give some extra time after all threads have finished.
+            if (not last_try_on and found and
+                    len(ips_iqns_luns) == data['stopped_threads']):
+                LOG.debug('All connection threads finished, giving 10 seconds '
+                          'for dm to appear.')
+                last_try_on = time.time() + 10
+            elif last_try_on and last_try_on < time.time():
                 break
+            time.sleep(1)
+        data['stop_connecting'] = True
+        for thread in threads:
+            thread.join()
 
-        if tries != 0:
-            LOG.debug("Found iSCSI node %(host_devices)s "
-                      "(after %(tries)s rescans)",
-                      {'host_devices': host_devices, 'tries': tries})
+        # If we haven't found any devices let the caller do the cleanup
+        if not found:
+            raise exception.VolumeDeviceNotFound(device='')
 
-        # Choose an accessible host device
-        host_device = next(dev for dev in host_devices if os.path.exists(dev))
+        # NOTE(geguileo): If we cannot find the dm it's because all paths are
+        # really bad, so we might as well raise a not found exception, but
+        # in our best effort we'll return a device even if it's probably
+        # useless.
+        if not mpath:
+            LOG.warning('No dm was created, connection to volume is probably '
+                        'bad and will perform poorly.')
+            return {'type': 'block', 'scsi_wwn': wwn,
+                    'path': '/dev/' + found[0]}
+        return {'type': 'block', 'scsi_wwn': wwn, 'multipath_id': mpath,
+                'path': '/dev/' + mpath}
 
-        # find out the WWN of the device
-        device_wwn = self._linuxscsi.get_scsi_wwn(host_device)
-        LOG.debug("Device WWN = '%(wwn)s'", {'wwn': device_wwn})
-        device_info['scsi_wwn'] = device_wwn
-
-        if self.use_multipath:
-            (host_device, multipath_id) = (super(
-                ISCSIConnector, self)._discover_mpath_device(
-                device_wwn, connection_properties, host_device))
-            if multipath_id:
-                device_info['multipath_id'] = multipath_id
-
-        device_info['path'] = host_device
-
-        LOG.debug("connect_volume returning %s", device_info)
-        return device_info
-
-    def _get_connection_devices(self, connection_properties):
+    def _get_connection_devices(self, connection_properties,
+                                ips_iqns_luns=None):
         """Get map of devices by sessions from our connection.
 
         For each of the TCP sessions that correspond to our connection
@@ -518,8 +636,12 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
 
         We also include all nodes from our connection that don't have a
         session.
+
+        If ips_iqns_luns parameter is provided connection_properties won't be
+        used to get them.
         """
-        ips_iqns_luns = self._get_all_targets(connection_properties)
+        if not ips_iqns_luns:
+            ips_iqns_luns = self._get_all_targets(connection_properties)
         nodes = self._get_iscsi_nodes()
         sessions = self._get_iscsi_sessions_full()
         # Use (portal, iqn) to map the session value
@@ -573,8 +695,31 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                               the operation.  Default is False.
         :type ignore_errors: bool
         """
+        return self._cleanup_connection(connection_properties, force=force,
+                                        ignore_errors=ignore_errors)
+
+    def _cleanup_connection(self, connection_properties, ips_iqns_luns=None,
+                            force=False, ignore_errors=False):
+        """Cleans up connection flushing and removing devices and multipath.
+
+        :param connection_properties: The dictionary that describes all
+                                      of the target volume attributes.
+        :type connection_properties: dict that must include:
+                                     target_portal(s) - IP and optional port
+                                     target_iqn(s) - iSCSI Qualified Name
+                                     target_lun(s) - LUN id of the volume
+        :param ips_iqns_luns: Use this list of tuples instead of information
+                              from the connection_properties.
+        :param force: Whether to forcefully disconnect even if flush fails.
+        :type force: bool
+        :param ignore_errors: When force is True, this will decide whether to
+                              ignore errors or raise an exception once finished
+                              the operation.  Default is False.
+        :type ignore_errors: bool
+        """
         exc = exception.ExceptionChainer()
-        devices_map = self._get_connection_devices(connection_properties)
+        devices_map = self._get_connection_devices(connection_properties,
+                                                   ips_iqns_luns)
 
         # Remove devices and multipath from this connection
         remove_devices = set()
@@ -689,24 +834,24 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         return ips, iqns
 
     def _connect_to_iscsi_portal(self, connection_properties):
+        """Connect to an iSCSI portal-target an return the session id."""
+        portal = connection_properties['target_portal'].split(",")[0]
+        target_iqn = connection_properties['target_iqn']
+
         # NOTE(vish): If we are on the same host as nova volume, the
         #             discovery makes the target so we don't need to
         #             run --op new. Therefore, we check to see if the
         #             target exists, and if we get 255 (Not Found), then
         #             we run --op new. This will also happen if another
         #             volume is using the same target.
-        LOG.info("Trying to connect to iSCSI portal %(portal)s",
-                 {"portal": connection_properties['target_portal']})
-        try:
-            self._run_iscsiadm(connection_properties, ())
-        except putils.ProcessExecutionError as exc:
-            # iscsiadm returns 21 for "No records found" after version 2.0-871
-            if exc.exit_code in [21, 255]:
-                self._run_iscsiadm(connection_properties,
-                                   ('--interface', self._get_transport(),
-                                    '--op', 'new'))
-            else:
-                raise
+        # iscsiadm returns 21 for "No records found" after version 2.0-871
+        LOG.info("Trying to connect to iSCSI portal %s", portal)
+        err = self._run_iscsiadm(connection_properties, (),
+                                 check_exit_code=(0, 21, 255))[1]
+        if err:
+            self._run_iscsiadm(connection_properties,
+                               ('--interface', self._get_transport(),
+                                '--op', 'new'))
 
         if connection_properties.get('auth_method'):
             self._iscsiadm_update(connection_properties,
@@ -719,44 +864,31 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                                   "node.session.auth.password",
                                   connection_properties['auth_password'])
 
-        # Duplicate logins crash iscsiadm after load,
-        # so we scan active sessions to see if the node is logged in.
-        out = self._run_iscsiadm_bare(["-m", "session"],
-                                      run_as_root=True,
-                                      check_exit_code=[0, 1, 21])[0] or ""
+        # We exit once we are logged in or once we fail login
+        while True:
+            # Duplicate logins crash iscsiadm after load, so we scan active
+            # sessions to see if the node is logged in.
+            sessions = self._get_iscsi_sessions_full()
+            for s in sessions:
+                # Found our session, return session_id
+                if 'tcp:' == s[0] and portal == s[2] and s[4] == target_iqn:
+                    return s[1]
 
-        portals = [{'portal': p.split(" ")[2], 'iqn': p.split(" ")[3]}
-                   for p in out.splitlines() if p.startswith("tcp:")]
-
-        stripped_portal = connection_properties['target_portal'].split(",")[0]
-        if len(portals) == 0 or len([s for s in portals
-                                     if stripped_portal ==
-                                     s['portal'].split(",")[0]
-                                     and
-                                     s['iqn'] ==
-                                     connection_properties['target_iqn']]
-                                    ) == 0:
             try:
-                self._run_iscsiadm(connection_properties,
-                                   ("--login",),
-                                   check_exit_code=[0, 255])
-            except putils.ProcessExecutionError as err:
                 # exit_code=15 means the session already exists, so it should
                 # be regarded as successful login.
-                if err.exit_code not in [15]:
-                    LOG.warning('Failed to login iSCSI target %(iqn)s '
-                                'on portal %(portal)s (exit code '
-                                '%(err)s).',
-                                {'iqn': connection_properties['target_iqn'],
-                                 'portal': connection_properties[
-                                     'target_portal'],
-                                 'err': err.exit_code})
-                    return False
+                self._run_iscsiadm(connection_properties, ("--login",),
+                                   check_exit_code=(0, 15, 255))
+            except putils.ProcessExecutionError as err:
+                LOG.warning('Failed to login iSCSI target %(iqn)s on portal '
+                            '%(portal)s (exit code %(err)s).',
+                            {'iqn': target_iqn, 'portal': portal,
+                             'err': err.exit_code})
+                return None
 
             self._iscsiadm_update(connection_properties,
                                   "node.startup",
                                   "automatic")
-        return True
 
     def _disconnect_from_iscsi_portal(self, connection_properties):
         self._iscsiadm_update(connection_properties, "node.startup", "manual",
@@ -808,72 +940,3 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                   {'multipath_command': multipath_command,
                    'out': out, 'err': err})
         return (out, err)
-
-    @utils.retry(exception.HostChannelsTargetsNotFound, backoff_rate=1.5)
-    def _get_hosts_channels_targets_luns(self, ips_iqns_luns):
-        iqns = {iqn: lun for ip, iqn, lun in ips_iqns_luns}
-        LOG.debug('Getting hosts, channels, and targets for iqns: %s',
-                  iqns.keys())
-
-        # Get all targets indexed by scsi host path
-        targets_paths = glob.glob('/sys/class/scsi_host/host*/device/session*/'
-                                  'target*')
-        targets = collections.defaultdict(list)
-        for path in targets_paths:
-            target = path.split('/target')[1]
-            host = path.split('/device/')[0]
-            targets[host].append(target.split(':'))
-
-        # Get all scsi targets
-        sessions = glob.glob('/sys/class/scsi_host/host*/device/session*/'
-                             'iscsi_session/session*/targetname')
-
-        result = []
-        for session in sessions:
-            # Read iSCSI target name
-            try:
-                with open(session, 'r') as f:
-                    targetname = f.read().strip('\n')
-            except Exception:
-                continue
-
-            # If we are interested in it we store its target information
-            if targetname in iqns:
-                host = session.split('/device/')[0]
-                for __, channel, target_id in targets[host]:
-                    result.append((host, channel, target_id, iqns[targetname]))
-                # Stop as soon as we have the info of all our iqns, even if
-                # there are more sessions to check
-                del iqns[targetname]
-                if not iqns:
-                    break
-
-        # In some cases the login and udev triggers may not have been fast
-        # enough to create all sysfs entries, so we want to retry.
-        else:
-            raise exception.HostChannelsTargetsNotFound(iqns=iqns.keys(),
-                                                        found=result)
-        return result
-
-    def _rescan_iscsi(self, ips_iqns_luns):
-        try:
-            hctls = self._get_hosts_channels_targets_luns(ips_iqns_luns)
-        except exception.HostChannelsTargetsNotFound as e:
-            if not e.found:
-                LOG.error('iSCSI scan failed: %s', e)
-                return
-
-            hctls = e.found
-            LOG.warning('iSCSI scan: %(error)s\nScanning %(hosts)s',
-                        {'error': e, 'hosts': [h for h, c, t, l in hctls]})
-
-        for host_path, channel, target_id, target_lun in hctls:
-            LOG.debug('Scanning host %(host)s c: %(channel)s, '
-                      't: %(target)s, l: %(lun)s)',
-                      {'host': host_path, 'channel': channel,
-                       'target': target_id, 'lun': target_lun})
-            self._linuxscsi.echo_scsi_command(
-                "%s/scan" % host_path,
-                "%(c)s %(t)s %(l)s" % {'c': channel,
-                                       't': target_id,
-                                       'l': target_lun})

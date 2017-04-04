@@ -217,6 +217,7 @@ class LinuxSCSITestCase(base.TestCase):
     @ddt.data({'do_raise': False, 'force': False},
               {'do_raise': True, 'force': True})
     @ddt.unpack
+    @mock.patch.object(linuxscsi.LinuxSCSI, '_remove_scsi_symlinks')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'flush_multipath_device')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_dm_name')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'find_sysfs_multipath_dm')
@@ -226,6 +227,7 @@ class LinuxSCSITestCase(base.TestCase):
                                                   find_dm_mock,
                                                   get_dm_name_mock,
                                                   flush_mp_mock,
+                                                  remove_link_mock,
                                                   do_raise, force):
         if do_raise:
             flush_mp_mock.side_effect = Exception
@@ -245,7 +247,9 @@ class LinuxSCSITestCase(base.TestCase):
             mock.call('/dev/sdb', mock.sentinel.Force, exc)])
         wait_mock.assert_called_once_with(devices_names)
         self.assertEqual(do_raise, bool(exc))
+        remove_link_mock.assert_called_once_with(devices_names)
 
+    @mock.patch.object(linuxscsi.LinuxSCSI, '_remove_scsi_symlinks')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'flush_multipath_device',
                        side_effect=Exception)
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_dm_name')
@@ -254,7 +258,7 @@ class LinuxSCSITestCase(base.TestCase):
     @mock.patch.object(linuxscsi.LinuxSCSI, 'remove_scsi_device')
     def test_remove_connection_multipath_fail(self, remove_mock, wait_mock,
                                               find_dm_mock, get_dm_name_mock,
-                                              flush_mp_mock):
+                                              flush_mp_mock, remove_link_mock):
         flush_mp_mock.side_effect = exception.ExceptionChainer
         devices_names = ('sda', 'sdb')
         exc = exception.ExceptionChainer()
@@ -267,11 +271,14 @@ class LinuxSCSITestCase(base.TestCase):
         flush_mp_mock.assert_called_once_with(get_dm_name_mock.return_value)
         remove_mock.assert_not_called()
         wait_mock.assert_not_called()
+        remove_link_mock.assert_not_called()
         self.assertTrue(bool(exc))
 
+    @mock.patch.object(linuxscsi.LinuxSCSI, '_remove_scsi_symlinks')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'wait_for_volumes_removal')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'remove_scsi_device')
-    def test_remove_connection_singlepath(self, remove_mock, wait_mock):
+    def test_remove_connection_singlepath(self, remove_mock, wait_mock,
+                                          remove_link_mock):
         devices_names = ('sda', 'sdb')
         exc = exception.ExceptionChainer()
         self.linuxscsi.remove_connection(devices_names, is_multipath=False,
@@ -281,6 +288,7 @@ class LinuxSCSITestCase(base.TestCase):
             [mock.call('/dev/sda', mock.sentinel.Force, exc),
              mock.call('/dev/sdb', mock.sentinel.Force, exc)])
         wait_mock.assert_called_once_with(devices_names)
+        remove_link_mock.assert_called_once_with(devices_names)
 
     def test_find_multipath_device_3par_ufn(self):
         def fake_execute(*cmd, **kwargs):
@@ -759,3 +767,177 @@ loop0                                     0"""
                 False, None, mock_rootwrap.execute))
         mock_rootwrap.execute.assert_called_once_with(
             'multipathd', 'show', 'status', run_as_root=True, root_helper=None)
+
+    @mock.patch('glob.glob')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_sysfs_wwid')
+    def test_get_sysfs_wwn_single_designator(self, get_wwid_mock, glob_mock):
+        glob_mock.return_value = ['/dev/disk/by-id/scsi-wwid1',
+                                  '/dev/disk/by-id/scsi-wwid2']
+        get_wwid_mock.return_value = 'wwid1'
+        res = self.linuxscsi.get_sysfs_wwn(mock.sentinel.device_names)
+        self.assertEqual('wwid1', res)
+        glob_mock.assert_called_once_with('/dev/disk/by-id/scsi-*')
+        get_wwid_mock.assert_called_once_with(mock.sentinel.device_names)
+
+    @mock.patch('os.path.realpath', side_effect=('/other/path',
+                                                 '/dev/sda', '/dev/sdb'))
+    @mock.patch('os.path.islink', side_effect=(False, True, True, True, True))
+    @mock.patch('os.stat', side_effect=(False, True, True, True))
+    @mock.patch('glob.glob')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_sysfs_wwid')
+    def test_get_sysfs_wwn_multiple_designators(self, get_wwid_mock, glob_mock,
+                                                stat_mock, islink_mock,
+                                                realpath_mock):
+        glob_mock.return_value = ['/dev/disk/by-id/scsi-fail-link',
+                                  '/dev/disk/by-id/scsi-fail-stat',
+                                  '/dev/disk/by-id/scsi-non-dev',
+                                  '/dev/disk/by-id/scsi-wwid1',
+                                  '/dev/disk/by-id/scsi-wwid2']
+        get_wwid_mock.return_value = 'pre-wwid'
+        devices = ['sdb', 'sdc']
+        res = self.linuxscsi.get_sysfs_wwn(devices)
+        self.assertEqual('wwid2', res)
+        glob_mock.assert_called_once_with('/dev/disk/by-id/scsi-*')
+        get_wwid_mock.assert_called_once_with(devices)
+
+    @mock.patch('os.path.realpath', side_effect=('/dev/sda', '/dev/sdb'))
+    @mock.patch('os.path.islink', return_value=True)
+    @mock.patch('os.stat', return_value=True)
+    @mock.patch('glob.glob')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_sysfs_wwid')
+    def test_get_sysfs_wwn_not_found(self, get_wwid_mock, glob_mock, stat_mock,
+                                     islink_mock, realpath_mock):
+        glob_mock.return_value = ['/dev/disk/by-id/scsi-wwid1',
+                                  '/dev/disk/by-id/scsi-wwid2']
+        get_wwid_mock.return_value = 'pre-wwid'
+        devices = ['sdc']
+        res = self.linuxscsi.get_sysfs_wwn(devices)
+        self.assertEqual('', res)
+        glob_mock.assert_called_once_with('/dev/disk/by-id/scsi-*')
+        get_wwid_mock.assert_called_once_with(devices)
+
+    @ddt.data({'wwn_type': 't10.', 'num_val': '1'},
+              {'wwn_type': 'eui.', 'num_val': '2'},
+              {'wwn_type': 'naa.', 'num_val': '3'})
+    @ddt.unpack
+    @mock.patch('six.moves.builtins.open')
+    def test_get_sysfs_wwid(self, open_mock, wwn_type, num_val):
+        read_fail = mock.MagicMock()
+        read_fail.__enter__.return_value.read.side_effect = IOError
+        read_data = mock.MagicMock()
+        read_data.__enter__.return_value.read.return_value = (wwn_type +
+                                                              'wwid1\n')
+        open_mock.side_effect = (IOError, read_fail, read_data)
+
+        res = self.linuxscsi.get_sysfs_wwid(['sda', 'sdb', 'sdc'])
+        self.assertEqual(num_val + 'wwid1', res)
+        open_mock.assert_has_calls([mock.call('/sys/block/sda/device/wwid'),
+                                    mock.call('/sys/block/sdb/device/wwid'),
+                                    mock.call('/sys/block/sdc/device/wwid')])
+
+    @mock.patch('six.moves.builtins.open', side_effect=IOError)
+    def test_get_sysfs_wwid_not_found(self, open_mock):
+        res = self.linuxscsi.get_sysfs_wwid(['sda', 'sdb'])
+        self.assertEqual('', res)
+        open_mock.assert_has_calls([mock.call('/sys/block/sda/device/wwid'),
+                                    mock.call('/sys/block/sdb/device/wwid')])
+
+    @mock.patch.object(linuxscsi.priv_rootwrap, 'unlink_root')
+    @mock.patch('glob.glob')
+    @mock.patch('os.path.realpath', side_effect=['/dev/sda', '/dev/sdb',
+                                                 '/dev/sdc'])
+    def test_remove_scsi_symlinks(self, realpath_mock, glob_mock, unlink_mock):
+        paths = ['/dev/disk/by-id/scsi-wwid1', '/dev/disk/by-id/scsi-wwid2',
+                 '/dev/disk/by-id/scsi-wwid3']
+        glob_mock.return_value = paths
+        self.linuxscsi._remove_scsi_symlinks(['sdb', 'sdc', 'sdd'])
+        glob_mock.assert_called_once_with('/dev/disk/by-id/scsi-*')
+        realpath_mock.assert_has_calls([mock.call(g) for g in paths])
+        unlink_mock.assert_called_once_with(no_errors=True, *paths[1:])
+
+    @mock.patch.object(linuxscsi.priv_rootwrap, 'unlink_root')
+    @mock.patch('glob.glob')
+    @mock.patch('os.path.realpath', side_effect=['/dev/sda', '/dev/sdb'])
+    def test_remove_scsi_symlinks_no_links(self, realpath_mock, glob_mock,
+                                           unlink_mock):
+        paths = ['/dev/disk/by-id/scsi-wwid1', '/dev/disk/by-id/scsi-wwid2']
+        glob_mock.return_value = paths
+        self.linuxscsi._remove_scsi_symlinks(['/dev/sdd', '/dev/sde'])
+        glob_mock.assert_called_once_with('/dev/disk/by-id/scsi-*')
+        realpath_mock.assert_has_calls([mock.call(g) for g in paths])
+        unlink_mock.assert_not_called()
+
+    @mock.patch('glob.glob')
+    def test_get_hctl_with_target(self, glob_mock):
+        glob_mock.return_value = [
+            '/sys/class/iscsi_host/host3/device/session1/target3:4:5',
+            '/sys/class/iscsi_host/host3/device/session1/target3:4:6']
+        res = self.linuxscsi.get_hctl('1', '2')
+        self.assertEqual(('3', '4', '5', '2'), res)
+        glob_mock.assert_called_once_with(
+            '/sys/class/iscsi_host/host*/device/session1/target*')
+
+    @mock.patch('glob.glob')
+    def test_get_hctl_no_target(self, glob_mock):
+        glob_mock.side_effect = [
+            [],
+            ['/sys/class/iscsi_host/host3/device/session1',
+             '/sys/class/iscsi_host/host3/device/session1']]
+        res = self.linuxscsi.get_hctl('1', '2')
+        self.assertEqual(('3', '-', '-', '2'), res)
+        glob_mock.assert_has_calls(
+            [mock.call('/sys/class/iscsi_host/host*/device/session1/target*'),
+             mock.call('/sys/class/iscsi_host/host*/device/session1')])
+
+    @mock.patch('glob.glob', return_value=[])
+    def test_get_hctl_no_paths(self, glob_mock):
+        res = self.linuxscsi.get_hctl('1', '2')
+        self.assertIsNone(res)
+        glob_mock.assert_has_calls(
+            [mock.call('/sys/class/iscsi_host/host*/device/session1/target*'),
+             mock.call('/sys/class/iscsi_host/host*/device/session1')])
+
+    @mock.patch('glob.glob')
+    def test_device_name_by_hctl(self, glob_mock):
+        glob_mock.return_value = [
+            '/sys/class/scsi_host/host3/device/session1/target3:4:5/3:4:5:2/'
+            'block/sda2',
+            '/sys/class/scsi_host/host3/device/session1/target3:4:5/3:4:5:2/'
+            'block/sda']
+        res = self.linuxscsi.device_name_by_hctl('1', ('3', '4', '5', '2'))
+        self.assertEqual('sda', res)
+        glob_mock.assert_called_once_with(
+            '/sys/class/scsi_host/host3/device/session1/target3:4:5/3:4:5:2/'
+            'block/*')
+
+    @mock.patch('glob.glob')
+    def test_device_name_by_hctl_wildcards(self, glob_mock):
+        glob_mock.return_value = [
+            '/sys/class/scsi_host/host3/device/session1/target3:4:5/3:4:5:2/'
+            'block/sda2',
+            '/sys/class/scsi_host/host3/device/session1/target3:4:5/3:4:5:2/'
+            'block/sda']
+        res = self.linuxscsi.device_name_by_hctl('1', ('3', '-', '-', '2'))
+        self.assertEqual('sda', res)
+        glob_mock.assert_called_once_with(
+            '/sys/class/scsi_host/host3/device/session1/target3:*:*/3:*:*:2/'
+            'block/*')
+
+    @mock.patch('glob.glob', mock.Mock(return_value=[]))
+    def test_device_name_by_hctl_no_devices(self):
+        res = self.linuxscsi.device_name_by_hctl('1', ('4', '5', '6', '2'))
+        self.assertIsNone(res)
+
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'echo_scsi_command')
+    def test_scsi_iscsi(self, echo_mock):
+        self.linuxscsi.scan_iscsi('host', 'channel', 'target', 'lun')
+        echo_mock.assert_called_once_with('/sys/class/scsi_host/hosthost/scan',
+                                          'channel target lun')
+
+    def test_multipath_add_wwid(self):
+        self.linuxscsi.multipath_add_wwid('wwid1')
+        self.assertEqual(['multipath -a wwid1'], self.cmds)
+
+    def test_multipath_add_path(self):
+        self.linuxscsi.multipath_add_path('/dev/sda')
+        self.assertEqual(['multipathd add path /dev/sda'], self.cmds)

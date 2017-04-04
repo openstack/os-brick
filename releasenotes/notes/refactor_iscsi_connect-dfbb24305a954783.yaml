@@ -1,0 +1,5 @@
+---
+fixes:
+  - |
+    iSCSI connect mechanism refactoring to be faster, more robust, more
+    reliable.
