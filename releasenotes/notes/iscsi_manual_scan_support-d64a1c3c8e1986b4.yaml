@@ -1,0 +1,11 @@
+---
+features:
+  - |
+    Support for setting the scan mode on the Open-iSCSI initiator.  If
+    installed iscsiadm supports this feature OS-Brick will set all it's new
+    sessions to manual scan.
+fixes:
+  - |
+    On systems with scan mode support on open-iSCSI we'll no longer see
+    unwanted devices polluting our system due to the automatic initiator scan
+    or to AEN/AER messages from the backend.

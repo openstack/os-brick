@@ -481,7 +481,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         """
         device = hctl = None
         portal = props['target_portal']
-        session = self._connect_to_iscsi_portal(props)
+        session, manual_scan = self._connect_to_iscsi_portal(props)
         do_scans = rescans > 0
         retry = 1
         if session:
@@ -493,8 +493,9 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                         hctl = self._linuxscsi.get_hctl(session,
                                                         props['target_lun'])
                     # Scan is sent on connect by iscsid, so skip first rescan
+                    # but on manual scan mode we have to do it ourselves.
                     if hctl:
-                        if retry > 1:
+                        if retry > 1 or manual_scan:
                             self._linuxscsi.scan_iscsi(*hctl)
 
                         device = self._linuxscsi.device_name_by_hctl(session,
@@ -846,12 +847,19 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         #             volume is using the same target.
         # iscsiadm returns 21 for "No records found" after version 2.0-871
         LOG.info("Trying to connect to iSCSI portal %s", portal)
-        err = self._run_iscsiadm(connection_properties, (),
-                                 check_exit_code=(0, 21, 255))[1]
+        out, err = self._run_iscsiadm(connection_properties, (),
+                                      check_exit_code=(0, 21, 255))
         if err:
             self._run_iscsiadm(connection_properties,
                                ('--interface', self._get_transport(),
                                 '--op', 'new'))
+            # Try to set the scan mode to manual
+            res = self._iscsiadm_update(connection_properties,
+                                        'node.session.scan', 'manual',
+                                        check_exit_code=False)
+            manual_scan = not res[1]
+        else:
+            manual_scan = 'node.session.scan = manual' in out
 
         if connection_properties.get('auth_method'):
             self._iscsiadm_update(connection_properties,
@@ -872,7 +880,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
             for s in sessions:
                 # Found our session, return session_id
                 if 'tcp:' == s[0] and portal == s[2] and s[4] == target_iqn:
-                    return s[1]
+                    return s[1], manual_scan
 
             try:
                 # exit_code=15 means the session already exists, so it should
@@ -884,7 +892,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                             '%(portal)s (exit code %(err)s).',
                             {'iqn': target_iqn, 'portal': portal,
                              'err': err.exit_code})
-                return None
+                return None, None
 
             self._iscsiadm_update(connection_properties,
                                   "node.startup",

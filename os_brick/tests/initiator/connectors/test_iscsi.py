@@ -831,14 +831,19 @@ Setting up iSCSI targets: unused
              ('tcp:', session, 'ip1:port1', '-1', 'tgt1')]
         ]
         with mock.patch.object(self.connector, '_execute') as exec_mock:
-            exec_mock.side_effect = [('', 'error'), ('', None), ('', None),
+            exec_mock.side_effect = [('', 'error'), ('', None),
+                                     ('', None), ('', None),
                                      ('', None)]
             res = self.connector._connect_to_iscsi_portal(self.CON_PROPS)
-        self.assertEqual(session, res)
+
+        # True refers to "manual scans", since the call to update
+        # node.session.scan didn't fail they are set to manual
+        self.assertEqual((session, True), res)
         prefix = 'iscsiadm -m node -T tgt1 -p ip1:port1'
         expected_cmds = [
             prefix,
             prefix + ' --interface default --op new',
+            prefix + ' --op update -n node.session.scan -v manual',
             prefix + ' --login',
             prefix + ' --op update -n node.startup -v automatic'
         ]
@@ -856,7 +861,8 @@ Setting up iSCSI targets: unused
         con_props.update(auth_method='CHAP', auth_username='user',
                          auth_password='pwd')
         res = self.connector._connect_to_iscsi_portal(con_props)
-        self.assertEqual(session, res)
+        # False refers to "manual scans", so we have automatic iscsi scans
+        self.assertEqual((session, False), res)
         prefix = 'iscsiadm -m node -T tgt1 -p ip1:port1'
         expected_cmds = [
             prefix,
@@ -867,13 +873,35 @@ Setting up iSCSI targets: unused
         self.assertListEqual(expected_cmds, self.cmds)
         get_sessions_mock.assert_called_once_with()
 
+    @ddt.data('auto', 'manual')
+    @mock.patch.object(iscsi.ISCSIConnector, '_get_iscsi_sessions_full')
+    def test_connect_to_iscsi_portal_manual_scan_feature(self, manual_scan,
+                                                         get_sessions_mock):
+        """Node and session already exists and iscsi supports manual scans."""
+        session = 'session2'
+        get_sessions_mock.return_value = [('tcp:', session, 'ip1:port1',
+                                           '-1', 'tgt1')]
+        con_props = self.CON_PROPS.copy()
+        node_props = ('node.startup = automatic\nnode.session.scan = ' +
+                      manual_scan)
+        with mock.patch.object(self.connector, '_execute') as exec_mock:
+            exec_mock.side_effect = [(node_props, None)]
+            res = self.connector._connect_to_iscsi_portal(con_props)
+        # False refers to "manual scans", so we have automatic iscsi scans
+        self.assertEqual((session, manual_scan == 'manual'), res)
+
+        actual_cmds = [' '.join(args[0]) for args in exec_mock.call_args_list]
+        self.assertListEqual(['iscsiadm -m node -T tgt1 -p ip1:port1'],
+                             actual_cmds)
+        get_sessions_mock.assert_called_once_with()
+
     @mock.patch.object(iscsi.ISCSIConnector, '_get_iscsi_sessions_full')
     def test_connect_to_iscsi_portal_fail_login(self, get_sessions_mock):
         get_sessions_mock.return_value = []
         with mock.patch.object(self.connector, '_execute') as exec_mock:
             exec_mock.side_effect = [('', None), putils.ProcessExecutionError]
             res = self.connector._connect_to_iscsi_portal(self.CON_PROPS)
-        self.assertIsNone(res)
+        self.assertEqual((None, None), res)
         expected_cmds = ['iscsiadm -m node -T tgt1 -p ip1:port1',
                          'iscsiadm -m node -T tgt1 -p ip1:port1 --login']
         actual_cmds = [' '.join(args[0]) for args in exec_mock.call_args_list]
@@ -1140,7 +1168,7 @@ Setting up iSCSI targets: unused
         hctl = [mock.sentinel.host, mock.sentinel.channel,
                 mock.sentinel.target, mock.sentinel.lun]
 
-        connect_mock.return_value = mock.sentinel.session
+        connect_mock.return_value = (mock.sentinel.session, False)
 
         with mock.patch.object(lscsi, 'get_hctl',
                                side_effect=(None, hctl)) as hctl_mock:
@@ -1161,7 +1189,7 @@ Setting up iSCSI targets: unused
         dev_name_mock.assert_called_once_with(mock.sentinel.session, hctl)
 
     @mock.patch.object(iscsi.ISCSIConnector, '_connect_to_iscsi_portal',
-                       return_value=None)
+                       return_value=(None, False))
     def test_connect_vol_no_session(self, connect_mock):
         data = self._get_connect_vol_data()
 
@@ -1183,22 +1211,21 @@ Setting up iSCSI targets: unused
         hctl = [mock.sentinel.host, mock.sentinel.channel,
                 mock.sentinel.target, mock.sentinel.lun]
 
-        connect_mock.return_value = mock.sentinel.session
+        # True because we are simulating we have manual scans
+        connect_mock.return_value = (mock.sentinel.session, True)
 
         with mock.patch.object(lscsi, 'get_hctl',
-                               side_effect=(None, hctl)) as hctl_mock:
+                               side_effect=(hctl,)) as hctl_mock:
             self.connector._connect_vol(3, self.CON_PROPS, data)
 
         expected = self._get_connect_vol_data()
         expected.update(num_logins=1, stopped_threads=1)
         self.assertDictEqual(expected, data)
 
-        hctl_mock.assert_has_calls([mock.call(mock.sentinel.session,
-                                              self.CON_PROPS['target_lun']),
-                                    mock.call(mock.sentinel.session,
-                                              self.CON_PROPS['target_lun'])])
-
-        scan_mock.assert_has_calls([mock.call(*hctl), mock.call(*hctl)])
+        hctl_mock.assert_called_once_with(mock.sentinel.session,
+                                          self.CON_PROPS['target_lun'])
+        # We have 3 scans because on manual mode we also scan on connect
+        scan_mock.assert_has_calls([mock.call(*hctl)] * 3)
         dev_name_mock.assert_has_calls(
             [mock.call(mock.sentinel.session, hctl),
              mock.call(mock.sentinel.session, hctl)])
@@ -1217,7 +1244,7 @@ Setting up iSCSI targets: unused
         hctl = [mock.sentinel.host, mock.sentinel.channel,
                 mock.sentinel.target, mock.sentinel.lun]
 
-        connect_mock.return_value = mock.sentinel.session
+        connect_mock.return_value = (mock.sentinel.session, False)
 
         with mock.patch.object(lscsi, 'get_hctl',
                                return_value=hctl) as hctl_mock, \
