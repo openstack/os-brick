@@ -373,7 +373,8 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         Try and update the local kernel's size information
         for an iSCSI volume.
         """
-        LOG.info("Extend volume for %s", connection_properties)
+        LOG.info("Extend volume for %s",
+                 strutils.mask_dict_password(connection_properties))
 
         volume_paths = self.get_volume_paths(connection_properties)
         LOG.info("Found paths for volume %s", volume_paths)
@@ -382,7 +383,8 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         else:
             LOG.warning("Couldn't find any volume paths on the host to "
                         "extend volume for %(props)s",
-                        {'props': connection_properties})
+                        {'props': strutils.mask_dict_password(
+                            connection_properties)})
             raise exception.VolumePathsNotFound()
 
     @utils.trace
