@@ -87,7 +87,7 @@ class RBDConnector(base.BaseLinuxConnector):
             fd, ceph_conf_path = tempfile.mkstemp(prefix="brickrbd_")
             with os.fdopen(fd, 'w') as conf_file:
                 conf_file.writelines([mon_hosts, "\n",
-                                      client_section, "\n", keyring])
+                                      client_section, "\n", keyring, "\n"])
             return ceph_conf_path
         except IOError:
             msg = (_("Failed to write data to %s.") % (ceph_conf_path))
