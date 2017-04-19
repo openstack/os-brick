@@ -1030,6 +1030,53 @@ Setting up iSCSI targets: unused
         new_size = self.connector.extend_volume(connection_info['data'])
         self.assertEqual(fake_new_size, new_size)
 
+    @mock.patch.object(iscsi.LOG, 'info')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'extend_volume')
+    @mock.patch.object(iscsi.ISCSIConnector, 'get_volume_paths')
+    def test_extend_volume_mask_password(self, mock_volume_paths,
+                                         mock_scsi_extend,
+                                         mock_log_info):
+        fake_new_size = 1024
+        mock_volume_paths.return_value = ['/dev/vdx']
+        mock_scsi_extend.return_value = fake_new_size
+        volume = {'id': 'fake_uuid'}
+        connection_info = self.iscsi_connection_chap(
+            volume, "10.0.2.15:3260", "fake_iqn",
+            'CHAP', 'fake_user', 'fake_password',
+            'CHAP1', 'fake_user1', 'fake_password1')
+        self.connector.extend_volume(connection_info['data'])
+
+        self.assertEqual(2, mock_log_info.call_count)
+        self.assertIn("'auth_password': '***'",
+                      str(mock_log_info.call_args_list[0]))
+        self.assertIn("'discovery_auth_password': '***'",
+                      str(mock_log_info.call_args_list[0]))
+
+    @mock.patch.object(iscsi.LOG, 'warning')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'extend_volume')
+    @mock.patch.object(iscsi.ISCSIConnector, 'get_volume_paths')
+    def test_extend_volume_mask_password_no_paths(self, mock_volume_paths,
+                                                  mock_scsi_extend,
+                                                  mock_log_warning):
+        fake_new_size = 1024
+        mock_volume_paths.return_value = []
+        mock_scsi_extend.return_value = fake_new_size
+        volume = {'id': 'fake_uuid'}
+        connection_info = self.iscsi_connection_chap(
+            volume, "10.0.2.15:3260", "fake_iqn",
+            'CHAP', 'fake_user', 'fake_password',
+            'CHAP1', 'fake_user1', 'fake_password1')
+
+        self.assertRaises(exception.VolumePathsNotFound,
+                          self.connector.extend_volume,
+                          connection_info['data'])
+
+        self.assertEqual(1, mock_log_warning.call_count)
+        self.assertIn("'auth_password': '***'",
+                      str(mock_log_warning.call_args_list[0]))
+        self.assertIn("'discovery_auth_password': '***'",
+                      str(mock_log_warning.call_args_list[0]))
+
     @mock.patch.object(os.path, 'isdir')
     def test_get_all_available_volumes_path_not_dir(self, mock_isdir):
         mock_isdir.return_value = False
