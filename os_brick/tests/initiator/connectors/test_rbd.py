@@ -14,6 +14,7 @@
 import ddt
 import mock
 
+from os_brick import exception
 from os_brick.initiator.connectors import rbd
 from os_brick.initiator import linuxrbd
 from os_brick.privileged import rootwrap as priv_rootwrap
@@ -146,15 +147,43 @@ class RBDConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(priv_rootwrap, 'execute', return_value=None)
     def test_connect_local_volume(self, mock_execute):
         rbd_connector = rbd.RBDConnector(None, do_local_attach=True)
-        conn = {'name': 'pool/image'}
+        conn = {'name': 'pool/image',
+                'auth_username': 'fake_user',
+                'hosts': ['192.168.10.2'],
+                'ports': ['6789']}
         device_info = rbd_connector.connect_volume(conn)
         execute_call1 = mock.call('which', 'rbd')
-        cmd = ['rbd', 'map', 'image', '--pool', 'pool']
+        cmd = ['rbd', 'map', 'image', '--pool', 'pool', '--id', 'fake_user',
+               '--mon_host', '192.168.10.2:6789']
         execute_call2 = mock.call(*cmd, root_helper=None, run_as_root=True)
         mock_execute.assert_has_calls([execute_call1, execute_call2])
         expected_info = {'path': '/dev/rbd/pool/image',
                          'type': 'block'}
         self.assertEqual(expected_info, device_info)
+
+    @mock.patch.object(priv_rootwrap, 'execute', return_value=None)
+    def test_connect_local_volume_without_mons(self, mock_execute):
+        rbd_connector = rbd.RBDConnector(None, do_local_attach=True)
+        conn = {'name': 'pool/image',
+                'auth_username': 'fake_user'}
+        device_info = rbd_connector.connect_volume(conn)
+        execute_call1 = mock.call('which', 'rbd')
+        cmd = ['rbd', 'map', 'image', '--pool', 'pool', '--id', 'fake_user']
+        execute_call2 = mock.call(*cmd, root_helper=None, run_as_root=True)
+        mock_execute.assert_has_calls([execute_call1, execute_call2])
+        expected_info = {'path': '/dev/rbd/pool/image',
+                         'type': 'block'}
+        self.assertEqual(expected_info, device_info)
+
+    @mock.patch.object(priv_rootwrap, 'execute', return_value=None)
+    def test_connect_local_volume_without_auth(self, mock_execute):
+        rbd_connector = rbd.RBDConnector(None, do_local_attach=True)
+        conn = {'name': 'pool/image',
+                'hosts': ['192.168.10.2'],
+                'ports': ['6789']}
+        self.assertRaises(exception.BrickException,
+                          rbd_connector.connect_volume,
+                          conn)
 
     @mock.patch('os_brick.initiator.linuxrbd.rbd')
     @mock.patch('os_brick.initiator.linuxrbd.rados')
@@ -171,11 +200,15 @@ class RBDConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(priv_rootwrap, 'execute', return_value=None)
     def test_disconnect_local_volume(self, mock_execute):
         rbd_connector = rbd.RBDConnector(None, do_local_attach=True)
-        conn = {'name': 'pool/image'}
+        conn = {'name': 'pool/image',
+                'auth_username': 'fake_user',
+                'hosts': ['192.168.10.2'],
+                'ports': ['6789']}
         rbd_connector.disconnect_volume(conn, None)
 
         dev_name = '/dev/rbd/pool/image'
-        cmd = ['rbd', 'unmap', dev_name]
+        cmd = ['rbd', 'unmap', dev_name, '--id', 'fake_user',
+               '--mon_host', '192.168.10.2:6789']
         mock_execute.assert_called_once_with(*cmd, root_helper=None,
                                              run_as_root=True)
 
