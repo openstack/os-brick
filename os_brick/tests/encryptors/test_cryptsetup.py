@@ -18,7 +18,6 @@ import binascii
 import copy
 import mock
 import six
-import uuid
 
 from castellan.common.objects import symmetric_key as key
 from castellan.tests.unit.key_manager import fake
@@ -65,7 +64,7 @@ class CryptsetupEncryptorTestCase(test_base.VolumeEncryptorTestCase):
 
     @mock.patch('os_brick.executor.Executor._execute')
     def test_attach_volume(self, mock_execute):
-        fake_key = uuid.uuid4().hex
+        fake_key = 'e8b76872e3b04c18b3b6656bbf6f5089'
         self.encryptor._get_key = mock.MagicMock()
         self.encryptor._get_key.return_value = fake__get_key(None, fake_key)
 

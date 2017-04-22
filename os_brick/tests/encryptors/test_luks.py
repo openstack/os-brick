@@ -15,8 +15,6 @@
 
 import binascii
 import mock
-import uuid
-
 
 from castellan.common.objects import symmetric_key as key
 from os_brick.encryptors import luks
@@ -82,7 +80,7 @@ class LuksEncryptorTestCase(test_cryptsetup.CryptsetupEncryptorTestCase):
 
     @mock.patch('os_brick.executor.Executor._execute')
     def test_attach_volume(self, mock_execute):
-        fake_key = uuid.uuid4().hex
+        fake_key = '0c84146034e747639b698368807286df'
         self.encryptor._get_key = mock.MagicMock()
         self.encryptor._get_key.return_value = (
             test_cryptsetup.fake__get_key(None, fake_key))
@@ -102,7 +100,7 @@ class LuksEncryptorTestCase(test_cryptsetup.CryptsetupEncryptorTestCase):
 
     @mock.patch('os_brick.executor.Executor._execute')
     def test_attach_volume_not_formatted(self, mock_execute):
-        fake_key = uuid.uuid4().hex
+        fake_key = 'bc37c5eccebe403f9cc2d0dd20dac2bc'
         self.encryptor._get_key = mock.MagicMock()
         self.encryptor._get_key.return_value = (
             test_cryptsetup.fake__get_key(None, fake_key))
@@ -141,7 +139,7 @@ class LuksEncryptorTestCase(test_cryptsetup.CryptsetupEncryptorTestCase):
 
     @mock.patch('os_brick.executor.Executor._execute')
     def test_attach_volume_fail(self, mock_execute):
-        fake_key = uuid.uuid4().hex
+        fake_key = 'ea6c2e1b8f7f4f84ae3560116d659ba2'
         self.encryptor._get_key = mock.MagicMock()
         self.encryptor._get_key.return_value = (
             test_cryptsetup.fake__get_key(None, fake_key))
