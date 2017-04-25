@@ -138,7 +138,9 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(linuxscsi.LinuxSCSI, 'remove_scsi_device')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_scsi_wwn')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_device_info')
-    def test_connect_volume(self, get_device_info_mock,
+    @mock.patch.object(base.BaseLinuxConnector, 'check_valid_device')
+    def test_connect_volume(self, check_valid_device_mock,
+                            get_device_info_mock,
                             get_scsi_wwn_mock,
                             remove_device_mock,
                             get_fc_hbas_info_mock,
@@ -146,6 +148,7 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
                             realpath_mock,
                             exists_mock,
                             wait_for_rw_mock):
+        check_valid_device_mock.return_value = True
         get_fc_hbas_mock.side_effect = self.fake_get_fc_hbas
         get_fc_hbas_info_mock.side_effect = self.fake_get_fc_hbas_info
 
@@ -262,7 +265,9 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(linuxfc.LinuxFibreChannel, 'get_fc_hbas_info')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_scsi_wwn')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_device_info')
-    def test_connect_volume_multipath_rw(self, get_device_info_mock,
+    @mock.patch.object(base.BaseLinuxConnector, 'check_valid_device')
+    def test_connect_volume_multipath_rw(self, check_valid_device_mock,
+                                         get_device_info_mock,
                                          get_scsi_wwn_mock,
                                          get_fc_hbas_info_mock,
                                          get_fc_hbas_mock,
@@ -271,6 +276,7 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
                                          wait_for_rw_mock,
                                          find_mp_dev_mock):
 
+        check_valid_device_mock.return_value = True
         self._test_connect_volume_multipath(get_device_info_mock,
                                             get_scsi_wwn_mock,
                                             get_fc_hbas_info_mock,
@@ -290,7 +296,9 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(linuxfc.LinuxFibreChannel, 'get_fc_hbas_info')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_scsi_wwn')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_device_info')
+    @mock.patch.object(base.BaseLinuxConnector, 'check_valid_device')
     def test_connect_volume_multipath_no_access_mode(self,
+                                                     check_valid_device_mock,
                                                      get_device_info_mock,
                                                      get_scsi_wwn_mock,
                                                      get_fc_hbas_info_mock,
@@ -300,6 +308,7 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
                                                      wait_for_rw_mock,
                                                      find_mp_dev_mock):
 
+        check_valid_device_mock.return_value = True
         self._test_connect_volume_multipath(get_device_info_mock,
                                             get_scsi_wwn_mock,
                                             get_fc_hbas_info_mock,
@@ -319,7 +328,9 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(linuxfc.LinuxFibreChannel, 'get_fc_hbas_info')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_scsi_wwn')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_device_info')
-    def test_connect_volume_multipath_ro(self, get_device_info_mock,
+    @mock.patch.object(base.BaseLinuxConnector, 'check_valid_device')
+    def test_connect_volume_multipath_ro(self, check_valid_device_mock,
+                                         get_device_info_mock,
                                          get_scsi_wwn_mock,
                                          get_fc_hbas_info_mock,
                                          get_fc_hbas_mock,
@@ -328,6 +339,7 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
                                          wait_for_rw_mock,
                                          find_mp_dev_mock):
 
+        check_valid_device_mock.return_value = True
         self._test_connect_volume_multipath(get_device_info_mock,
                                             get_scsi_wwn_mock,
                                             get_fc_hbas_info_mock,
@@ -348,7 +360,9 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(linuxfc.LinuxFibreChannel, 'get_fc_hbas_info')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_scsi_wwn')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_device_info')
+    @mock.patch.object(base.BaseLinuxConnector, 'check_valid_device')
     def test_connect_volume_multipath_not_found(self,
+                                                check_valid_device_mock,
                                                 get_device_info_mock,
                                                 get_scsi_wwn_mock,
                                                 get_fc_hbas_info_mock,
@@ -358,6 +372,7 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
                                                 wait_for_rw_mock,
                                                 find_mp_dev_mock,
                                                 discover_mp_dev_mock):
+        check_valid_device_mock.return_value = True
         discover_mp_dev_mock.return_value = ("/dev/disk/by-path/something",
                                              None)
 
@@ -401,3 +416,36 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
         expected = []
         actual = self.connector.get_all_available_volumes()
         self.assertItemsEqual(expected, actual)
+
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'find_multipath_device')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'wait_for_rw')
+    @mock.patch.object(os.path, 'exists', return_value=True)
+    @mock.patch.object(os.path, 'realpath', return_value='/dev/sdb')
+    @mock.patch.object(linuxfc.LinuxFibreChannel, 'get_fc_hbas')
+    @mock.patch.object(linuxfc.LinuxFibreChannel, 'get_fc_hbas_info')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_scsi_wwn')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_device_info')
+    @mock.patch.object(base.BaseLinuxConnector, 'check_valid_device')
+    def test_connect_volume_device_not_valid(self, check_valid_device_mock,
+                                             get_device_info_mock,
+                                             get_scsi_wwn_mock,
+                                             get_fc_hbas_info_mock,
+                                             get_fc_hbas_mock,
+                                             realpath_mock,
+                                             exists_mock,
+                                             wait_for_rw_mock,
+                                             find_mp_dev_mock):
+
+        check_valid_device_mock.return_value = False
+        self.assertRaises(exception.NoFibreChannelVolumeDeviceFound,
+                          self._test_connect_volume_multipath,
+                          get_device_info_mock,
+                          get_scsi_wwn_mock,
+                          get_fc_hbas_info_mock,
+                          get_fc_hbas_mock,
+                          realpath_mock,
+                          exists_mock,
+                          wait_for_rw_mock,
+                          find_mp_dev_mock,
+                          'rw',
+                          True)
