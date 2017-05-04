@@ -180,12 +180,20 @@ class RBDConnector(base.BaseLinuxConnector):
             # NOTE(e0ne): map volume to a block device
             # via the rbd kernel module.
             pool, volume = connection_properties['name'].split('/')
-            cmd = ['rbd', 'map', volume, '--pool', pool]
-            cmd += self._get_rbd_args(connection_properties)
-            self._execute(*cmd, root_helper=self._root_helper,
-                          run_as_root=True)
+            rbd_dev_path = RBDConnector.get_rbd_device_name(pool, volume)
+            if (not os.path.islink(rbd_dev_path) or
+                    not os.path.exists(os.path.realpath(rbd_dev_path))):
+                cmd = ['rbd', 'map', volume, '--pool', pool]
+                cmd += self._get_rbd_args(connection_properties)
+                self._execute(*cmd, root_helper=self._root_helper,
+                              run_as_root=True)
+            else:
+                LOG.debug('volume %(vol)s is already mapped to local'
+                          ' device %(dev)s',
+                          {'vol': volume,
+                           'dev': os.path.realpath(rbd_dev_path)})
 
-            return {'path': RBDConnector.get_rbd_device_name(pool, volume),
+            return {'path': rbd_dev_path,
                     'type': 'block'}
 
         rbd_handle = self._get_rbd_handle(connection_properties)
