@@ -27,14 +27,12 @@ from os_brick import utils
 LOG = logging.getLogger(__name__)
 synchronized = lockutils.synchronized_with_prefix('os-brick-vrts-hyperscale-')
 
-GUID_STR_LEN = 38
-
 
 class HyperScaleConnector(base.BaseLinuxConnector):
     """Class implements the os-brick connector for HyperScale volumes."""
 
     def __init__(self, root_helper, driver=None,
-                 execute=putils.execute,
+                 execute=None,
                  *args, **kwargs):
 
         super(HyperScaleConnector, self).__init__(
@@ -69,7 +67,7 @@ class HyperScaleConnector(base.BaseLinuxConnector):
         if 'name' in connection_properties.keys():
             volume_name = connection_properties['name']
 
-        if volume_name is None or len(volume_name) != GUID_STR_LEN:
+        if volume_name is None:
             msg = _("Failed to connect volume: invalid volume name.")
             raise exception.BrickException(message=msg)
 
@@ -92,7 +90,7 @@ class HyperScaleConnector(base.BaseLinuxConnector):
                   "stderr=%(err)s",
                   {'out': out, 'err': err})
 
-        if err != 0:
+        if err or out is None or len(out) == 0:
             msg = (_("Failed to connect volume with stdout=%(out)s "
                      "stderr=%(err)s") % {'out': out, 'err': err})
             raise exception.BrickException(message=msg)
@@ -138,7 +136,7 @@ class HyperScaleConnector(base.BaseLinuxConnector):
         if 'name' in connection_properties.keys():
             volume_name = connection_properties['name']
 
-        if volume_name is None or len(volume_name) != GUID_STR_LEN:
+        if volume_name is None:
             msg = _("Failed to disconnect volume: invalid volume name")
             raise exception.BrickException(message=msg)
 
