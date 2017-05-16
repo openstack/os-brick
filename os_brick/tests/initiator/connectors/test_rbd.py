@@ -34,7 +34,7 @@ class RBDConnectorTestCase(test_connector.ConnectorTestCase):
         self.clustername = 'fake_ceph'
         self.hosts = ['192.168.10.2']
         self.ports = ['6789']
-        self.keyring = '/etc/ceph/ceph.client.cinder.keyring'
+        self.keyring = "[client.cinder]\n  key = test\n"
 
         self.connection_properties = {
             'auth_username': self.user,
@@ -42,6 +42,7 @@ class RBDConnectorTestCase(test_connector.ConnectorTestCase):
             'cluster_name': self.clustername,
             'hosts': self.hosts,
             'ports': self.ports,
+            'keyring': self.keyring,
         }
 
     def test_get_search_path(self):
@@ -100,16 +101,40 @@ class RBDConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch('os_brick.initiator.linuxrbd.rados')
     @mock.patch.object(rbd.RBDConnector, '_create_ceph_conf')
     @mock.patch('os.path.exists')
-    def test_custom_keyring(self, mock_path, mock_conf, mock_rados, mock_rbd):
+    def test_provided_keyring(self, mock_path, mock_conf, mock_rados,
+                              mock_rbd):
         conn = rbd.RBDConnector(None)
         mock_path.return_value = False
         mock_conf.return_value = "/tmp/fake_dir/fake_ceph.conf"
-        custom_keyring_path = "/foo/bar/baz"
-        self.connection_properties['keyring'] = custom_keyring_path
+        self.connection_properties['keyring'] = self.keyring
         conn.connect_volume(self.connection_properties)
         mock_conf.assert_called_once_with(self.hosts, self.ports,
                                           self.clustername, self.user,
-                                          custom_keyring_path)
+                                          self.keyring)
+
+    def test_keyring_is_none(self):
+        conn = rbd.RBDConnector(None)
+        keyring = None
+        keyring_data = "[client.cinder]\n  key = test\n"
+        mockopen = mock.mock_open(read_data=keyring_data)
+        mockopen.return_value.__exit__ = mock.Mock()
+        with mock.patch('os_brick.initiator.connectors.rbd.open', mockopen,
+                        create=True):
+            self.assertEqual(
+                conn._check_or_get_keyring_contents(keyring, 'cluster',
+                                                    'user'), keyring_data)
+
+    def test_keyring_raise_error(self):
+        conn = rbd.RBDConnector(None)
+        keyring = None
+        mockopen = mock.mock_open()
+        mockopen.return_value = ""
+        with mock.patch('os_brick.initiator.connectors.rbd.open', mockopen,
+                        create=True) as mock_keyring_file:
+            mock_keyring_file.side_effect = IOError
+            self.assertRaises(exception.BrickException,
+                              conn._check_or_get_keyring_contents, keyring,
+                              'cluster', 'user')
 
     @ddt.data((['192.168.1.1', '192.168.1.2'],
                ['192.168.1.1', '192.168.1.2']),

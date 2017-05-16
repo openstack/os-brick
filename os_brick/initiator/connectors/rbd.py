@@ -69,25 +69,31 @@ class RBDConnector(base.BaseLinuxConnector):
             return host
         return list(map(_sanitize_host, hosts))
 
+    def _check_or_get_keyring_contents(self, keyring, cluster_name, user):
+        try:
+            if keyring is None:
+                keyring_path = ("/etc/ceph/%s.client.%s.keyring" %
+                                (cluster_name, user))
+                with open(keyring_path, 'r') as keyring_file:
+                    keyring = keyring_file.read()
+            return keyring
+        except IOError:
+            msg = (_("Keyring path %s is not readable.") % (keyring_path))
+            raise exception.BrickException(msg=msg)
+
     def _create_ceph_conf(self, monitor_ips, monitor_ports,
-                          cluster_name, user, keyring_path):
+                          cluster_name, user, keyring):
         monitors = ["%s:%s" % (ip, port) for ip, port in
                     zip(self._sanitize_mon_hosts(monitor_ips), monitor_ports)]
         mon_hosts = "mon_host = %s" % (','.join(monitors))
 
-        client_section = "[client.%s]" % user
-
-        if keyring_path is None:
-            keyring = ("keyring = /etc/ceph/%s.client.%s.keyring" %
-                       (cluster_name, user))
-        else:
-            keyring = "keyring = %s" % keyring_path
+        keyring = self._check_or_get_keyring_contents(keyring, cluster_name,
+                                                      user)
 
         try:
             fd, ceph_conf_path = tempfile.mkstemp(prefix="brickrbd_")
             with os.fdopen(fd, 'w') as conf_file:
-                conf_file.writelines([mon_hosts, "\n",
-                                      client_section, "\n", keyring, "\n"])
+                conf_file.writelines([mon_hosts, "\n", keyring, "\n"])
             return ceph_conf_path
         except IOError:
             msg = (_("Failed to write data to %s.") % (ceph_conf_path))
@@ -100,14 +106,14 @@ class RBDConnector(base.BaseLinuxConnector):
             cluster_name = connection_properties.get('cluster_name')
             monitor_ips = connection_properties.get('hosts')
             monitor_ports = connection_properties.get('ports')
-            keyring_path = connection_properties.get('keyring')
+            keyring = connection_properties.get('keyring')
         except IndexError:
             msg = _("Connect volume failed, malformed connection properties")
             raise exception.BrickException(msg=msg)
 
         conf = self._create_ceph_conf(monitor_ips, monitor_ports,
                                       str(cluster_name), user,
-                                      keyring_path)
+                                      keyring)
         try:
             rbd_client = linuxrbd.RBDClient(user, pool, conffile=conf,
                                             rbd_cluster_name=str(cluster_name))
