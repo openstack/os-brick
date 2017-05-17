@@ -56,10 +56,9 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
             return [line.split('/')[4].split(':')[1:]
                     for line in out.split('\n') if line.startswith(path)]
         except Exception as exc:
-            LOG.error('Could not get HBA channel and SCSI target ID, '
-                      'path: %(path)s, reason: %(reason)s',
-                      {'path': path,
-                       'reason': exc})
+            LOG.debug('Could not get HBA channel and SCSI target ID, path: '
+                      '%(path)s, reason: %(reason)s', {'path': path,
+                                                       'reason': exc})
             return None
 
     def rescan_hosts(self, hbas, target_lun):
