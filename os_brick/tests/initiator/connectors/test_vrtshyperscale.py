@@ -88,17 +88,6 @@ class HyperScaleConnectorTestCase(test_connector.ConnectorTestCase):
                           connector.connect_volume,
                           fake_connection_properties)
 
-    def test_connect_volume_arg_inval(self):
-        """Test connect_volume with bad volume name argument"""
-        connector = vrtshyperscale.HyperScaleConnector(
-            'sudo', execute=self._fake_execute_success)
-        fake_connection_properties = {
-            'name': 'x'
-        }
-        self.assertRaises(exception.BrickException,
-                          connector.connect_volume,
-                          fake_connection_properties)
-
     def test_connect_volume_hscli_missing(self):
         """Test connect_volume that can't call hscli"""
         connector = vrtshyperscale.HyperScaleConnector(
@@ -148,19 +137,6 @@ class HyperScaleConnectorTestCase(test_connector.ConnectorTestCase):
         connector = vrtshyperscale.HyperScaleConnector(
             'sudo', execute=self._fake_execute_success)
         fake_connection_properties = {}
-        fake_device_info = {}
-        self.assertRaises(exception.BrickException,
-                          connector.disconnect_volume,
-                          fake_connection_properties,
-                          fake_device_info)
-
-    def test_disconnect_volume_arg_inval(self):
-        """Test disconnect_volume with invalid volume name argument"""
-        connector = vrtshyperscale.HyperScaleConnector(
-            'sudo', execute=self._fake_execute_success)
-        fake_connection_properties = {
-            'name': 'x'
-        }
         fake_device_info = {}
         self.assertRaises(exception.BrickException,
                           connector.disconnect_volume,
