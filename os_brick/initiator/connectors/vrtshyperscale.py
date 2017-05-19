@@ -110,9 +110,7 @@ class HyperScaleConnector(base.BaseLinuxConnector):
 
         device_info['vsa_ip'] = payload.get('vsa_ip')
         device_info['device_path'] = (
-            "oflame://" + device_info['vsa_ip'] + ":9999/%7B" +
-            volume_name[1:-1] + "%7D")
-
+            '/dev/' + connection_properties['name'][1:32])
         refl_factor = int(payload.get('refl_factor'))
         device_info['refl_factor'] = str(refl_factor)
 

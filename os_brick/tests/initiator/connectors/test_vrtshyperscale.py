@@ -21,6 +21,9 @@ from os_brick import exception
 from os_brick.initiator.connectors import vrtshyperscale
 from os_brick.tests.initiator import test_connector
 
+DEVICE_NAME = '{8ee71c33-dcd0-4267-8f2b-e0742ecabe9f}'
+DEVICE_PATH = '/dev/8ee71c33-dcd0-4267-8f2b-e0742ec'
+
 
 class HyperScaleConnectorTestCase(test_connector.ConnectorTestCase):
     """Test cases for Veritas HyperScale os-brick connector."""
@@ -67,17 +70,14 @@ class HyperScaleConnectorTestCase(test_connector.ConnectorTestCase):
         connector = vrtshyperscale.HyperScaleConnector(
             'sudo', execute=self._fake_execute_success)
         fake_connection_properties = {
-            'name': '{8ee71c33-dcd0-4267-8f2b-e0742ecabe9f}'
+            'name': DEVICE_NAME
         }
         device_info = connector.connect_volume(fake_connection_properties)
 
         self.assertEqual('192.0.2.2', device_info['vsa_ip'])
         self.assertEqual('2', device_info['refl_factor'])
         self.assertEqual('192.0.2.3,192.0.2.4', device_info['refl_targets'])
-        self.assertEqual(
-            'oflame://192.0.2.2:9999/'
-            '%7B8ee71c33-dcd0-4267-8f2b-e0742ecabe9f%7D',
-            device_info['device_path'])
+        self.assertEqual(DEVICE_PATH, device_info['device_path'])
 
     def test_connect_volume_arg_missing(self):
         """Test connect_volume with missing missing arguments"""
@@ -93,7 +93,7 @@ class HyperScaleConnectorTestCase(test_connector.ConnectorTestCase):
         connector = vrtshyperscale.HyperScaleConnector(
             'sudo', execute=self._fake_execute_hscli_missing)
         fake_connection_properties = {
-            'name': '{8ee71c33-dcd0-4267-8f2b-e0742ecabe9f}'
+            'name': DEVICE_NAME
         }
         self.assertRaises(exception.BrickException,
                           connector.connect_volume,
@@ -104,7 +104,7 @@ class HyperScaleConnectorTestCase(test_connector.ConnectorTestCase):
         connector = vrtshyperscale.HyperScaleConnector(
             'sudo', execute=self._fake_execute_hscli_err)
         fake_connection_properties = {
-            'name': '{8ee71c33-dcd0-4267-8f2b-e0742ecabe9f}'
+            'name': DEVICE_NAME
         }
         self.assertRaises(exception.BrickException,
                           connector.connect_volume,
@@ -115,7 +115,7 @@ class HyperScaleConnectorTestCase(test_connector.ConnectorTestCase):
         connector = vrtshyperscale.HyperScaleConnector(
             'sudo', execute=self._fake_execute_hscli_res_inval)
         fake_connection_properties = {
-            'name': '{8ee71c33-dcd0-4267-8f2b-e0742ecabe9f}'
+            'name': DEVICE_NAME
         }
         self.assertRaises(exception.BrickException,
                           connector.connect_volume,
@@ -126,7 +126,7 @@ class HyperScaleConnectorTestCase(test_connector.ConnectorTestCase):
         connector = vrtshyperscale.HyperScaleConnector(
             'sudo', execute=self._fake_execute_success)
         fake_connection_properties = {
-            'name': '{8ee71c33-dcd0-4267-8f2b-e0742ecabe9f}'
+            'name': DEVICE_NAME
         }
         fake_device_info = {}
         connector.disconnect_volume(fake_connection_properties,
