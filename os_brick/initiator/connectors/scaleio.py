@@ -106,7 +106,7 @@ class ScaleIOConnector(base.BaseLinuxConnector):
             msg = (
                 _("ScaleIO volume %(volume_id)s not found at "
                   "expected path.") % {'volume_id': self.volume_id}
-                )
+            )
 
             LOG.debug(msg)
             raise exception.BrickException(message=msg)

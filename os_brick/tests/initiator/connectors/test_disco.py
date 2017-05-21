@@ -26,13 +26,13 @@ class DISCOConnectorTestCase(test_connector.ConnectorTestCase):
     volume = {
         'name': 'a-disco-volume',
         'disco_id': '1234567'
-        }
+    }
 
     # Conf for test
     conf = {
         'ip': test_connector.MY_IP,
         'port': 9898
-        }
+    }
 
     def setUp(self):
         super(DISCOConnectorTestCase, self).setUp()
@@ -43,7 +43,7 @@ class DISCOConnectorTestCase(test_connector.ConnectorTestCase):
             'conf': {
                 'server_ip': self.conf['ip'],
                 'server_port': self.conf['port']}
-            }
+        }
 
         self.fake_volume_status = {'attached': True,
                                    'detached': False}
