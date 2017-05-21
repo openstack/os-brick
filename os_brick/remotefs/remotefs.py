@@ -66,10 +66,7 @@ class RemoteFsClient(executor.Executor):
         return self._mount_base
 
     def _get_hash_str(self, base_str):
-        """Return a string that represents hash of base_str
-        (in a hex format).
-
-        """
+        """Return a string that represents hash of base_str (hex format)."""
         if isinstance(base_str, six.text_type):
             base_str = base_str.encode('utf-8')
         return hashlib.md5(base_str).hexdigest()

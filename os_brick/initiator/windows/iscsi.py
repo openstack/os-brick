@@ -38,7 +38,9 @@ class WindowsISCSIConnector(win_conn_base.BaseWindowsConnector,
         self.validate_initiators()
 
     def validate_initiators(self):
-        """Validates the list of requested initiator HBAs to be used
+        """Validates the list of requested initiator HBAs
+
+        Validates the list of requested initiator HBAs to be used
         when establishing iSCSI sessions.
         """
         valid_initiator_list = True

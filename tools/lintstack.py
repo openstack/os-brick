@@ -79,7 +79,9 @@ class LintOutput(object):
 
     @classmethod
     def from_msg_to_dict(cls, msg):
-        """From the output of pylint msg, to a dict, where each key
+        """Converts pytlint message to a unique-error dictionary.
+
+        From the output of pylint msg, to a dict, where each key
         is a unique error identifier, value is a list of LintOutput
         """
         result = {}
