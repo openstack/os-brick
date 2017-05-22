@@ -423,7 +423,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         # TODO(justinsb): This retry-with-delay is a pattern, move to utils?
         tries = 0
         # Loop until at least 1 path becomes available
-        while all(map(lambda x: not os.path.exists(x), host_devices)):
+        while all(not os.path.exists(x) for x in host_devices):
             if tries >= self.device_scan_attempts:
                 raise exception.VolumeDeviceNotFound(device=host_devices)
 
@@ -436,12 +436,12 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                 host_devices, target_props = (
                     self._get_potential_volume_paths(connection_properties))
             else:
-                if (tries):
+                if tries:
                     host_devices = self._get_device_path(target_props)
                 self._run_iscsiadm(target_props, ("--rescan",))
 
-            tries = tries + 1
-            if all(map(lambda x: not os.path.exists(x), host_devices)):
+            tries += 1
+            if all(not os.path.exists(x) for x in host_devices):
                 time.sleep(tries ** 2)
             else:
                 break
