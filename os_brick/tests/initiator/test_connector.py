@@ -182,6 +182,10 @@ class ConnectorTestCase(test_base.TestCase):
         obj = connector.InitiatorConnector.factory('iscsi', None)
         self.assertEqual("ISCSIConnector", obj.__class__.__name__)
 
+        obj = connector.InitiatorConnector.factory('iscsi', None,
+                                                   arch='ppc64le')
+        self.assertEqual("ISCSIConnector", obj.__class__.__name__)
+
         obj = connector.InitiatorConnector.factory('fibre_channel', None,
                                                    arch='x86_64')
         self.assertEqual("FibreChannelConnector", obj.__class__.__name__)
