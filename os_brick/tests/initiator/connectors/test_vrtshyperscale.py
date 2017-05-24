@@ -77,7 +77,7 @@ class HyperScaleConnectorTestCase(test_connector.ConnectorTestCase):
         self.assertEqual('192.0.2.2', device_info['vsa_ip'])
         self.assertEqual('2', device_info['refl_factor'])
         self.assertEqual('192.0.2.3,192.0.2.4', device_info['refl_targets'])
-        self.assertEqual(DEVICE_PATH, device_info['device_path'])
+        self.assertEqual(DEVICE_PATH, device_info['path'])
 
     def test_connect_volume_arg_missing(self):
         """Test connect_volume with missing missing arguments"""
