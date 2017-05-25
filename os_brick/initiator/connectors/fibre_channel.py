@@ -143,7 +143,7 @@ class FibreChannelConnector(base.BaseLinuxConnector):
             for device in host_devices:
                 LOG.debug("Looking for Fibre Channel dev %(device)s",
                           {'device': device})
-                if os.path.exists(device):
+                if os.path.exists(device) and self.check_valid_device(device):
                     self.host_device = device
                     # get the /dev/sdX device.  This is used
                     # to find the multipath device.
