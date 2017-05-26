@@ -102,8 +102,7 @@ class CryptsetupEncryptor(base.VolumeEncryptor):
         return binascii.hexlify(key).decode('utf-8')
 
     def _open_volume(self, passphrase, **kwargs):
-        """Opens the LUKS partition on the volume using the specified
-        passphrase.
+        """Open the LUKS partition on the volume using passphrase.
 
         :param passphrase: the passphrase used to access the volume
         """
@@ -129,6 +128,7 @@ class CryptsetupEncryptor(base.VolumeEncryptor):
 
     def _get_mangled_passphrase(self, key):
         """Convert the raw key into a list of unsigned int's and then a string
+
         """
         # NOTE(lyarwood): This replicates the methods used prior to Newton to
         # first encode the passphrase as a list of unsigned int's before
@@ -139,8 +139,7 @@ class CryptsetupEncryptor(base.VolumeEncryptor):
         return ''.join(hex(x).replace('0x', '') for x in encoded_key)
 
     def attach_volume(self, context, **kwargs):
-        """Shadows the device and passes an unencrypted version to the
-        instance.
+        """Shadow the device and pass an unencrypted version to the instance.
 
         Transparent disk encryption is achieved by mounting the volume via
         dm-crypt and passing the resulting device to the instance. The

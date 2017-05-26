@@ -126,7 +126,9 @@ class LinuxSCSI(executor.Executor):
         return True
 
     def remove_multipath_device(self, device):
-        """This removes LUNs associated with a multipath device
+        """Removes related LUNs and multipath device
+
+        This removes LUNs associated with a multipath device
         and the multipath device itself.
         """
 

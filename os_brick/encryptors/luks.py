@@ -87,8 +87,7 @@ class LuksEncryptor(cryptsetup.CryptsetupEncryptor):
                       attempts=3)
 
     def _open_volume(self, passphrase, **kwargs):
-        """Opens the LUKS partition on the volume using the specified
-        passphrase.
+        """Opens the LUKS partition on the volume using passphrase.
 
         :param passphrase: the passphrase used to access the volume
         """
@@ -137,8 +136,7 @@ class LuksEncryptor(cryptsetup.CryptsetupEncryptor):
         LOG.debug("%s mangled passphrase successfully replaced", self.dev_path)
 
     def attach_volume(self, context, **kwargs):
-        """Shadows the device and passes an unencrypted version to the
-        instance.
+        """Shadow the device and pass an unencrypted version to the instance.
 
         Transparent disk encryption is achieved by mounting the volume via
         dm-crypt and passing the resulting device to the instance. The

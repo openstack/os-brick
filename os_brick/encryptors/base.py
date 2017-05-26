@@ -52,11 +52,13 @@ class VolumeEncryptor(executor.Executor):
     @abc.abstractmethod
     def attach_volume(self, context, **kwargs):
         """Hook called immediately prior to attaching a volume to an instance.
+
         """
         pass
 
     @abc.abstractmethod
     def detach_volume(self, **kwargs):
         """Hook called immediately after detaching a volume from an instance.
+
         """
         pass
