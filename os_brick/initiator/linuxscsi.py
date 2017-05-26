@@ -436,6 +436,8 @@ class LinuxSCSI(executor.Executor):
         return processed
 
     def _format_lun_id(self, lun_id):
+        # make sure lun_id is an int
+        lun_id = int(lun_id)
         if lun_id < 256:
             return lun_id
         else:
