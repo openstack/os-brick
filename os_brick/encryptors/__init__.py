@@ -62,13 +62,13 @@ def get_volume_encryptor(root_helper,
     if location and location.lower() == 'front-end':  # case insensitive
         provider = kwargs.get('provider')
 
-        # TODO(lyarwood): Remove the following in Pike and raise an
+        # TODO(lyarwood): Remove the following in Queens and raise an
         # ERROR if provider is not a key in SUPPORTED_ENCRYPTION_PROVIDERS.
         # Until then continue to allow both the class name and path to be used.
         if provider in LEGACY_PROVIDER_CLASS_TO_FORMAT_MAP:
             LOG.warning("Use of the in tree encryptor class %(provider)s"
                         " by directly referencing the implementation class"
-                        " will be blocked in the Pike release of"
+                        " will be blocked in the Queens release of"
                         " os-brick.", {'provider': provider})
             provider = LEGACY_PROVIDER_CLASS_TO_FORMAT_MAP[provider]
 
@@ -78,7 +78,7 @@ def get_volume_encryptor(root_helper,
             provider = "os_brick.encryptors.nop.NoOpEncryptor"
         else:
             LOG.warning("Use of the out of tree encryptor class "
-                        "%(provider)s will be blocked with the Pike "
+                        "%(provider)s will be blocked with the Queens "
                         "release of os-brick.", {'provider': provider})
 
         try:

@@ -132,7 +132,7 @@ class BaseEncryptorTestCase(VolumeEncryptorTestCase):
             log.warning.assert_called_once_with("Use of the out of tree "
                                                 "encryptor class %(provider)s "
                                                 "will be blocked with the "
-                                                "Pike release of os-brick.",
+                                                "Queens release of os-brick.",
                                                 {'provider': provider})
 
     @mock.patch('os_brick.encryptors.LOG')
@@ -164,15 +164,15 @@ class BaseEncryptorTestCase(VolumeEncryptorTestCase):
         log.warning.assert_has_calls([
             mock.call("Use of the in tree encryptor class %(provider)s by "
                       "directly referencing the implementation class will be "
-                      "blocked in the Pike release of os-brick.",
+                      "blocked in the Queens release of os-brick.",
                       {'provider': 'LuksEncryptor'}),
             mock.call("Use of the in tree encryptor class %(provider)s by "
                       "directly referencing the implementation class will be "
-                      "blocked in the Pike release of os-brick.",
+                      "blocked in the Queens release of os-brick.",
                       {'provider':
                        'os_brick.encryptors.luks.LuksEncryptor'}),
             mock.call("Use of the in tree encryptor class %(provider)s by "
                       "directly referencing the implementation class will be "
-                      "blocked in the Pike release of os-brick.",
+                      "blocked in the Queens release of os-brick.",
                       {'provider':
                        'nova.volume.encryptors.luks.LuksEncryptor'})])
