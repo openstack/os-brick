@@ -417,6 +417,7 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
         actual = self.connector.get_all_available_volumes()
         self.assertItemsEqual(expected, actual)
 
+    @mock.patch('eventlet.greenthread.sleep', mock.Mock())
     @mock.patch.object(linuxscsi.LinuxSCSI, 'find_multipath_device')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'wait_for_rw')
     @mock.patch.object(os.path, 'exists', return_value=True)
