@@ -117,7 +117,8 @@ class HuaweiStorHyperConnector(base.BaseLinuxConnector):
 
     @utils.trace
     @synchronized('connect_volume')
-    def disconnect_volume(self, connection_properties, device_info):
+    def disconnect_volume(self, connection_properties, device_info,
+                          force=False, ignore_errors=False):
         """Disconnect a volume from the local host.
 
         :param connection_properties: The dictionary that describes all

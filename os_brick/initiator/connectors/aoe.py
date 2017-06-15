@@ -124,7 +124,8 @@ class AoEConnector(base.BaseLinuxConnector):
 
     @utils.trace
     @lockutils.synchronized('aoe_control', 'aoe-')
-    def disconnect_volume(self, connection_properties, device_info):
+    def disconnect_volume(self, connection_properties, device_info,
+                          force=False, ignore_errors=False):
         """Detach and flush the volume.
 
         :param connection_properties: The dictionary that describes all

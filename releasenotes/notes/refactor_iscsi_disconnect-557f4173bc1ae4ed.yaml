@@ -1,0 +1,12 @@
+---
+features:
+  - |
+    New parameters on `disconnect_volume` named `force` and `ignore_errors` can
+    be used to let OS-Brick know that data loss is secondary to leaving a clean
+    system with no leftover devices.  If `force` is not set, or set to False,
+    preventing data loss will take priority.  Currently only iSCSI implements
+    these new parameters.
+fixes:
+  - |
+    iSCSI disconnect refactoring improves reliability, speed, and thoroughness
+    on leaving a cleaner system after disconnection.

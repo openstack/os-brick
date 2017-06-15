@@ -192,7 +192,8 @@ class RBDConnector(base.BaseLinuxConnector):
         return {'path': rbd_handle}
 
     @utils.trace
-    def disconnect_volume(self, connection_properties, device_info):
+    def disconnect_volume(self, connection_properties, device_info,
+                          force=False, ignore_errors=False):
         """Disconnect a volume.
 
         :param connection_properties: The dictionary that describes all

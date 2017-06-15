@@ -25,7 +25,6 @@ import re
 
 DEVICE_SCAN_ATTEMPTS_DEFAULT = 3
 MULTIPATH_ERROR_REGEX = re.compile("\w{3} \d+ \d\d:\d\d:\d\d \|.*$")
-MULTIPATH_DEV_CHECK_REGEX = re.compile("\s+dm-\d+\s+")
 MULTIPATH_PATH_CHECK_REGEX = re.compile("\s+\d+:\d+:\d+:\d+\s+")
 
 PLATFORM_ALL = 'ALL'
