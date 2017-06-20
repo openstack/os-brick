@@ -16,6 +16,7 @@
 import collections
 import glob
 import os
+import re
 import threading
 import time
 
@@ -26,6 +27,7 @@ from oslo_utils import excutils
 from oslo_utils import strutils
 
 from os_brick import exception
+from os_brick.i18n import _
 from os_brick import initiator
 from os_brick.initiator.connectors import base
 from os_brick.initiator.connectors import base_iscsi
@@ -159,16 +161,36 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         # entry: [tcp, [1], 192.168.121.250:3260,1 ...]
         return [entry[2] for entry in self._get_iscsi_sessions_full()]
 
-    def _get_ips_iqns_luns(self, connection_properties):
+    def _get_ips_iqns_luns(self, connection_properties, discover=True):
         """Build a list of ips, iqns, and luns.
+
+        Used only when doing multipath, we have 3 cases:
+
+        - All information is in the connection properties
+        - We have to do an iSCSI discovery to get the information
+        - We don't want to do another discovery and we query the discoverydb
 
         :param connection_properties: The dictionary that describes all
                                       of the target volume attributes.
         :type connection_properties: dict
+        :param discover: Wheter doing an iSCSI discovery is acceptable.
+        :type discover: bool
         :returns: list of tuples of (ip, iqn, lun)
         """
         try:
-            ips_iqns_luns = self._discover_iscsi_portals(connection_properties)
+            if ('target_portals' in connection_properties and
+                    'target_iqns' in connection_properties):
+                # Use targets specified by connection_properties
+                ips_iqns_luns = list(
+                    zip(connection_properties['target_portals'],
+                        connection_properties['target_iqns'],
+                        self._get_luns(connection_properties)))
+            else:
+                method = (self._discover_iscsi_portals if discover
+                          else self._get_discoverydb_portals)
+                ips_iqns_luns = method(connection_properties)
+        except exception.TargetPortalsNotFound:
+            raise
         except Exception:
             if 'target_portals' in connection_properties:
                 raise exception.TargetPortalsNotFound(
@@ -289,14 +311,74 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         num_luns = len(con_props['target_iqns']) if iqns is None else len(iqns)
         return luns or [con_props.get('target_lun')] * num_luns
 
-    def _discover_iscsi_portals(self, connection_properties):
-        if all([key in connection_properties for key in ('target_portals',
-                                                         'target_iqns')]):
-            # Use targets specified by connection_properties
-            return list(zip(connection_properties['target_portals'],
-                        connection_properties['target_iqns'],
-                        self._get_luns(connection_properties)))
+    def _get_discoverydb_portals(self, connection_properties):
+        """Retrieve iscsi portals information from the discoverydb.
 
+        Example of discoverydb command output:
+
+        SENDTARGETS:
+        DiscoveryAddress: 192.168.1.33,3260
+        DiscoveryAddress: 192.168.1.2,3260
+        Target: iqn.2004-04.com.qnap:ts-831x:iscsi.cinder-20170531114245.9eff88
+            Portal: 192.168.1.3:3260,1
+                Iface Name: default
+            Portal: 192.168.1.2:3260,1
+                Iface Name: default
+        Target: iqn.2004-04.com.qnap:ts-831x:iscsi.cinder-20170531114447.9eff88
+            Portal: 192.168.1.3:3260,1
+                Iface Name: default
+            Portal: 192.168.1.2:3260,1
+                Iface Name: default
+        DiscoveryAddress: 192.168.1.38,3260
+        iSNS:
+        No targets found.
+        STATIC:
+        No targets found.
+        FIRMWARE:
+        No targets found.
+
+        :param connection_properties: The dictionary that describes all
+                                      of the target volume attributes.
+        :type connection_properties: dict
+        :returns: list of tuples of (ip, iqn, lun)
+        """
+        out = self._run_iscsiadm_bare(['-m', 'discoverydb',
+                                       '-o', 'show',
+                                       '-P', 1])[0] or ""
+        regex = ('^SENDTARGETS:\n.*?^DiscoveryAddress: ' +
+                 connection_properties['target_portal'] +
+                 '.*?\n(.*?)^(?:DiscoveryAddress|iSNS):.*')
+        info = re.search(regex, out, re.DOTALL | re.MULTILINE)
+
+        ips = []
+        iqns = []
+
+        if info:
+            iscsi_transport = ('iser' if self._get_transport() == 'iser'
+                               else 'default')
+            iface = 'Iface Name: ' + iscsi_transport
+            current_iqn = ''
+            current_ip = ''
+            for line in info.group(1).splitlines():
+                line = line.strip()
+                if line.startswith('Target:'):
+                    current_iqn = line[8:]
+                elif line.startswith('Portal:'):
+                    current_ip = line[8:].split(',')[0]
+                elif line.startswith(iface):
+                    if current_iqn and current_ip:
+                        iqns.append(current_iqn)
+                        ips.append(current_ip)
+                    current_ip = ''
+
+        if not iqns:
+            raise exception.TargetPortalsNotFound(
+                _('Unable to find target portals information on discoverydb.'))
+
+        luns = self._get_luns(connection_properties, iqns)
+        return list(zip(ips, iqns, luns))
+
+    def _discover_iscsi_portals(self, connection_properties):
         out = None
         iscsi_transport = ('iser' if self._get_transport() == 'iser'
                            else 'default')
@@ -640,9 +722,21 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
 
         If ips_iqns_luns parameter is provided connection_properties won't be
         used to get them.
+
+        When doing multipath we may not have all the information on the
+        connection properties (sendtargets was used on connect) so we may have
+        to retrieve the info from the discoverydb.  Call _get_ips_iqns_luns to
+        do the right things.
         """
         if not ips_iqns_luns:
-            ips_iqns_luns = self._get_all_targets(connection_properties)
+            if self.use_multipath:
+                # We are only called from disconnect, so don't discover
+                ips_iqns_luns = self._get_ips_iqns_luns(connection_properties,
+                                                        discover=False)
+            else:
+                ips_iqns_luns = self._get_all_targets(connection_properties)
+        LOG.debug('Getting connected devices for (ips,iqns,luns)=%s',
+                  ips_iqns_luns)
         nodes = self._get_iscsi_nodes()
         sessions = self._get_iscsi_sessions_full()
         # Use (portal, iqn) to map the session value
@@ -673,6 +767,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                 else:
                     others.add(device)
 
+        LOG.debug('Resulting device map %s', device_map)
         return device_map
 
     @utils.trace

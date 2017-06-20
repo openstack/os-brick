@@ -27,6 +27,10 @@ from os_brick.tests.initiator import test_connector
 
 @ddt.ddt
 class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
+    SINGLE_CON_PROPS = {'volume_id': 'vol_id',
+                        'target_portal': 'ip1:port1',
+                        'target_iqn': 'tgt1',
+                        'target_lun': '1'}
     CON_PROPS = {
         'volume_id': 'vol_id',
         'target_portal': 'ip1:port1',
@@ -108,11 +112,15 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
         res = self.connector._get_iscsi_nodes()
         self.assertEqual([], res)
 
+    @mock.patch.object(iscsi.ISCSIConnector, '_get_ips_iqns_luns')
     @mock.patch('glob.glob')
     @mock.patch.object(iscsi.ISCSIConnector, '_get_iscsi_sessions_full')
     @mock.patch.object(iscsi.ISCSIConnector, '_get_iscsi_nodes')
     def test_get_connection_devices(self, nodes_mock, sessions_mock,
-                                    glob_mock):
+                                    glob_mock, iql_mock):
+        self.connector.use_multipath = True
+        iql_mock.return_value = self.connector._get_all_targets(self.CON_PROPS)
+
         # List sessions from other targets and non tcp sessions
         sessions_mock.return_value = [
             ('non-tcp:', '0', 'ip1:port1', '1', 'tgt1'),
@@ -136,6 +144,7 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
                     ('ip2:port2', 'tgt2'): ({'sdb'}, {'sdc'}),
                     ('ip3:port3', 'tgt3'): (set(), set())}
         self.assertDictEqual(expected, res)
+        iql_mock.assert_called_once_with(self.CON_PROPS, discover=False)
 
     @mock.patch('glob.glob')
     @mock.patch.object(iscsi.ISCSIConnector, '_get_iscsi_sessions_full')
@@ -525,6 +534,109 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
             force=mock.sentinel.Force,
             ignore_errors=mock.sentinel.ignore_errors)
 
+    @ddt.data(True, False)
+    @mock.patch.object(iscsi.ISCSIConnector, '_get_transport')
+    @mock.patch.object(iscsi.ISCSIConnector, '_run_iscsiadm_bare')
+    def test_get_discoverydb_portals(self, is_iser, iscsiadm_mock,
+                                     transport_mock):
+        params = {'iqn1': self.SINGLE_CON_PROPS['target_iqn'],
+                  'iqn2': 'iqn.2004-04.com.qnap:ts-831x:iscsi.cinder-2017.9ef',
+                  'ip1': self.SINGLE_CON_PROPS['target_portal'],
+                  'ip2': '192.168.1.3:3260',
+                  'transport': 'iser' if is_iser else 'default',
+                  'other_transport': 'default' if is_iser else 'iser'}
+
+        iscsiadm_mock.return_value = (
+            'SENDTARGETS:\n'
+            'DiscoveryAddress: 192.168.1.33,3260\n'
+            'DiscoveryAddress: %(ip1)s\n'
+            'Target: %(iqn1)s\n'
+            '	Portal: %(ip2)s,1\n'
+            '		Iface Name: %(transport)s\n'
+            '	Portal: %(ip1)s,1\n'
+            '		Iface Name: %(transport)s\n'
+            '	Portal: %(ip1)s,1\n'
+            '		Iface Name: %(other_transport)s\n'
+            'Target: %(iqn2)s\n'
+            '	Portal: %(ip2)s,1\n'
+            '		Iface Name: %(transport)s\n'
+            '	Portal: %(ip1)s,1\n'
+            '		Iface Name: %(transport)s\n'
+            'DiscoveryAddress: 192.168.1.38,3260\n'
+            'iSNS:\n'
+            'No targets found.\n'
+            'STATIC:\n'
+            'No targets found.\n'
+            'FIRMWARE:\n'
+            'No targets found.\n' % params, None)
+        transport_mock.return_value = 'iser' if is_iser else 'non-iser'
+
+        res = self.connector._get_discoverydb_portals(self.SINGLE_CON_PROPS)
+        expected = [(params['ip2'], params['iqn1'],
+                     self.SINGLE_CON_PROPS['target_lun']),
+                    (params['ip1'], params['iqn1'],
+                     self.SINGLE_CON_PROPS['target_lun']),
+                    (params['ip2'], params['iqn2'],
+                     self.SINGLE_CON_PROPS['target_lun']),
+                    (params['ip1'], params['iqn2'],
+                     self.SINGLE_CON_PROPS['target_lun'])]
+        self.assertListEqual(expected, res)
+        iscsiadm_mock.assert_called_once_with(
+            ['-m', 'discoverydb', '-o', 'show', '-P', 1])
+        transport_mock.assert_called_once_with()
+
+    @mock.patch.object(iscsi.ISCSIConnector, '_get_transport', return_value='')
+    @mock.patch.object(iscsi.ISCSIConnector, '_run_iscsiadm_bare')
+    def test_get_discoverydb_portals_error(self, iscsiadm_mock,
+                                           transport_mock):
+        """DiscoveryAddress is not present."""
+        iscsiadm_mock.return_value = (
+            'SENDTARGETS:\n'
+            'DiscoveryAddress: 192.168.1.33,3260\n'
+            'DiscoveryAddress: 192.168.1.38,3260\n'
+            'iSNS:\n'
+            'No targets found.\n'
+            'STATIC:\n'
+            'No targets found.\n'
+            'FIRMWARE:\n'
+            'No targets found.\n', None)
+
+        self.assertRaises(exception.TargetPortalsNotFound,
+                          self.connector._get_discoverydb_portals,
+                          self.SINGLE_CON_PROPS)
+        iscsiadm_mock.assert_called_once_with(
+            ['-m', 'discoverydb', '-o', 'show', '-P', 1])
+        transport_mock.assert_not_called()
+
+    @mock.patch.object(iscsi.ISCSIConnector, '_get_transport', return_value='')
+    @mock.patch.object(iscsi.ISCSIConnector, '_run_iscsiadm_bare')
+    def test_get_discoverydb_portals_error_is_present(self, iscsiadm_mock,
+                                                      transport_mock):
+        """DiscoveryAddress is present but wrong iterface."""
+        params = {'iqn': self.SINGLE_CON_PROPS['target_iqn'],
+                  'ip': self.SINGLE_CON_PROPS['target_portal']}
+        iscsiadm_mock.return_value = (
+            'SENDTARGETS:\n'
+            'DiscoveryAddress: 192.168.1.33,3260\n'
+            'DiscoveryAddress: %(ip)s\n'
+            'Target: %(iqn)s\n'
+            '	Portal: %(ip)s,1\n'
+            '		Iface Name: iser\n'
+            'DiscoveryAddress: 192.168.1.38,3260\n'
+            'iSNS:\n'
+            'No targets found.\n'
+            'STATIC:\n'
+            'No targets found.\n'
+            'FIRMWARE:\n'
+            'No targets found.\n' % params, None)
+
+        self.assertRaises(exception.TargetPortalsNotFound,
+                          self.connector._get_discoverydb_portals,
+                          self.SINGLE_CON_PROPS)
+        iscsiadm_mock.assert_called_once_with(
+            ['-m', 'discoverydb', '-o', 'show', '-P', 1])
+        transport_mock.assert_called_once_with()
+
     @mock.patch.object(iscsi.ISCSIConnector, '_disconnect_connection')
     @mock.patch.object(iscsi.ISCSIConnector, '_get_connection_devices')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'flush_multipath_device')
@@ -793,32 +905,38 @@ Setting up iSCSI targets: unused
     @mock.patch.object(iscsi.ISCSIConnector, '_discover_iscsi_portals')
     def test_get_ips_iqns_luns_with_target_iqns(self, discover_mock):
         res = self.connector._get_ips_iqns_luns(self.CON_PROPS)
-        self.assertEqual(discover_mock.return_value, res)
+        expected = list(self.connector._get_all_targets(self.CON_PROPS))
+        self.assertListEqual(expected, res)
+        discover_mock.assert_not_called()
+
+    @mock.patch.object(iscsi.ISCSIConnector, '_get_discoverydb_portals')
+    @mock.patch.object(iscsi.ISCSIConnector, '_discover_iscsi_portals')
+    def test_get_ips_iqns_luns_discoverydb(self, discover_mock,
+                                           db_portals_mock):
+        db_portals_mock.return_value = [('ip1:port1', 'tgt1', '1'),
+                                        ('ip2:port2', 'tgt2', '2')]
+        res = self.connector._get_ips_iqns_luns(self.SINGLE_CON_PROPS,
+                                                discover=False)
+        self.assertListEqual(db_portals_mock.return_value, res)
+        db_portals_mock.assert_called_once_with(self.SINGLE_CON_PROPS)
+        discover_mock.assert_not_called()
 
     @mock.patch.object(iscsi.ISCSIConnector, '_discover_iscsi_portals')
     def test_get_ips_iqns_luns_no_target_iqns_share_iqn(self, discover_mock):
-        con_props = {'volume_id': 'vol_id',
-                     'target_portal': 'ip1:port1',
-                     'target_iqn': 'tgt1',
-                     'target_lun': '1'}
         discover_mock.return_value = [('ip1:port1', 'tgt1', '1'),
                                       ('ip1:port1', 'tgt2', '1'),
                                       ('ip2:port2', 'tgt1', '2'),
                                       ('ip2:port2', 'tgt2', '2')]
-        res = self.connector._get_ips_iqns_luns(con_props)
+        res = self.connector._get_ips_iqns_luns(self.SINGLE_CON_PROPS)
         expected = {('ip1:port1', 'tgt1', '1'),
                     ('ip2:port2', 'tgt1', '2')}
         self.assertEqual(expected, set(res))
 
     @mock.patch.object(iscsi.ISCSIConnector, '_discover_iscsi_portals')
     def test_get_ips_iqns_luns_no_target_iqns_diff_iqn(self, discover_mock):
-        con_props = {'volume_id': 'vol_id',
-                     'target_portal': 'ip1:port1',
-                     'target_iqn': 'tgt1',
-                     'target_lun': '1'}
         discover_mock.return_value = [('ip1:port1', 'tgt1', '1'),
                                       ('ip2:port2', 'tgt2', '2')]
-        res = self.connector._get_ips_iqns_luns(con_props)
+        res = self.connector._get_ips_iqns_luns(self.SINGLE_CON_PROPS)
         self.assertEqual(discover_mock.return_value, res)
 
     @mock.patch.object(iscsi.ISCSIConnector, '_get_iscsi_sessions_full')
