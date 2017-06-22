@@ -18,7 +18,10 @@
    and root_helper settings, so this provides that hook.
 """
 
+import threading
+
 from oslo_concurrency import processutils as putils
+from oslo_context import context as context_utils
 from oslo_utils import encodeutils
 
 from os_brick.privileged import rootwrap as priv_rootwrap
@@ -60,3 +63,22 @@ class Executor(object):
 
     def set_root_helper(self, helper):
         self._root_helper = helper
+
+
+class Thread(threading.Thread):
+    """Thread class that inherits the parent's context.
+
+    This is useful when you are spawning a thread and want LOG entries to
+    display the right context information, such as the request.
+    """
+
+    def __init__(self, *args, **kwargs):
+        # Store the caller's context as a private variable shared among threads
+        self.__context__ = context_utils.get_current()
+        super(Thread, self).__init__(*args, **kwargs)
+
+    def run(self):
+        # Store the context in the current thread's request store
+        if self.__context__:
+            self.__context__.update_store()
+        super(Thread, self).run()

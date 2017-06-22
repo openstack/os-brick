@@ -17,7 +17,6 @@ import collections
 import glob
 import os
 import re
-import threading
 import time
 
 from oslo_concurrency import lockutils
@@ -27,6 +26,7 @@ from oslo_utils import excutils
 from oslo_utils import strutils
 
 from os_brick import exception
+from os_brick import executor
 from os_brick.i18n import _
 from os_brick import initiator
 from os_brick.initiator.connectors import base
@@ -642,8 +642,8 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         for ip, iqn, lun in ips_iqns_luns:
             props = connection_properties.copy()
             props.update(target_portal=ip, target_iqn=iqn, target_lun=lun)
-            threads.append(threading.Thread(target=self._connect_vol,
-                                            args=(retries, props, data)))
+            threads.append(executor.Thread(target=self._connect_vol,
+                                           args=(retries, props, data)))
         for thread in threads:
             thread.start()
 
