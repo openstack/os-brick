@@ -114,8 +114,9 @@ class RBDConnector(base.BaseLinuxConnector):
             rbd_volume = linuxrbd.RBDVolume(rbd_client, volume)
             rbd_handle = linuxrbd.RBDVolumeIOWrapper(
                 linuxrbd.RBDImageMetadata(rbd_volume, pool, user, conf))
-        finally:
+        except Exception:
             fileutils.delete_if_exists(conf)
+            raise
 
         return rbd_handle
 
@@ -187,6 +188,7 @@ class RBDConnector(base.BaseLinuxConnector):
             if device_info:
                 rbd_handle = device_info.get('path', None)
                 if rbd_handle is not None:
+                    fileutils.delete_if_exists(rbd_handle.rbd_conf)
                     rbd_handle.close()
 
     def check_valid_device(self, path, run_as_root=True):
