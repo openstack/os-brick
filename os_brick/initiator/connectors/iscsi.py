@@ -342,12 +342,18 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         :type connection_properties: dict
         :returns: list of tuples of (ip, iqn, lun)
         """
+        ip, port = connection_properties['target_portal'].rsplit(':', 1)
+        # NOTE(geguileo): I don't know if IPv6 will be reported with []
+        # or not, so we'll make them optional.
+        ip = ip.replace('[', '\[?').replace(']', '\]?')
         out = self._run_iscsiadm_bare(['-m', 'discoverydb',
                                        '-o', 'show',
                                        '-P', 1])[0] or ""
-        regex = ('^SENDTARGETS:\n.*?^DiscoveryAddress: ' +
-                 connection_properties['target_portal'] +
-                 '.*?\n(.*?)^(?:DiscoveryAddress|iSNS):.*')
+        regex = ''.join(('^SENDTARGETS:\n.*?^DiscoveryAddress: ',
+                         ip, ',', port,
+                         '.*?\n(.*?)^(?:DiscoveryAddress|iSNS):.*'))
+        LOG.debug('Regex to get portals from discoverydb: %s', regex)
+
         info = re.search(regex, out, re.DOTALL | re.MULTILINE)
 
         ips = []
