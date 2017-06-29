@@ -948,13 +948,11 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
             self._run_iscsiadm(connection_properties,
                                ('--interface', self._get_transport(),
                                 '--op', 'new'))
-            # Try to set the scan mode to manual
-            res = self._iscsiadm_update(connection_properties,
-                                        'node.session.scan', 'manual',
-                                        check_exit_code=False)
-            manual_scan = not res[1]
-        else:
-            manual_scan = 'node.session.scan = manual' in out
+        # Try to set the scan mode to manual
+        res = self._iscsiadm_update(connection_properties,
+                                    'node.session.scan', 'manual',
+                                    check_exit_code=False)
+        manual_scan = not res[1]
 
         if connection_properties.get('auth_method'):
             self._iscsiadm_update(connection_properties,

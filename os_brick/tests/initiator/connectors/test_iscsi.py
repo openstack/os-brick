@@ -979,11 +979,12 @@ Setting up iSCSI targets: unused
         con_props.update(auth_method='CHAP', auth_username='user',
                          auth_password='pwd')
         res = self.connector._connect_to_iscsi_portal(con_props)
-        # False refers to "manual scans", so we have automatic iscsi scans
-        self.assertEqual((session, False), res)
+        # False refers to "manual scans", so we have manual iscsi scans
+        self.assertEqual((session, True), res)
         prefix = 'iscsiadm -m node -T tgt1 -p ip1:port1'
         expected_cmds = [
             prefix,
+            prefix + ' --op update -n node.session.scan -v manual',
             prefix + ' --op update -n node.session.auth.authmethod -v CHAP',
             prefix + ' --op update -n node.session.auth.username -v user',
             prefix + ' --op update -n node.session.auth.password -v pwd',
@@ -991,36 +992,17 @@ Setting up iSCSI targets: unused
         self.assertListEqual(expected_cmds, self.cmds)
         get_sessions_mock.assert_called_once_with()
 
-    @ddt.data('auto', 'manual')
-    @mock.patch.object(iscsi.ISCSIConnector, '_get_iscsi_sessions_full')
-    def test_connect_to_iscsi_portal_manual_scan_feature(self, manual_scan,
-                                                         get_sessions_mock):
-        """Node and session already exists and iscsi supports manual scans."""
-        session = 'session2'
-        get_sessions_mock.return_value = [('tcp:', session, 'ip1:port1',
-                                           '-1', 'tgt1')]
-        con_props = self.CON_PROPS.copy()
-        node_props = ('node.startup = automatic\nnode.session.scan = ' +
-                      manual_scan)
-        with mock.patch.object(self.connector, '_execute') as exec_mock:
-            exec_mock.side_effect = [(node_props, None)]
-            res = self.connector._connect_to_iscsi_portal(con_props)
-        # False refers to "manual scans", so we have automatic iscsi scans
-        self.assertEqual((session, manual_scan == 'manual'), res)
-
-        actual_cmds = [' '.join(args[0]) for args in exec_mock.call_args_list]
-        self.assertListEqual(['iscsiadm -m node -T tgt1 -p ip1:port1'],
-                             actual_cmds)
-        get_sessions_mock.assert_called_once_with()
-
     @mock.patch.object(iscsi.ISCSIConnector, '_get_iscsi_sessions_full')
     def test_connect_to_iscsi_portal_fail_login(self, get_sessions_mock):
         get_sessions_mock.return_value = []
         with mock.patch.object(self.connector, '_execute') as exec_mock:
-            exec_mock.side_effect = [('', None), putils.ProcessExecutionError]
+            exec_mock.side_effect = [('', None), ('', None),
+                                     putils.ProcessExecutionError]
             res = self.connector._connect_to_iscsi_portal(self.CON_PROPS)
         self.assertEqual((None, None), res)
         expected_cmds = ['iscsiadm -m node -T tgt1 -p ip1:port1',
+                         'iscsiadm -m node -T tgt1 -p ip1:port1 '
+                         '--op update -n node.session.scan -v manual',
                          'iscsiadm -m node -T tgt1 -p ip1:port1 --login']
         actual_cmds = [' '.join(args[0]) for args in exec_mock.call_args_list]
         self.assertListEqual(expected_cmds, actual_cmds)
