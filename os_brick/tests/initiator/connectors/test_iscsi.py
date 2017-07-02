@@ -539,17 +539,20 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(iscsi.ISCSIConnector, '_run_iscsiadm_bare')
     def test_get_discoverydb_portals(self, is_iser, iscsiadm_mock,
                                      transport_mock):
-        params = {'iqn1': self.SINGLE_CON_PROPS['target_iqn'],
-                  'iqn2': 'iqn.2004-04.com.qnap:ts-831x:iscsi.cinder-2017.9ef',
-                  'ip1': self.SINGLE_CON_PROPS['target_portal'],
-                  'ip2': '192.168.1.3:3260',
-                  'transport': 'iser' if is_iser else 'default',
-                  'other_transport': 'default' if is_iser else 'iser'}
+        params = {
+            'iqn1': self.SINGLE_CON_PROPS['target_iqn'],
+            'iqn2': 'iqn.2004-04.com.qnap:ts-831x:iscsi.cinder-2017.9ef',
+            'addr': self.SINGLE_CON_PROPS['target_portal'].replace(':', ','),
+            'ip1': self.SINGLE_CON_PROPS['target_portal'],
+            'ip2': '192.168.1.3:3260',
+            'transport': 'iser' if is_iser else 'default',
+            'other_transport': 'default' if is_iser else 'iser',
+        }
 
         iscsiadm_mock.return_value = (
             'SENDTARGETS:\n'
             'DiscoveryAddress: 192.168.1.33,3260\n'
-            'DiscoveryAddress: %(ip1)s\n'
+            'DiscoveryAddress: %(addr)s\n'
             'Target: %(iqn1)s\n'
             '	Portal: %(ip2)s,1\n'
             '		Iface Name: %(transport)s\n'
@@ -613,12 +616,15 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
     def test_get_discoverydb_portals_error_is_present(self, iscsiadm_mock,
                                                       transport_mock):
         """DiscoveryAddress is present but wrong iterface."""
-        params = {'iqn': self.SINGLE_CON_PROPS['target_iqn'],
-                  'ip': self.SINGLE_CON_PROPS['target_portal']}
+        params = {
+            'iqn': self.SINGLE_CON_PROPS['target_iqn'],
+            'addr': self.SINGLE_CON_PROPS['target_portal'].replace(':', ','),
+            'ip': self.SINGLE_CON_PROPS['target_portal'],
+        }
         iscsiadm_mock.return_value = (
             'SENDTARGETS:\n'
             'DiscoveryAddress: 192.168.1.33,3260\n'
-            'DiscoveryAddress: %(ip)s\n'
+            'DiscoveryAddress: %(addr)s\n'
             'Target: %(iqn)s\n'
             '	Portal: %(ip)s,1\n'
             '		Iface Name: iser\n'
