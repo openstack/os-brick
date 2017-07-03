@@ -709,6 +709,16 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
             mock.sentinel.force, mock.ANY)
         flush_mock.assert_called_once_with(mock.sentinel.mp_name)
 
+    def test_cleanup_connection_no_data_discoverydb(self):
+        self.connector.use_multipath = True
+        with mock.patch.object(self.connector, '_get_discoverydb_portals',
+                               side_effect=exception.TargetPortalsNotFound), \
+                mock.patch.object(self.connector._linuxscsi,
+                                  'remove_connection') as mock_remove:
+            # This will not raise and exception
+            self.connector._cleanup_connection(self.SINGLE_CON_PROPS)
+            mock_remove.assert_not_called()
+
     @ddt.data({'do_raise': False, 'force': False},
               {'do_raise': True, 'force': True},
               {'do_raise': True, 'force': False})

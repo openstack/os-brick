@@ -857,8 +857,14 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         :type ignore_errors: bool
         """
         exc = exception.ExceptionChainer()
-        devices_map = self._get_connection_devices(connection_properties,
-                                                   ips_iqns_luns)
+        try:
+            devices_map = self._get_connection_devices(connection_properties,
+                                                       ips_iqns_luns)
+        except exception.TargetPortalsNotFound as exc:
+            # When discovery sendtargets failed on connect there is no
+            # information in the discoverydb, so there's nothing to clean.
+            LOG.debug('Skipping cleanup %s', exc)
+            return
 
         # Remove devices and multipath from this connection
         remove_devices = set()
