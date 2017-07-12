@@ -30,6 +30,7 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
     SINGLE_CON_PROPS = {'volume_id': 'vol_id',
                         'target_portal': 'ip1:port1',
                         'target_iqn': 'tgt1',
+                        'encryption': False,
                         'target_lun': '1'}
     CON_PROPS = {
         'volume_id': 'vol_id',
@@ -1368,3 +1369,72 @@ Setting up iSCSI targets: unused
                                           self.CON_PROPS['target_lun'])
         scan_mock.assert_not_called()
         dev_name_mock.assert_called_once_with(mock.sentinel.session, hctl)
+
+    @mock.patch.object(iscsi.ISCSIConnector, '_get_device_link')
+    def test__get_connect_result(self, get_link_mock):
+        props = self.CON_PROPS.copy()
+        props['encrypted'] = False
+        res = self.connector._get_connect_result(props, 'wwn', ['sda', 'sdb'])
+        expected = {'type': 'block', 'scsi_wwn': 'wwn', 'path': '/dev/sda'}
+        self.assertDictEqual(expected, res)
+        get_link_mock.assert_not_called()
+
+    @mock.patch.object(iscsi.ISCSIConnector, '_get_device_link')
+    def test__get_connect_result_mpath(self, get_link_mock):
+        props = self.CON_PROPS.copy()
+        props['encrypted'] = False
+        res = self.connector._get_connect_result(props, 'wwn', ['sda', 'sdb'],
+                                                 'mpath')
+        expected = {'type': 'block', 'scsi_wwn': 'wwn', 'path': '/dev/mpath',
+                    'multipath_id': 'mpath'}
+        self.assertDictEqual(expected, res)
+        get_link_mock.assert_not_called()
+
+    @mock.patch.object(iscsi.ISCSIConnector, '_get_device_link',
+                       return_value='/dev/disk/by-id/scsi-wwn')
+    def test__get_connect_result_encrypted(self, get_link_mock):
+        props = self.CON_PROPS.copy()
+        props['encrypted'] = True
+        res = self.connector._get_connect_result(props, 'wwn', ['sda', 'sdb'])
+        expected = {'type': 'block', 'scsi_wwn': 'wwn',
+                    'path': get_link_mock.return_value}
+        self.assertDictEqual(expected, res)
+        get_link_mock.assert_called_once_with('wwn', '/dev/sda', None)
+
+    @mock.patch('os.path.realpath', return_value='/dev/sda')
+    def test__get_device_link(self, realpath_mock):
+        symlink = '/dev/disk/by-id/scsi-wwn'
+        res = self.connector._get_device_link('wwn', '/dev/sda', None)
+        self.assertEqual(symlink, res)
+        realpath_mock.assert_called_once_with(symlink)
+
+    @mock.patch('os.path.realpath', return_value='/dev/dm-0')
+    def test__get_device_link_multipath(self, realpath_mock):
+        symlink = '/dev/disk/by-id/dm-uuid-mpath-wwn'
+        res = self.connector._get_device_link('wwn', '/dev/dm-0', 'wwn')
+        self.assertEqual(symlink, res)
+        realpath_mock.assert_called_once_with(symlink)
+
+    @mock.patch('os.path.realpath', side_effect=('/dev/sdz', '/dev/sdy',
+                                                 '/dev/sda', '/dev/sdx'))
+    @mock.patch('os.listdir', return_value=['dm-...', 'scsi-wwn', 'scsi-...'])
+    def test__get_device_link_check_links(self, listdir_mock, realpath_mock):
+        res = self.connector._get_device_link('wwn', '/dev/sda', None)
+        self.assertEqual(res, '/dev/disk/by-id/scsi-wwn')
+        listdir_mock.assert_called_once_with('/dev/disk/by-id/')
+        realpath_mock.assert_has_calls([
+            mock.call('/dev/disk/by-id/scsi-wwn'),
+            mock.call('/dev/disk/by-id/dm-...'),
+            mock.call('/dev/disk/by-id/scsi-wwn')])
+
+    @mock.patch('os.path.realpath', return_value='/dev/sdz')
+    @mock.patch('os.listdir', return_value=['dm-...', 'scsi-...'])
+    def test__get_device_link_not_found(self, listdir_mock, realpath_mock):
+        self.assertRaises(exception.VolumeDeviceNotFound,
+                          self.connector._get_device_link,
+                          'wwn', '/dev/sda', None)
+        listdir_mock.assert_called_once_with('/dev/disk/by-id/')
+        realpath_mock.assert_has_calls([
+            mock.call('/dev/disk/by-id/scsi-wwn'),
+            mock.call('/dev/disk/by-id/dm-...'),
+            mock.call('/dev/disk/by-id/scsi-...')])

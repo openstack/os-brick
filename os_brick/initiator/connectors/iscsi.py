@@ -506,6 +506,45 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
             with excutils.save_and_reraise_exception():
                 self._cleanup_connection(connection_properties, force=True)
 
+    def _get_device_link(self, wwn, device, mpath):
+        # These are the default symlinks that should always be there
+        if mpath:
+            symlink = '/dev/disk/by-id/dm-uuid-mpath-' + mpath
+        else:
+            symlink = '/dev/disk/by-id/scsi-' + wwn
+
+        # If default symlinks are not there just search for anything that links
+        # to our device.  In my experience this will return the last added link
+        # first, so if we are going to succeed this should be fast.
+        if not os.path.realpath(symlink) == device:
+            links_path = '/dev/disk/by-id/'
+            for symlink in os.listdir(links_path):
+                symlink = links_path + symlink
+                if os.path.realpath(symlink) == device:
+                    break
+            else:
+                # Raising this will trigger the next retry
+                raise exception.VolumeDeviceNotFound(device='/dev/disk/by-id')
+        return symlink
+
+    def _get_connect_result(self, con_props, wwn, devices_names, mpath=None):
+        device = '/dev/' + (mpath or devices_names[0])
+
+        # NOTE(geguileo): This is only necessary because of the current
+        # encryption flow that requires that connect_volume returns a symlink
+        # because first we do the volume attach, then the libvirt config is
+        # generated using the path returned by the atach, and then we do the
+        # encryption attach, which is forced to preserve the path that was used
+        # in the libvirt config.  If we fix that flow in OS-brick, Nova, and
+        # Cinder we can remove this and just return the real path.
+        if con_props.get('encrypted'):
+            device = self._get_device_link(wwn, device, mpath)
+
+        result = {'type': 'block', 'scsi_wwn': wwn, 'path': device}
+        if mpath:
+            result['multipath_id'] = mpath
+        return result
+
     @utils.retry(exceptions=(exception.VolumeDeviceNotFound))
     def _connect_single_volume(self, connection_properties):
         """Connect to a volume using a single path."""
@@ -520,8 +559,8 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                 for __ in range(10):
                     wwn = self._linuxscsi.get_sysfs_wwn(found_devs)
                     if wwn:
-                        return {'type': 'block', 'scsi_wwn': wwn,
-                                'path': '/dev/' + found_devs[0]}
+                        return self._get_connect_result(connection_properties,
+                                                        wwn, found_devs)
                     time.sleep(1)
                 LOG.debug('Could not find the WWN for %s.', found_devs[0])
 
@@ -707,10 +746,8 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         if not mpath:
             LOG.warning('No dm was created, connection to volume is probably '
                         'bad and will perform poorly.')
-            return {'type': 'block', 'scsi_wwn': wwn,
-                    'path': '/dev/' + found[0]}
-        return {'type': 'block', 'scsi_wwn': wwn, 'multipath_id': mpath,
-                'path': '/dev/' + mpath}
+        return self._get_connect_result(connection_properties, wwn, found,
+                                        mpath)
 
     def _get_connection_devices(self, connection_properties,
                                 ips_iqns_luns=None):
