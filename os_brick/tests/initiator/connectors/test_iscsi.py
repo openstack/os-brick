@@ -1107,7 +1107,7 @@ Setting up iSCSI targets: unused
 
         res = self.connector._connect_multipath_volume(self.CON_PROPS)
 
-        expected = {'type': 'block', 'scsi_wwn': 'wwn', 'multipath_id': 'dm-0',
+        expected = {'type': 'block', 'scsi_wwn': 'wwn', 'multipath_id': 'wwn',
                     'path': '/dev/dm-0'}
         self.assertEqual(expected, res)
 
@@ -1176,7 +1176,7 @@ Setting up iSCSI targets: unused
 
         res = self.connector._connect_multipath_volume(self.CON_PROPS)
 
-        expected = {'type': 'block', 'scsi_wwn': 'wwn', 'multipath_id': 'dm-0',
+        expected = {'type': 'block', 'scsi_wwn': 'wwn', 'multipath_id': 'wwn',
                     'path': '/dev/dm-0'}
         self.assertEqual(expected, res)
         self.assertEqual(1, get_wwn_mock.call_count)
@@ -1386,7 +1386,7 @@ Setting up iSCSI targets: unused
         res = self.connector._get_connect_result(props, 'wwn', ['sda', 'sdb'],
                                                  'mpath')
         expected = {'type': 'block', 'scsi_wwn': 'wwn', 'path': '/dev/mpath',
-                    'multipath_id': 'mpath'}
+                    'multipath_id': 'wwn'}
         self.assertDictEqual(expected, res)
         get_link_mock.assert_not_called()
 

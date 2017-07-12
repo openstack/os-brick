@@ -542,7 +542,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
 
         result = {'type': 'block', 'scsi_wwn': wwn, 'path': device}
         if mpath:
-            result['multipath_id'] = mpath
+            result['multipath_id'] = wwn
         return result
 
     @utils.retry(exceptions=(exception.VolumeDeviceNotFound))
