@@ -68,8 +68,16 @@ class VmdkConnector(initiator_connector.InitiatorConnector):
     def get_connector_properties(root_helper, *args, **kwargs):
         return {}
 
-    def check_valid_device(self, path, run_as_root=True):
-        pass
+    def check_valid_device(self, path, *args, **kwargs):
+        try:
+            with open(path, 'r') as dev:
+                dev.read(1)
+        except IOError:
+            LOG.exception(
+                "Failed to access the device on the path "
+                "%(path)s", {"path": path})
+            return False
+        return True
 
     def get_volume_paths(self, connection_properties):
         return []
