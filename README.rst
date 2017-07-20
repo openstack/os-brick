@@ -39,9 +39,9 @@ If "tox -e py34" fails with the error "db type could not be determined", remove
 the .testrepository/ directory and then run "tox -e py34".
 
 For any other information, refer to the developer documents:
-  http://docs.openstack.org/developer/os-brick/index.html
+  https://docs.openstack.org/os-brick/latest/
 OR refer to the parent project, Cinder:
-  http://docs.openstack.org/developer/cinder/
+  https://docs.openstack.org/cinder/latest/
 
 * License: Apache License, Version 2.0
 * Source: http://git.openstack.org/cgit/openstack/os-brick
