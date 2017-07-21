@@ -974,7 +974,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         iqns = []
         for data in [line.split() for line in output.splitlines()]:
             if len(data) == 2 and data[1].startswith('iqn.'):
-                ips.append(data[0])
+                ips.append(data[0].split(',')[0])
                 iqns.append(data[1])
         return ips, iqns
 

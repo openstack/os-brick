@@ -514,8 +514,9 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
 
     def test_get_target_portals_from_iscsiadm_output(self):
         connector = self.connector
-        test_output = '''10.15.84.19:3260 iqn.1992-08.com.netapp:sn.33615311
-                         10.15.85.19:3260 iqn.1992-08.com.netapp:sn.33615311'''
+        test_output = '''10.15.84.19:3260,1 iqn.1992-08.com.netapp:sn.33615311
+                         10.15.85.19:3260,2 iqn.1992-08.com.netapp:sn.33615311
+                         '''
         res = connector._get_target_portals_from_iscsiadm_output(test_output)
         ips = ['10.15.84.19:3260', '10.15.85.19:3260']
         iqns = ['iqn.1992-08.com.netapp:sn.33615311',
@@ -776,7 +777,7 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
     def test_iscsiadm_discover_parsing(self):
         # Ensure that parsing iscsiadm discover ignores cruft.
 
-        ips = ["192.168.204.82:3260,1", "192.168.204.82:3261,1"]
+        ips = ["192.168.204.82:3260", "192.168.204.82:3261"]
         iqns = ["iqn.2010-10.org.openstack:volume-"
                 "f9b12623-6ce3-4dac-a71f-09ad4249bdd3",
                 "iqn.2010-10.org.openstack:volume-"
@@ -789,7 +790,7 @@ Starting iSCSI initiator service: done
 Setting up iSCSI targets: unused
 %s %s
 %s %s
-""" % (ips[0], iqns[0], ips[1], iqns[1])
+""" % (ips[0] + ',1', iqns[0], ips[1] + ',1', iqns[1])
         out = self.connector.\
             _get_target_portals_from_iscsiadm_output(sample_input)
         self.assertEqual((ips, iqns), out)
