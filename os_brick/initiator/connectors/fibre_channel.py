@@ -139,7 +139,6 @@ class FibreChannelConnector(base.BaseLinuxConnector):
         # We only need to find the first device.  Once we see the first device
         # multipath will have any others.
         def _wait_for_device_discovery(host_devices):
-            tries = self.tries
             for device in host_devices:
                 LOG.debug("Looking for Fibre Channel dev %(device)s",
                           {'device': device})
@@ -156,7 +155,7 @@ class FibreChannelConnector(base.BaseLinuxConnector):
 
             LOG.info("Fibre Channel volume device not yet found. "
                      "Will rescan & retry.  Try number: %(tries)s.",
-                     {'tries': tries})
+                     {'tries': self.tries})
 
             self._linuxfc.rescan_hosts(hbas,
                                        connection_properties['target_lun'])
@@ -169,11 +168,10 @@ class FibreChannelConnector(base.BaseLinuxConnector):
             _wait_for_device_discovery, host_devices)
         timer.start(interval=2).wait()
 
-        tries = self.tries
         if self.host_device is not None and self.device_name is not None:
             LOG.debug("Found Fibre Channel volume %(name)s "
                       "(after %(tries)s rescans)",
-                      {'name': self.device_name, 'tries': tries})
+                      {'name': self.device_name, 'tries': self.tries})
 
         # find out the WWN of the device
         device_wwn = self._linuxscsi.get_scsi_wwn(self.host_device)
