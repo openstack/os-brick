@@ -911,9 +911,7 @@ Setting up iSCSI targets: unused
                                              get_sessions_mock):
         get_path_mock.side_effect = [['path1'], ['path2'], ['path3', 'path4']]
         get_sessions_mock.return_value = [
-            ('tcp:', 'session1', 'ip1:port1', '1', 'tgt1'),
-            ('tcp:', 'session2', 'ip2:port2', '-1', 'tgt2'),
-            ('tcp:', 'session3', 'ip3:port3', '1', 'tgt3')]
+            'ip1:port1', 'ip2:port2', 'ip3:port3']
 
         self.connector.use_multipath = False
         res = self.connector._get_potential_volume_paths(self.CON_PROPS)
