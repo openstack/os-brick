@@ -245,14 +245,13 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         else:
             LOG.info("Multipath discovery for iSCSI not enabled.")
             iscsi_sessions = self._get_iscsi_sessions()
-            iscsi_portals_with_sessions = [s[2] for s in iscsi_sessions]
 
             host_devices = set()
             for props in self._iterate_all_targets(connection_properties):
                 # If we aren't trying to connect to the portal, we
                 # want to find ALL possible paths from all of the
                 # alternate portals
-                if props['target_portal'] in iscsi_portals_with_sessions:
+                if props['target_portal'] in iscsi_sessions:
                     paths = self._get_device_path(props)
                     host_devices.update(paths)
             host_devices = list(host_devices)
