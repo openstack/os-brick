@@ -80,7 +80,9 @@ class WindowsISCSIConnector(win_conn_base.BaseWindowsConnector,
 
     @utils.trace
     def connect_volume(self, connection_properties):
+        connected_target_mappings = set()
         volume_connected = False
+
         for (initiator_name,
              target_portal,
              target_iqn,
@@ -103,23 +105,29 @@ class WindowsISCSIConnector(win_conn_base.BaseWindowsConnector,
                     mpio_enabled=self.use_multipath,
                     initiator_name=initiator_name,
                     ensure_lun_available=False)
-                self._iscsi_utils.ensure_lun_available(
-                    target_iqn=target_iqn,
-                    target_lun=target_lun,
-                    rescan_attempts=self.device_scan_attempts,
-                    retry_interval=self.device_scan_interval)
 
-                if not volume_connected:
-                    (device_number,
-                     device_path) = (
-                        self._iscsi_utils.get_device_number_and_path(
-                            target_iqn, target_lun))
-                    volume_connected = True
+                connected_target_mappings.add((target_iqn, target_lun))
 
                 if not self.use_multipath:
                     break
             except os_win_exc.OSWinException:
                 LOG.exception("Could not establish the iSCSI session.")
+
+        for target_iqn, target_lun in connected_target_mappings:
+            try:
+                (device_number,
+                 device_path) = self._iscsi_utils.get_device_number_and_path(
+                    target_iqn, target_lun,
+                    retry_attempts=self.device_scan_attempts,
+                    retry_interval=self.device_scan_interval,
+                    rescan_disks=True,
+                    ensure_mpio_claimed=self.use_multipath)
+                volume_connected = True
+            except os_win_exc.OSWinException:
+                LOG.exception("Could not retrieve device path for target "
+                              "%(target_iqn)s and lun %(target_lun)s.",
+                              dict(target_iqn=target_iqn,
+                                   target_lun=target_lun))
 
         if not volume_connected:
             raise exception.BrickException(
@@ -158,7 +166,8 @@ class WindowsISCSIConnector(win_conn_base.BaseWindowsConnector,
 
             (device_number,
              device_path) = self._iscsi_utils.get_device_number_and_path(
-                target_iqn, target_lun)
+                target_iqn, target_lun,
+                ensure_mpio_claimed=self.use_multipath)
             if device_path:
                 device_paths.add(device_path)
 

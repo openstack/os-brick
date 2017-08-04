@@ -131,16 +131,12 @@ class WindowsISCSIConnectorTestCase(test_base.WindowsConnectorTestBase):
                        initiator_name=mock.sentinel.initiator_name,
                        ensure_lun_available=False)] *
             expected_login_attempts)
-        self._iscsi_utils.ensure_lun_available.assert_has_calls(
-            [mock.call(target_iqn=mock.sentinel.target_iqn,
-                       target_lun=mock.sentinel.target_lun,
-                       rescan_attempts=(
-                           self._connector.device_scan_attempts),
-                       retry_interval=mock.sentinel.rescan_interval)] *
-            (expected_login_attempts - 1))
-
         self._iscsi_utils.get_device_number_and_path.assert_called_once_with(
-            mock.sentinel.target_iqn, mock.sentinel.target_lun)
+            mock.sentinel.target_iqn, mock.sentinel.target_lun,
+            retry_attempts=self._connector.device_scan_attempts,
+            retry_interval=self._connector.device_scan_interval,
+            rescan_disks=True,
+            ensure_mpio_claimed=use_multipath)
         mock_get_scsi_wwn.assert_called_once_with(mock.sentinel.device_number)
 
     @mock.patch.object(iscsi.WindowsISCSIConnector, '_get_all_paths')
