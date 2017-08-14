@@ -43,6 +43,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
 
     supported_transports = ['be2iscsi', 'bnx2i', 'cxgb3i', 'default',
                             'cxgb4i', 'qla4xxx', 'ocs', 'iser']
+    VALID_SESSIONS_PREFIX = ('tcp:', 'iser:')
 
     def __init__(self, root_helper, driver=None,
                  execute=None, use_multipath=False,
@@ -782,7 +783,8 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         nodes = self._get_iscsi_nodes()
         sessions = self._get_iscsi_sessions_full()
         # Use (portal, iqn) to map the session value
-        sessions_map = {(s[2], s[4]): s[1] for s in sessions if s[0] == 'tcp:'}
+        sessions_map = {(s[2], s[4]): s[1] for s in sessions
+                        if s[0] in self.VALID_SESSIONS_PREFIX}
         # device_map will keep a tuple with devices from the connection and
         # others that don't belong to this connection" (belong, others)
         device_map = collections.defaultdict(lambda: (set(), set()))
@@ -1020,7 +1022,8 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
             sessions = self._get_iscsi_sessions_full()
             for s in sessions:
                 # Found our session, return session_id
-                if 'tcp:' == s[0] and portal == s[2] and s[4] == target_iqn:
+                if (s[0] in self.VALID_SESSIONS_PREFIX and
+                        portal == s[2] and s[4] == target_iqn):
                     return s[1], manual_scan
 
             try:
