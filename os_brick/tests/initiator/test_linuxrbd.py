@@ -12,9 +12,49 @@
 
 import mock
 
+from os_brick import exception
 from os_brick.initiator import linuxrbd
 from os_brick.tests import base
 from os_brick import utils
+
+
+class MockRados(object):
+
+    class Error(Exception):
+        pass
+
+    class ioctx(object):
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self, *args, **kwargs):
+            return self
+
+        def __exit__(self, *args, **kwargs):
+            return False
+
+        def close(self, *args, **kwargs):
+            pass
+
+    class Rados(object):
+
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self, *args, **kwargs):
+            return self
+
+        def __exit__(self, *args, **kwargs):
+            return False
+
+        def connect(self, *args, **kwargs):
+            pass
+
+        def open_ioctx(self, *args, **kwargs):
+            return MockRados.ioctx()
+
+        def shutdown(self, *args, **kwargs):
+            pass
 
 
 class RBDClientTestCase(base.TestCase):
@@ -45,6 +85,17 @@ class RBDClientTestCase(base.TestCase):
                 utils.convert_str('test_pool'))
 
         self.assertEqual(1, mock_rados.Rados.return_value.shutdown.call_count)
+
+    @mock.patch.object(MockRados.Rados, 'connect', side_effect=MockRados.Error)
+    def test_with_client_error(self, _):
+        linuxrbd.rados = MockRados
+        linuxrbd.rados.Error = MockRados.Error
+
+        def test():
+            with linuxrbd.RBDClient('test_user', 'test_pool'):
+                pass
+
+        self.assertRaises(exception.BrickException, test)
 
 
 class RBDVolumeIOWrapperTestCase(base.TestCase):
