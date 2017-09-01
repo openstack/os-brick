@@ -45,10 +45,10 @@ class LocalConnector(base.BaseLinuxConnector):
     def connect_volume(self, connection_properties):
         """Connect to a volume.
 
-        :param connection_properties: The dictionary that describes all
-                                      of the target volume attributes.
-               connection_properties must include:
-               device_path - path to the volume to be connected
+        :param connection_properties: The dictionary that describes all of the
+          target volume attributes. ``connection_properties`` must include:
+
+          - ``device_path`` - path to the volume to be connected
         :type connection_properties: dict
         :returns: dict
         """
