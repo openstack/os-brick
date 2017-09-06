@@ -37,7 +37,14 @@ class FibreChannelConnectorPPC64TestCase(test_connector.ConnectorTestCase):
                          (3, "0x5005076802332ade"), ]
         devices = self.connector._get_host_devices(possible_devs, lun)
         self.assertEqual(2, len(devices))
-        device_path = "/dev/disk/by-path/fc-0x5005076802232ade-lun-2"
-        self.assertEqual(devices[0], device_path)
         device_path = "/dev/disk/by-path/fc-0x5005076802332ade-lun-2"
-        self.assertEqual(devices[1], device_path)
+        self.assertIn(device_path, devices)
+        device_path = "/dev/disk/by-path/fc-0x5005076802232ade-lun-2"
+        self.assertIn(device_path, devices)
+        # test duplicates
+        possible_devs = [(3, "0x5005076802232ade"),
+                         (3, "0x5005076802232ade"), ]
+        devices = self.connector._get_host_devices(possible_devs, lun)
+        self.assertEqual(1, len(devices))
+        device_path = "/dev/disk/by-path/fc-0x5005076802232ade-lun-2"
+        self.assertIn(device_path, devices)

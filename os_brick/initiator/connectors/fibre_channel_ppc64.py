@@ -45,13 +45,13 @@ class FibreChannelConnectorPPC64(fibre_channel.FibreChannelConnector):
         self._linuxfc.set_execute(execute)
 
     def _get_host_devices(self, possible_devs, lun):
-        host_devices = []
+        host_devices = set()
         for pci_num, target_wwn in possible_devs:
             host_device = "/dev/disk/by-path/fc-%s-lun-%s" % (
                 target_wwn,
                 self._linuxscsi.process_lun_id(lun))
-            host_devices.append(host_device)
-        return host_devices
+            host_devices.add(host_device)
+        return list(host_devices)
 
     def _get_possible_volume_paths(self, connection_properties, hbas):
         ports = connection_properties['target_wwn']
