@@ -280,8 +280,8 @@ class LinuxFibreChannelPPC64(LinuxFibreChannel):
         if host_device and len(host_device) > 4:
             host_device = host_device[4:]
         path = '/sys/class/fc_transport/target%s:' % host_device
-        cmd = 'grep -l %(wwpn)s %(path)s*/port_name' % {'wwpn': wwpn,
-                                                        'path': path}
+        cmd = 'grep -il %(wwpn)s %(path)s*/port_name' % {'wwpn': wwpn,
+                                                         'path': path}
         try:
             out, _err = self._execute(cmd, shell=True)
             return [line.split('/')[4].split(':')[1:]
