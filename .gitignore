@@ -3,6 +3,7 @@
 !.gitignore
 !.mailmap
 !.testr.conf
+/.*
 
 *.py[cod]
 
