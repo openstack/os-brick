@@ -294,6 +294,9 @@ class LinuxFibreChannelPPC64(LinuxFibreChannel):
     def rescan_hosts(self, hbas, target_lun):
         for hba in hbas:
             # Try to get HBA channel and SCSI target to use as filters
+            # Ignore HBA which does not have target wwn
+            if 'target_wwn' not in hba.keys():
+                continue
             for wwpn in hba['target_wwn']:
                 cts = self._get_hba_channel_scsi_target(hba, wwpn)
                 # If we couldn't get the channel and target use wildcards
