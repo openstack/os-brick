@@ -867,6 +867,18 @@ loop0                                     0"""
         realpath_mock.assert_has_calls([mock.call(g) for g in paths])
         unlink_mock.assert_not_called()
 
+    @mock.patch.object(linuxscsi.priv_rootwrap, 'unlink_root')
+    @mock.patch('glob.glob')
+    @mock.patch('os.path.realpath', side_effect=[OSError, '/dev/sda'])
+    def test_remove_scsi_symlinks_race_condition(self, realpath_mock,
+                                                 glob_mock, unlink_mock):
+        paths = ['/dev/disk/by-id/scsi-wwid1', '/dev/disk/by-id/scsi-wwid2']
+        glob_mock.return_value = paths
+        self.linuxscsi._remove_scsi_symlinks(['sda'])
+        glob_mock.assert_called_once_with('/dev/disk/by-id/scsi-*')
+        realpath_mock.assert_has_calls([mock.call(g) for g in paths])
+        unlink_mock.assert_called_once_with(paths[1], no_errors=True)
+
     @mock.patch('glob.glob')
     def test_get_hctl_with_target(self, glob_mock):
         glob_mock.return_value = [
