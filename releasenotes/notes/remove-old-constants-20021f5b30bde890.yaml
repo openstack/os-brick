@@ -1,0 +1,7 @@
+---
+upgrade:
+  - |
+    The location for connector constants was moved in the 1.6.0 release, but
+    their old location was kept for backwards compatibility. These legacy
+    constants are now being removed and any out of tree code should be updated
+    to use the latest location (os_brick.iniitator.CONSTANT_NAME).
