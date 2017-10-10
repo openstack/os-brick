@@ -1,0 +1,7 @@
+---
+fixes:
+  - |
+    [`bug 1722432 <https://bugs.launchpad.net/os-brick/+bug/1722432>`_]
+    Changes the supported_transports to support tcp transport. With this
+    change, we can define an custom iface with tcp transport to limit the
+    storage traffic only be transimitted via storage NIC we specified.
