@@ -207,3 +207,10 @@ class RBDVolumeIOWrapperTestCase(base.TestCase):
             linuxrbd.RBDImageMetadata(rbd_volume, 'pool', 'user', None))
         rbd_handle.close()
         self.assertEqual(1, rbd_disconnect.call_count)
+
+
+class RBDVolumeTestCase(base.TestCase):
+    def test_name_attribute(self):
+        mock_client = mock.Mock()
+        rbd_volume = linuxrbd.RBDVolume(mock_client, 'volume')
+        self.assertEqual('volume', rbd_volume.name)
