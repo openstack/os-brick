@@ -235,8 +235,17 @@ class LinuxSCSI(executor.Executor):
     def _remove_scsi_symlinks(self, devices_names):
         devices = ['/dev/' + dev for dev in devices_names]
         links = glob.glob('/dev/disk/by-id/scsi-*')
-        unlink = [link for link in links
-                  if os.path.realpath(link) in devices]
+        unlink = []
+        for link in links:
+            try:
+                if os.path.realpath(link) in devices:
+                    unlink.append(link)
+            except OSError:
+                # A race condition in Python's posixpath:realpath just occurred
+                # so we can ignore it because the file was just removed between
+                # a check if file exists and a call to os.readlink
+                continue
+
         if unlink:
             priv_rootwrap.unlink_root(no_errors=True, *unlink)
 
