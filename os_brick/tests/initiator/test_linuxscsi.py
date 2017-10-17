@@ -862,7 +862,7 @@ loop0                                     0"""
                                            unlink_mock):
         paths = ['/dev/disk/by-id/scsi-wwid1', '/dev/disk/by-id/scsi-wwid2']
         glob_mock.return_value = paths
-        self.linuxscsi._remove_scsi_symlinks(['/dev/sdd', '/dev/sde'])
+        self.linuxscsi._remove_scsi_symlinks(['sdd', 'sde'])
         glob_mock.assert_called_once_with('/dev/disk/by-id/scsi-*')
         realpath_mock.assert_has_calls([mock.call(g) for g in paths])
         unlink_mock.assert_not_called()
