@@ -21,7 +21,6 @@ each of the supported transport protocols.
 """
 
 import platform
-import re
 import socket
 import sys
 
@@ -37,45 +36,6 @@ from os_brick import utils
 LOG = logging.getLogger(__name__)
 
 synchronized = lockutils.synchronized_with_prefix('os-brick-')
-
-# These constants are being deprecated and moving to the init file.
-# Please use the constants there instead.
-
-DEVICE_SCAN_ATTEMPTS_DEFAULT = 3
-MULTIPATH_ERROR_REGEX = re.compile("\w{3} \d+ \d\d:\d\d:\d\d \|.*$")
-MULTIPATH_PATH_CHECK_REGEX = re.compile("\s+\d+:\d+:\d+:\d+\s+")
-
-PLATFORM_ALL = 'ALL'
-PLATFORM_x86 = 'X86'
-PLATFORM_S390 = 'S390'
-PLATFORM_PPC64 = 'PPC64'
-OS_TYPE_ALL = 'ALL'
-OS_TYPE_LINUX = 'LINUX'
-OS_TYPE_WINDOWS = 'WIN'
-
-S390X = "s390x"
-S390 = "s390"
-PPC64 = "ppc64"
-PPC64LE = "ppc64le"
-
-ISCSI = "ISCSI"
-ISER = "ISER"
-FIBRE_CHANNEL = "FIBRE_CHANNEL"
-AOE = "AOE"
-DRBD = "DRBD"
-NFS = "NFS"
-GLUSTERFS = "GLUSTERFS"
-LOCAL = "LOCAL"
-GPFS = "GPFS"
-HUAWEISDSHYPERVISOR = "HUAWEISDSHYPERVISOR"
-HGST = "HGST"
-RBD = "RBD"
-SCALEIO = "SCALEIO"
-SCALITY = "SCALITY"
-QUOBYTE = "QUOBYTE"
-DISCO = "DISCO"
-VZSTORAGE = "VZSTORAGE"
-SHEEPDOG = "SHEEPDOG"
 
 # List of connectors to call when getting
 # the connector properties for a host
