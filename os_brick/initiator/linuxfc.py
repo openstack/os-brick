@@ -19,6 +19,7 @@ import os
 
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
+import six
 
 from os_brick.initiator import linuxscsi
 
@@ -34,7 +35,7 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
         else:
             return False
 
-    def _get_hba_channel_scsi_target(self, hba):
+    def _get_hba_channel_scsi_target(self, hba, conn_props):
         """Try to get the HBA channel and SCSI target for an HBA.
 
         This method only works for Fibre Channel targets that implement a
@@ -43,28 +44,44 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
 
         :returns: List or None
         """
+        # We want the target's WWPNs, so we use the initiator_target_map if
+        # present for this hba or default to target_wwns if not present.
+        wwpns = conn_props['target_wwn']
+        if 'initiator_target_map' in conn_props:
+            wwpns = conn_props['initiator_target_map'].get(hba['port_name'],
+                                                           wwpns)
+
+        # If it's not a string then it's an iterable (most likely a list),
+        # so we need to create a BRE for the grep query.
+        if not isinstance(wwpns, six.string_types):
+            wwpns = '\|'.join(wwpns)
+
         # Leave only the number from the host_device field (ie: host6)
         host_device = hba['host_device']
         if host_device and len(host_device) > 4:
             host_device = host_device[4:]
 
         path = '/sys/class/fc_transport/target%s:' % host_device
-        cmd = 'grep %(wwnn)s %(path)s*/node_name' % {'wwnn': hba['node_name'],
-                                                     'path': path}
+        # Since we'll run the command in a shell ensure BRE are being used
+        cmd = 'grep -Gil "%(wwpns)s" %(path)s*/port_name' % {'wwpns': wwpns,
+                                                             'path': path}
         try:
-            out, _err = self._execute(cmd)
+            # We need to run command in shell to expand the * glob
+            out, _err = self._execute(cmd, shell=True)
             return [line.split('/')[4].split(':')[1:]
                     for line in out.split('\n') if line.startswith(path)]
         except Exception as exc:
             LOG.debug('Could not get HBA channel and SCSI target ID, path: '
-                      '%(path)s, reason: %(reason)s', {'path': path,
-                                                       'reason': exc})
+                      '%(path)s*, reason: %(reason)s', {'path': path,
+                                                        'reason': exc})
             return None
 
-    def rescan_hosts(self, hbas, target_lun):
+    def rescan_hosts(self, hbas, connection_properties):
+        target_lun = connection_properties['target_lun']
+
         for hba in hbas:
             # Try to get HBA channel and SCSI target to use as filters
-            cts = self._get_hba_channel_scsi_target(hba)
+            cts = self._get_hba_channel_scsi_target(hba, connection_properties)
             # If we couldn't get the channel and target use wildcards
             if not cts:
                 cts = [('-', '-')]
