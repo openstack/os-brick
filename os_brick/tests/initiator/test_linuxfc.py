@@ -44,87 +44,141 @@ class LinuxFCTestCase(base.TestCase):
         has_fc = self.lfc.has_fc_support()
         self.assertTrue(has_fc)
 
-    def test_rescan_hosts(self):
-        # We check that we try to get the HBA channel and SCSI target
-        execute_results = (
-            ('/sys/class/fc_transport/target10:2:3/node_name:'
-             '0x5006016090203181\n/sys/class/fc_transport/target10:4:5/'
-             'node_name:0x5006016090203181', ''),
-            None,
-            None,
-            ('/sys/class/fc_transport/target11:6:7/node_name:'
-             '0x5006016090203181\n/sys/class/fc_transport/target11:8:9/'
-             'node_name:0x5006016090203181', ''),
-            None,
-            None)
-        hbas = [{'host_device': 'host10', 'node_name': '5006016090203181'},
-                {'host_device': 'host11', 'node_name': '5006016090203181'}]
+    @staticmethod
+    def __get_rescan_info(zone_manager=False):
+
+        connection_properties = {
+            'initiator_target_map': {'50014380186af83c': ['514f0c50023f6c00'],
+                                     '50014380186af83e': ['514f0c50023f6c01']},
+            'target_discovered': False,
+            'target_lun': 1,
+            'target_wwn': ['514f0c50023f6c00', '514f0c50023f6c01']
+        }
+
+        hbas = [
+            {'device_path': ('/sys/devices/pci0000:00/0000:00:02.0/'
+                             '0000:04:00.0/host6/fc_host/host6'),
+             'host_device': 'host6',
+             'node_name': '50014380186af83d',
+             'port_name': '50014380186af83c'},
+            {'device_path': ('/sys/devices/pci0000:00/0000:00:02.0/'
+                             '0000:04:00.1/host7/fc_host/host7'),
+             'host_device': 'host7',
+             'node_name': '50014380186af83f',
+             'port_name': '50014380186af83e'},
+        ]
+        if not zone_manager:
+            del connection_properties['initiator_target_map']
+        return hbas, connection_properties
+
+    def test__get_hba_channel_scsi_target_single_wwpn(self):
+        execute_results = ('/sys/class/fc_transport/target6:0:1/port_name\n',
+                           '')
+        hbas, con_props = self.__get_rescan_info()
+        con_props['target_wwn'] = con_props['target_wwn'][0]
         with mock.patch.object(self.lfc, '_execute',
-                               side_effect=execute_results) as execute_mock:
-            self.lfc.rescan_hosts(hbas, 1)
+                               return_value=execute_results) as execute_mock:
+            res = self.lfc._get_hba_channel_scsi_target(hbas[0], con_props)
+            execute_mock.assert_called_once_with(
+                'grep -Gil "514f0c50023f6c00" '
+                '/sys/class/fc_transport/target6:*/port_name',
+                shell=True)
+        expected = [['0', '1']]
+        self.assertListEqual(expected, res)
+
+    def test__get_hba_channel_scsi_target_multiple_wwpn(self):
+        execute_results = ('/sys/class/fc_transport/target6:0:1/port_name\n'
+                           '/sys/class/fc_transport/target6:0:2/port_name\n',
+                           '')
+        hbas, con_props = self.__get_rescan_info()
+        with mock.patch.object(self.lfc, '_execute',
+                               return_value=execute_results) as execute_mock:
+            res = self.lfc._get_hba_channel_scsi_target(hbas[0], con_props)
+            execute_mock.assert_called_once_with(
+                'grep -Gil "514f0c50023f6c00\|514f0c50023f6c01" '
+                '/sys/class/fc_transport/target6:*/port_name',
+                shell=True)
+        expected = [['0', '1'], ['0', '2']]
+        self.assertListEqual(expected, res)
+
+    def test__get_hba_channel_scsi_target_zone_manager(self):
+        execute_results = ('/sys/class/fc_transport/target6:0:1/port_name\n',
+                           '')
+        hbas, con_props = self.__get_rescan_info(zone_manager=True)
+        with mock.patch.object(self.lfc, '_execute',
+                               return_value=execute_results) as execute_mock:
+            res = self.lfc._get_hba_channel_scsi_target(hbas[0], con_props)
+            execute_mock.assert_called_once_with(
+                'grep -Gil "514f0c50023f6c00" '
+                '/sys/class/fc_transport/target6:*/port_name',
+                shell=True)
+        expected = [['0', '1']]
+        self.assertListEqual(expected, res)
+
+    def test__get_hba_channel_scsi_target_not_found(self):
+        hbas, con_props = self.__get_rescan_info(zone_manager=True)
+        with mock.patch.object(self.lfc, '_execute',
+                               return_value=('', '')) as execute_mock:
+            res = self.lfc._get_hba_channel_scsi_target(hbas[0], con_props)
+            execute_mock.assert_called_once_with(
+                'grep -Gil "514f0c50023f6c00" '
+                '/sys/class/fc_transport/target6:*/port_name',
+                shell=True)
+        self.assertListEqual([], res)
+
+    def test__get_hba_channel_scsi_target_exception(self):
+        hbas, con_props = self.__get_rescan_info(zone_manager=True)
+        with mock.patch.object(self.lfc, '_execute',
+                               side_effect=Exception) as execute_mock:
+            res = self.lfc._get_hba_channel_scsi_target(hbas[0], con_props)
+            execute_mock.assert_called_once_with(
+                'grep -Gil "514f0c50023f6c00" '
+                '/sys/class/fc_transport/target6:*/port_name',
+                shell=True)
+        self.assertIsNone(res)
+
+    def test_rescan_hosts(self):
+        get_chan_results = [[['2', '3'], ['4', '5']], [['6', '7']]]
+
+        hbas, con_props = self.__get_rescan_info(zone_manager=True)
+        with mock.patch.object(self.lfc, '_execute',
+                               return_value=None) as execute_mock, \
+            mock.patch.object(self.lfc, '_get_hba_channel_scsi_target',
+                              side_effect=get_chan_results) as mock_get_chan:
+
+            self.lfc.rescan_hosts(hbas, con_props)
             expected_commands = [
-                mock.call('grep 5006016090203181 /sys/class/fc_transport/'
-                          'target10:*/node_name'),
-                mock.call('tee', '-a', '/sys/class/scsi_host/host10/scan',
+                mock.call('tee', '-a', '/sys/class/scsi_host/host6/scan',
                           process_input='2 3 1',
                           root_helper=None, run_as_root=True),
-                mock.call('tee', '-a', '/sys/class/scsi_host/host10/scan',
+                mock.call('tee', '-a', '/sys/class/scsi_host/host6/scan',
                           process_input='4 5 1',
                           root_helper=None, run_as_root=True),
-                mock.call('grep 5006016090203181 /sys/class/fc_transport/'
-                          'target11:*/node_name'),
-                mock.call('tee', '-a', '/sys/class/scsi_host/host11/scan',
+                mock.call('tee', '-a', '/sys/class/scsi_host/host7/scan',
                           process_input='6 7 1',
-                          root_helper=None, run_as_root=True),
-                mock.call('tee', '-a', '/sys/class/scsi_host/host11/scan',
-                          process_input='8 9 1',
                           root_helper=None, run_as_root=True)]
 
             execute_mock.assert_has_calls(expected_commands)
             self.assertEqual(len(expected_commands), execute_mock.call_count)
+
+            expected_calls = [mock.call(hbas[0], con_props),
+                              mock.call(hbas[1], con_props)]
+            mock_get_chan.assert_has_calls(expected_calls)
 
     def test_rescan_hosts_wildcard(self):
-        hbas = [{'host_device': 'host10', 'node_name': '5006016090203181'},
-                {'host_device': 'host11', 'node_name': '5006016090203181'}]
+        hbas, con_props = self.__get_rescan_info(zone_manager=True)
         with mock.patch.object(self.lfc, '_get_hba_channel_scsi_target',
-                               return_value=None), \
+                               side_effect=(None, [])), \
             mock.patch.object(self.lfc, '_execute',
-                              return_value=None) as execute_mock:
+                              side_effect=None) as execute_mock:
 
-            self.lfc.rescan_hosts(hbas, 1)
-
-            expected_commands = [
-                mock.call('tee', '-a', '/sys/class/scsi_host/host10/scan',
-                          process_input='- - 1',
-                          root_helper=None, run_as_root=True),
-                mock.call('tee', '-a', '/sys/class/scsi_host/host11/scan',
-                          process_input='- - 1',
-                          root_helper=None, run_as_root=True)]
-
-            execute_mock.assert_has_calls(expected_commands)
-            self.assertEqual(len(expected_commands), execute_mock.call_count)
-
-    def test_rescan_hosts_wildcard_exception(self):
-        def _execute(cmd, *args, **kwargs):
-            if cmd.startswith('grep'):
-                raise Exception
-
-        hbas = [{'host_device': 'host10', 'node_name': '5006016090203181'},
-                {'host_device': 'host11', 'node_name': '5006016090203181'}]
-        with mock.patch.object(self.lfc, '_execute',
-                               side_effect=_execute) as execute_mock:
-
-            self.lfc.rescan_hosts(hbas, 1)
+            self.lfc.rescan_hosts(hbas, con_props)
 
             expected_commands = [
-                mock.call('grep 5006016090203181 /sys/class/fc_transport/'
-                          'target10:*/node_name'),
-                mock.call('tee', '-a', '/sys/class/scsi_host/host10/scan',
+                mock.call('tee', '-a', '/sys/class/scsi_host/host6/scan',
                           process_input='- - 1',
                           root_helper=None, run_as_root=True),
-                mock.call('grep 5006016090203181 /sys/class/fc_transport/'
-                          'target11:*/node_name'),
-                mock.call('tee', '-a', '/sys/class/scsi_host/host11/scan',
+                mock.call('tee', '-a', '/sys/class/scsi_host/host7/scan',
                           process_input='- - 1',
                           root_helper=None, run_as_root=True)]
 
