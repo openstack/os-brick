@@ -17,8 +17,6 @@
 #
 #   http://www.sphinx-doc.org/en/stable/config.html
 
-from os_brick.version import version_info
-
 # -- General configuration ------------------------------------------------
 
 # Add any Sphinx extension module names here, as strings. They can be
@@ -39,15 +37,9 @@ master_doc = 'index'
 project = u'OS-Brick Release Notes'
 copyright = u'2015, Cinder Developers'
 
-# The version info for the project you're documenting, acts as replacement for
-# |version| and |release|, also used in various other places throughout the
-# built documents.
-#
-# The short X.Y version.
-# The full version, including alpha/beta/rc tags.
-release = version_info.version_string_with_vcs()
-# The short X.Y version.
-version = version_info.canonical_version_string()
+# Release notes are unversioned, so we don't need to set version and release
+version = ''
+release = ''
 
 # -- Options for HTML output ----------------------------------------------
 
