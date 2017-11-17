@@ -63,6 +63,7 @@ connector_list = [
     'os_brick.initiator.windows.fibre_channel.WindowsFCConnector',
     'os_brick.initiator.windows.smbfs.WindowsSMBFSConnector',
     'os_brick.initiator.connectors.vrtshyperscale.HyperScaleConnector',
+    'os_brick.initiator.connectors.nvme.NVMeConnector',
 ]
 
 # Mappings used to determine who to contruct in the factory
@@ -110,6 +111,8 @@ _connector_mapping_linux = {
         'os_brick.initiator.connectors.gpfs.GPFSConnector',
     initiator.VERITAS_HYPERSCALE:
         'os_brick.initiator.connectors.vrtshyperscale.HyperScaleConnector',
+    initiator.NVME:
+        'os_brick.initiator.connectors.nvme.NVMeConnector',
 }
 
 # Mapping for the S390X platform
