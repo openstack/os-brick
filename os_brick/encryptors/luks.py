@@ -184,7 +184,12 @@ class LuksEncryptor(cryptsetup.CryptsetupEncryptor):
     def _close_volume(self, **kwargs):
         """Closes the device (effectively removes the dm-crypt mapping)."""
         LOG.debug("closing encrypted volume %s", self.dev_path)
+        # NOTE(mdbooth): luksClose will return 4 (wrong device specified) if
+        # the device doesn't exist. We assume here that the caller hasn't
+        # specified the wrong device, and that it doesn't exist because it
+        # isn't open. We don't fail in this case in order to make this
+        # operation idempotent.
         self._execute('cryptsetup', 'luksClose', self.dev_name,
-                      run_as_root=True, check_exit_code=True,
+                      run_as_root=True, check_exit_code=[0, 4],
                       root_helper=self._root_helper,
                       attempts=3)
