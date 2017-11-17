@@ -169,11 +169,13 @@ class CryptsetupEncryptor(base.VolumeEncryptor):
     def _close_volume(self, **kwargs):
         """Closes the device (effectively removes the dm-crypt mapping)."""
         LOG.debug("closing encrypted volume %s", self.dev_path)
-        # cryptsetup returns 4 when attempting to destroy a non-active
-        # dm-crypt device. We are going to ignore this error code to make
-        # nova deleting that instance successfully.
+        # NOTE(mdbooth): remove will return 4 (wrong device specified) if
+        # the device doesn't exist. We assume here that the caller hasn't
+        # specified the wrong device, and that it doesn't exist because it
+        # isn't open. We don't fail in this case in order to make this
+        # operation idempotent.
         self._execute('cryptsetup', 'remove', self.dev_name,
-                      run_as_root=True, check_exit_code=True,
+                      run_as_root=True, check_exit_code=[0, 4],
                       root_helper=self._root_helper)
 
     def detach_volume(self, **kwargs):
