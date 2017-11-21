@@ -169,7 +169,7 @@ class LuksEncryptorTestCase(test_cryptsetup.CryptsetupEncryptorTestCase):
         mock_execute.assert_has_calls([
             mock.call('cryptsetup', 'luksClose', self.dev_name,
                       root_helper=self.root_helper,
-                      attempts=3, run_as_root=True, check_exit_code=True),
+                      attempts=3, run_as_root=True, check_exit_code=[0, 4]),
         ])
 
     @mock.patch('os_brick.executor.Executor._execute')
@@ -179,7 +179,7 @@ class LuksEncryptorTestCase(test_cryptsetup.CryptsetupEncryptorTestCase):
         mock_execute.assert_has_calls([
             mock.call('cryptsetup', 'luksClose', self.dev_name,
                       root_helper=self.root_helper,
-                      attempts=3, run_as_root=True, check_exit_code=True),
+                      attempts=3, run_as_root=True, check_exit_code=[0, 4]),
         ])
 
     def test_get_mangled_passphrase(self):
@@ -224,7 +224,7 @@ class LuksEncryptorTestCase(test_cryptsetup.CryptsetupEncryptorTestCase):
                       check_exit_code=True),
             mock.call('cryptsetup', 'luksClose', self.dev_name,
                       root_helper=self.root_helper, run_as_root=True,
-                      check_exit_code=True, attempts=3),
+                      check_exit_code=[0, 4], attempts=3),
             mock.call('cryptsetup', 'luksAddKey', self.dev_path,
                       process_input=''.join([fake_key_mangled,
                                              '\n', fake_key,
@@ -237,7 +237,7 @@ class LuksEncryptorTestCase(test_cryptsetup.CryptsetupEncryptorTestCase):
                       check_exit_code=True),
             mock.call('cryptsetup', 'luksClose', self.dev_name,
                       root_helper=self.root_helper, run_as_root=True,
-                      check_exit_code=True, attempts=3),
+                      check_exit_code=[0, 4], attempts=3),
             mock.call('cryptsetup', 'luksRemoveKey', self.dev_path,
                       process_input=fake_key_mangled,
                       root_helper=self.root_helper, run_as_root=True,
