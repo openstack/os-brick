@@ -591,7 +591,8 @@ class LVM(executor.Executor):
             LOG.error("Trying to create snapshot by non-existent LV: %s",
                       source_lv_name)
             raise exception.VolumeDeviceNotFound(device=source_lv_name)
-        cmd = LVM.LVM_CMD_PREFIX + ['lvcreate', '--name', name, '--snapshot',
+        cmd = LVM.LVM_CMD_PREFIX + ['lvcreate', '--name', name,
+                                    '-k', 'y', '--snapshot',
                                     '%s/%s' % (self.vg_name, source_lv_name)]
         if lv_type != 'thin':
             size = source_lvref['size']
