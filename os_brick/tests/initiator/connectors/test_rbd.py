@@ -33,6 +33,7 @@ class RBDConnectorTestCase(test_connector.ConnectorTestCase):
         self.clustername = 'fake_ceph'
         self.hosts = ['192.168.10.2']
         self.ports = ['6789']
+        self.keyring = '/etc/ceph/ceph.client.cinder.keyring'
 
         self.connection_properties = {
             'auth_username': self.user,
@@ -137,7 +138,8 @@ class RBDConnectorTestCase(test_connector.ConnectorTestCase):
         with mock.patch('os.fdopen', mockopen, create=True):
             rbd_connector = rbd.RBDConnector(None)
             conf_path = rbd_connector._create_ceph_conf(
-                self.hosts, self.ports, self.clustername, self.user, None)
+                self.hosts, self.ports, self.clustername, self.user,
+                self.keyring)
         self.assertEqual(conf_path, tmpfile)
         mock_mkstemp.assert_called_once_with(prefix='brickrbd_')
 
