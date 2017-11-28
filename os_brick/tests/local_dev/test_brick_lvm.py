@@ -292,14 +292,14 @@ class BrickLvmTestCase(base.TestCase):
         self.vg.vg_thin_pool = "test-prov-cap-pool-unit"
         self.vg.vg_name = 'test-prov-cap-vg-unit'
         self.assertIsNone(self.vg.create_thin_pool(name=self.vg.vg_thin_pool))
-        self.assertEqual("9.50", self.vg.vg_thin_pool_size)
+        self.assertEqual(9.50, self.vg.vg_thin_pool_size)
         self.assertEqual(7.6, self.vg.vg_thin_pool_free_space)
         self.assertEqual(3.0, self.vg.vg_provisioned_capacity)
 
         self.vg.vg_thin_pool = "test-prov-cap-pool-no-unit"
         self.vg.vg_name = 'test-prov-cap-vg-no-unit'
         self.assertIsNone(self.vg.create_thin_pool(name=self.vg.vg_thin_pool))
-        self.assertEqual("9.50", self.vg.vg_thin_pool_size)
+        self.assertEqual(9.50, self.vg.vg_thin_pool_size)
         self.assertEqual(7.6, self.vg.vg_thin_pool_free_space)
         self.assertEqual(3.0, self.vg.vg_provisioned_capacity)
 
