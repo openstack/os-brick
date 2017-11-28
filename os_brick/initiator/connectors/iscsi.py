@@ -14,6 +14,7 @@
 
 
 import collections
+import copy
 import glob
 import os
 import re
@@ -412,6 +413,8 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                               {'target_portal': connection_properties[
                                   'target_portal']})
                     raise
+            old_node_startups = self._get_node_startup_values(
+                connection_properties)
             out = self._run_iscsiadm_bare(
                 ['-m', 'discoverydb',
                  '-t', 'sendtargets',
@@ -419,13 +422,19 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                  '-p', connection_properties['target_portal'],
                  '--discover'],
                 check_exit_code=[0, 255])[0] or ""
+            self._recover_node_startup_values(connection_properties,
+                                              old_node_startups)
         else:
+            old_node_startups = self._get_node_startup_values(
+                connection_properties)
             out = self._run_iscsiadm_bare(
                 ['-m', 'discovery',
                  '-t', 'sendtargets',
                  '-I', iscsi_transport,
                  '-p', connection_properties['target_portal']],
                 check_exit_code=[0, 255])[0] or ""
+            self._recover_node_startup_values(connection_properties,
+                                              old_node_startups)
 
         ips, iqns = self._get_target_portals_from_iscsiadm_output(out)
         luns = self._get_luns(connection_properties, iqns)
@@ -1037,7 +1046,6 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                             {'iqn': target_iqn, 'portal': portal,
                              'err': err.exit_code})
                 return None, None
-
             self._iscsiadm_update(connection_properties,
                                   "node.startup",
                                   "automatic")
@@ -1092,3 +1100,47 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                   {'multipath_command': multipath_command,
                    'out': out, 'err': err})
         return (out, err)
+
+    def _get_node_startup_values(self, connection_properties):
+        out, __ = self._run_iscsiadm_bare(
+            ['-m', 'node', '--op', 'show', '-p',
+             connection_properties['target_portal']]) or ""
+        node_values = out.strip()
+        node_values = node_values.split("\n")
+        iqn = None
+        startup = None
+        startup_values = {}
+
+        for node_value in node_values:
+            node_keys = node_value.split()
+            try:
+                if node_keys[0] == "node.name":
+                    iqn = node_keys[2]
+                elif node_keys[0] == "node.startup":
+                    startup = node_keys[2]
+
+                if iqn and startup:
+                    startup_values[iqn] = startup
+                    iqn = None
+                    startup = None
+            except IndexError:
+                pass
+
+        return startup_values
+
+    def _recover_node_startup_values(self, connection_properties,
+                                     old_node_startups):
+        node_startups = self._get_node_startup_values(connection_properties)
+        for iqn, node_startup in node_startups.items():
+            old_node_startup = old_node_startups.get(iqn, None)
+            if old_node_startup and node_startup != old_node_startup:
+                # _iscsiadm_update() only uses "target_portal" and "target_iqn"
+                # of connection_properties.
+                # And the recovering target belongs to the same target_portal
+                # as discovering target.
+                # So target_iqn is updated, and other values aren't updated.
+                recover_connection = copy.deepcopy(connection_properties)
+                recover_connection['target_iqn'] = [iqn]
+                self._iscsiadm_update(recover_connection,
+                                      "node.startup",
+                                      old_node_startup)
