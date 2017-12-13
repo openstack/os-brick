@@ -22,6 +22,8 @@ from os_brick.remotefs import windows_remotefs as remotefs
 from os_brick import utils
 
 
+# The Windows SMBFS connector expects to receive VHD/x images stored on SMB
+# shares, exposed by the Cinder SMBFS driver.
 class WindowsSMBFSConnector(win_conn_base.BaseWindowsConnector):
     def __init__(self, *args, **kwargs):
         super(WindowsSMBFSConnector, self).__init__(*args, **kwargs)
@@ -30,10 +32,14 @@ class WindowsSMBFSConnector(win_conn_base.BaseWindowsConnector):
         # for the Hyper-C scenario.
         self._local_path_for_loopback = kwargs.get('local_path_for_loopback',
                                                    False)
+
+        self._expect_raw_disk = kwargs.get('expect_raw_disk', False)
         self._remotefsclient = remotefs.WindowsRemoteFsClient(
             mount_type='smbfs',
             *args, **kwargs)
         self._smbutils = utilsfactory.get_smbutils()
+        self._vhdutils = utilsfactory.get_vhdutils()
+        self._diskutils = utilsfactory.get_diskutils()
 
     @staticmethod
     def get_connector_properties(*args, **kwargs):
@@ -43,15 +49,39 @@ class WindowsSMBFSConnector(win_conn_base.BaseWindowsConnector):
     @utils.trace
     def connect_volume(self, connection_properties):
         self.ensure_share_mounted(connection_properties)
+        # This will be a virtual disk image path.
         disk_path = self._get_disk_path(connection_properties)
+
+        if self._expect_raw_disk:
+            # The caller expects a direct accessible raw disk. We'll
+            # mount the image and bring the new disk offline, which will
+            # allow direct IO, while ensuring that any partiton residing
+            # on it will be unmounted.
+            read_only = connection_properties.get('access_mode') == 'ro'
+            self._vhdutils.attach_virtual_disk(disk_path, read_only=read_only)
+            raw_disk_path = self._vhdutils.get_virtual_disk_physical_path(
+                disk_path)
+            dev_num = self._diskutils.get_device_number_from_device_name(
+                raw_disk_path)
+            self._diskutils.set_disk_offline(dev_num)
+        else:
+            raw_disk_path = None
+
         device_info = {'type': 'file',
-                       'path': disk_path}
+                       'path': raw_disk_path if self._expect_raw_disk
+                               else disk_path}
         return device_info
 
     @utils.trace
     def disconnect_volume(self, connection_properties, device_info=None,
                           force=False, ignore_errors=False):
         export_path = self._get_export_path(connection_properties)
+
+        disk_path = self._get_disk_path(connection_properties)
+        # The detach method will silently continue if the disk is
+        # not attached.
+        self._vhdutils.detach_virtual_disk(disk_path)
+
         self._remotefsclient.unmount(export_path)
 
     def _get_export_path(self, connection_properties):
