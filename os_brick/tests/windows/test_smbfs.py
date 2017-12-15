@@ -46,7 +46,8 @@ class WindowsSMBFSConnectorTestCase(test_base.WindowsConnectorTestBase):
 
     @mock.patch.object(smbfs.WindowsSMBFSConnector, '_get_export_path')
     def test_disconnect_volume(self, mock_get_export_path):
-        self._connector.disconnect_volume(mock.sentinel.conn_props)
+        self._connector.disconnect_volume(mock.sentinel.conn_props,
+                                          mock.sentinel.dev_info)
 
         self._remotefs.unmount.assert_called_once_with(
             mock_get_export_path.return_value)

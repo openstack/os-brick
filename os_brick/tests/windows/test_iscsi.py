@@ -168,7 +168,8 @@ class WindowsISCSIConnectorTestCase(test_base.WindowsConnectorTestBase):
         mock_get_all_targets.return_value = targets
         self._iscsi_utils.get_target_luns.return_value = [mock.sentinel.lun_0]
 
-        self._connector.disconnect_volume(mock.sentinel.conn_props)
+        self._connector.disconnect_volume(mock.sentinel.conn_props,
+                                          mock.sentinel.dev_info)
 
         self._diskutils.rescan_disks.assert_called_once_with()
         mock_get_all_targets.assert_called_once_with(mock.sentinel.conn_props)
