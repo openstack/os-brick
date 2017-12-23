@@ -89,7 +89,7 @@ class CryptsetupEncryptorTestCase(test_base.VolumeEncryptorTestCase):
         mock_execute.assert_has_calls([
             mock.call('cryptsetup', 'remove', self.dev_name,
                       root_helper=self.root_helper,
-                      run_as_root=True, check_exit_code=True),
+                      run_as_root=True, check_exit_code=[0, 4]),
         ])
 
     @mock.patch('os_brick.executor.Executor._execute')
@@ -99,7 +99,7 @@ class CryptsetupEncryptorTestCase(test_base.VolumeEncryptorTestCase):
         mock_execute.assert_has_calls([
             mock.call('cryptsetup', 'remove', self.dev_name,
                       root_helper=self.root_helper,
-                      run_as_root=True, check_exit_code=True),
+                      run_as_root=True, check_exit_code=[0, 4]),
         ])
 
     def test_init_volume_encryption_not_supported(self):
