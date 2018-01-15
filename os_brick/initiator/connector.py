@@ -156,6 +156,8 @@ _connector_mapping_linux_ppc64 = {
         'os_brick.initiator.connectors.gpfs.GPFSConnector',
     initiator.VZSTORAGE:
         'os_brick.initiator.connectors.remotefs.RemoteFsConnector',
+    initiator.VERITAS_HYPERSCALE:
+        'os_brick.initiator.connectors.vrtshyperscale.HyperScaleConnector',
 }
 
 # Mapping for the windows connectors
