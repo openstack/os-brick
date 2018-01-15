@@ -158,6 +158,8 @@ _connector_mapping_linux_ppc64 = {
         'os_brick.initiator.connectors.remotefs.RemoteFsConnector',
     initiator.VERITAS_HYPERSCALE:
         'os_brick.initiator.connectors.vrtshyperscale.HyperScaleConnector',
+    initiator.ISER:
+        'os_brick.initiator.connectors.iscsi.ISCSIConnector',
 }
 
 # Mapping for the windows connectors
