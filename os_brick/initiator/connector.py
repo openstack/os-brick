@@ -154,6 +154,8 @@ _connector_mapping_linux_ppc64 = {
         'os_brick.initiator.connectors.rbd.RBDConnector',
     initiator.GPFS:
         'os_brick.initiator.connectors.gpfs.GPFSConnector',
+    initiator.VZSTORAGE:
+        'os_brick.initiator.connectors.remotefs.RemoteFsConnector',
 }
 
 # Mapping for the windows connectors
