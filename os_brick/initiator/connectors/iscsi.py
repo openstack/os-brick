@@ -43,7 +43,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
     """Connector class to attach/detach iSCSI volumes."""
 
     supported_transports = ['be2iscsi', 'bnx2i', 'cxgb3i', 'default',
-                            'cxgb4i', 'qla4xxx', 'ocs', 'iser']
+                            'cxgb4i', 'qla4xxx', 'ocs', 'iser', 'tcp']
     VALID_SESSIONS_PREFIX = ('tcp:', 'iser:')
 
     def __init__(self, root_helper, driver=None,
@@ -268,7 +268,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         """Check that given iscsi_iface uses only supported transports
 
         Accepted transport names for provided iface param are
-        be2iscsi, bnx2i, cxgb3i, cxgb4i, default, qla4xxx, ocs or iser.
+        be2iscsi, bnx2i, cxgb3i, cxgb4i, default, qla4xxx, ocs, iser or tcp.
         Note the difference between transport and iface;
         unlike default(iscsi_tcp)/iser, this is not one and the same for
         offloaded transports, where the default format is
