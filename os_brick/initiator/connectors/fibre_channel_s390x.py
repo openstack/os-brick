@@ -71,14 +71,19 @@ class FibreChannelConnectorS390X(fibre_channel.FibreChannelConnector):
 
     def _get_device_file_path(self, pci_num, target_wwn, lun):
         # NOTE(arne_r)
-        # Need to add two possible ways to resolve device paths,
+        # Need to add multiple possible ways to resolve device paths,
         # depending on OS. Since it gets passed to '_get_possible_volume_paths'
         # having a mismatch is not a problem
         host_device = [
+            # RHEL based
             "/dev/disk/by-path/ccw-%s-zfcp-%s:%s" % (
                 pci_num, target_wwn, self._get_lun_string(lun)),
+            # Debian based (e.g. for storwize)
             "/dev/disk/by-path/ccw-%s-fc-%s-lun-%s" % (
                 pci_num, target_wwn, lun),
+            # Debian based (e.g. for ds8k)
+            "/dev/disk/by-path/ccw-%s-fc-%s-lun-%s" % (
+                pci_num, target_wwn, self._get_lun_string(lun)),
         ]
         return host_device
 
