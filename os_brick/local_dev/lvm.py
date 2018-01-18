@@ -82,8 +82,6 @@ class LVM(executor.Executor):
                                   'LVM_SYSTEM_DIR=' + lvm_sys_dir]
 
         if create_vg and physical_volumes is not None:
-            self.pv_list = physical_volumes
-
             try:
                 self._create_vg(physical_volumes)
             except putils.ProcessExecutionError as err:
