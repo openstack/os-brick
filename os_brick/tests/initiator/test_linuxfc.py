@@ -96,6 +96,41 @@ class LinuxFCTestCase(base.TestCase):
         expected = [['0', '1', 1]]
         self.assertListEqual(expected, res)
 
+    def test__get_hba_channel_scsi_target_with_initiator_target_map(self):
+        execute_results = ('/sys/class/fc_transport/target6:0:1/port_name\n',
+                           '')
+        hbas, con_props = self.__get_rescan_info(zone_manager=True)
+        con_props['target_wwn'] = con_props['target_wwn'][0]
+        con_props['targets'] = con_props['targets'][0:1]
+        hbas[0]['port_name'] = '50014380186af83e'
+        with mock.patch.object(self.lfc, '_execute',
+                               return_value=execute_results) as execute_mock:
+            res = self.lfc._get_hba_channel_scsi_target(hbas[0], con_props)
+            execute_mock.assert_called_once_with(
+                'grep -Gil "514f0c50023f6c01" '
+                '/sys/class/fc_transport/target6:*/port_name',
+                shell=True)
+        expected = [['0', '1', 1]]
+        self.assertListEqual(expected, res)
+
+    def test__get_hba_channel_scsi_target_with_initiator_target_map_none(self):
+        execute_results = ('/sys/class/fc_transport/target6:0:1/port_name\n',
+                           '')
+        hbas, con_props = self.__get_rescan_info()
+        con_props['target_wwn'] = con_props['target_wwn'][0]
+        con_props['targets'] = con_props['targets'][0:1]
+        con_props['initiator_target_map'] = None
+        hbas[0]['port_name'] = '50014380186af83e'
+        with mock.patch.object(self.lfc, '_execute',
+                               return_value=execute_results) as execute_mock:
+            res = self.lfc._get_hba_channel_scsi_target(hbas[0], con_props)
+            execute_mock.assert_called_once_with(
+                'grep -Gil "514f0c50023f6c00" '
+                '/sys/class/fc_transport/target6:*/port_name',
+                shell=True)
+        expected = [['0', '1', 1]]
+        self.assertListEqual(expected, res)
+
     def test__get_hba_channel_scsi_target_multiple_wwpn(self):
         execute_results = [
             ['/sys/class/fc_transport/target6:0:1/port_name\n', ''],

@@ -625,8 +625,7 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
         conn = self.fibrechan_connection(volume, "10.0.2.15:3260", wwn)
         conn['data'].update(target_info)
 
-        if itmap:
-            conn['data']['initiator_target_map'] = itmap
+        conn['data']['initiator_target_map'] = itmap
 
         connection_info = self.connector._add_targets_to_connection_properties(
             conn['data'])
