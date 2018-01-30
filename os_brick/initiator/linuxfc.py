@@ -50,7 +50,7 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
         # We want the target's WWPNs, so we use the initiator_target_map if
         # present for this hba or default to target_wwns if not present.
         targets = conn_props['targets']
-        if 'initiator_target_map' in conn_props:
+        if conn_props.get('initiator_target_map') is not None:
             targets = conn_props['initiator_target_lun_map'].get(
                 hba['port_name'], targets)
 

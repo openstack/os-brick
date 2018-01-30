@@ -116,7 +116,7 @@ class FibreChannelConnector(base.BaseLinuxConnector):
             wwpn_lun_map[wwpn] = lun
 
         # If there is an initiator_target_map we can update it too
-        if 'initiator_target_map' in connection_properties:
+        if connection_properties.get('initiator_target_map') is not None:
             itmap = connection_properties['initiator_target_map']
             new_itmap = dict()
             for init_wwpn in itmap:
