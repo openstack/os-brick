@@ -267,7 +267,16 @@ class ScaleIOConnectorTestCase(test_connector.ConnectorTestCase):
 
         self.test_disconnect_volume()
 
-    def test_extend_volume(self):
-        self.assertRaises(NotImplementedError,
-                          self.connector.extend_volume,
-                          self.fake_connection_properties)
+    @mock.patch.object(os.path, 'exists', return_value=True)
+    @mock.patch.object(scaleio.ScaleIOConnector, '_find_volume_path')
+    @mock.patch.object(scaleio.ScaleIOConnector, 'get_device_size')
+    def test_extend_volume(self,
+                           mock_device_size,
+                           mock_find_volume_path,
+                           mock_exists):
+        mock_device_size.return_value = 16
+        mock_find_volume_path.return_value = "emc-vol-vol1"
+        extended_size = self.connector.extend_volume(
+            self.fake_connection_properties)
+        self.assertEqual(extended_size,
+                         mock_device_size.return_value)
