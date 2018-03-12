@@ -25,12 +25,18 @@ from os_brick.tests.windows import test_base
 
 @ddt.ddt
 class WindowsSMBFSConnectorTestCase(test_base.WindowsConnectorTestBase):
-    @mock.patch.object(windows_remotefs, 'WindowsRemoteFsClient')
-    def setUp(self, mock_remotefs_cls):
+    def setUp(self):
         super(WindowsSMBFSConnectorTestCase, self).setUp()
 
-        self._connector = smbfs.WindowsSMBFSConnector()
+        self._load_connector()
+
+    @mock.patch.object(windows_remotefs, 'WindowsRemoteFsClient')
+    def _load_connector(self, mock_remotefs_cls, *args, **kwargs):
+        self._connector = smbfs.WindowsSMBFSConnector(*args, **kwargs)
         self._remotefs = mock_remotefs_cls.return_value
+
+        self._vhdutils = self._connector._vhdutils
+        self._diskutils = self._connector._diskutils
 
     @mock.patch.object(smbfs.WindowsSMBFSConnector, '_get_disk_path')
     @mock.patch.object(smbfs.WindowsSMBFSConnector, 'ensure_share_mounted')
@@ -44,11 +50,46 @@ class WindowsSMBFSConnectorTestCase(test_base.WindowsConnectorTestBase):
         mock_ensure_mounted.assert_called_once_with(mock.sentinel.conn_props)
         mock_get_disk_path.assert_called_once_with(mock.sentinel.conn_props)
 
+    @ddt.data(True, False)
+    @mock.patch.object(smbfs.WindowsSMBFSConnector, '_get_disk_path')
+    @mock.patch.object(smbfs.WindowsSMBFSConnector, 'ensure_share_mounted')
+    def test_connect_and_mount_volume(self, read_only,
+                                      mock_ensure_mounted,
+                                      mock_get_disk_path):
+        self._load_connector(expect_raw_disk=True)
+
+        fake_conn_props = dict(access_mode='ro' if read_only else 'rw')
+        self._vhdutils.get_virtual_disk_physical_path.return_value = (
+            mock.sentinel.raw_disk_path)
+        mock_get_disk_path.return_value = mock.sentinel.image_path
+
+        device_info = self._connector.connect_volume(fake_conn_props)
+
+        expected_info = dict(type='file',
+                             path=mock.sentinel.raw_disk_path)
+
+        self.assertEqual(expected_info, device_info)
+        self._vhdutils.attach_virtual_disk.assert_called_once_with(
+            mock.sentinel.image_path,
+            read_only=read_only)
+        self._vhdutils.get_virtual_disk_physical_path.assert_called_once_with(
+            mock.sentinel.image_path)
+        get_dev_num = self._diskutils.get_device_number_from_device_name
+        get_dev_num.assert_called_once_with(mock.sentinel.raw_disk_path)
+        self._diskutils.set_disk_offline.assert_called_once_with(
+            get_dev_num.return_value)
+
+    @mock.patch.object(smbfs.WindowsSMBFSConnector, '_get_disk_path')
     @mock.patch.object(smbfs.WindowsSMBFSConnector, '_get_export_path')
-    def test_disconnect_volume(self, mock_get_export_path):
+    def test_disconnect_volume(self, mock_get_export_path,
+                               mock_get_disk_path):
         self._connector.disconnect_volume(mock.sentinel.conn_props,
                                           mock.sentinel.dev_info)
 
+        mock_get_disk_path.assert_called_once_with(
+            mock.sentinel.conn_props)
+        self._vhdutils.detach_virtual_disk.assert_called_once_with(
+            mock_get_disk_path.return_value)
         self._remotefs.unmount.assert_called_once_with(
             mock_get_export_path.return_value)
         mock_get_export_path.assert_called_once_with(mock.sentinel.conn_props)
