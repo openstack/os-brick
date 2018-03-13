@@ -27,7 +27,7 @@ class FibreChannelConnectorPPC64TestCase(test_connector.ConnectorTestCase):
         self.assertIsNotNone(self.connector)
         self.assertIsNotNone(self.connector._linuxfc)
         self.assertEqual(self.connector._linuxfc.__class__.__name__,
-                         "LinuxFibreChannelPPC64")
+                         "LinuxFibreChannel")
         self.assertIsNotNone(self.connector._linuxscsi)
 
     @mock.patch.object(linuxscsi.LinuxSCSI, 'process_lun_id', return_value='2')
