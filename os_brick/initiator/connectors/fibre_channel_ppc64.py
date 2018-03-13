@@ -16,7 +16,6 @@ from oslo_log import log as logging
 
 from os_brick import initiator
 from os_brick.initiator.connectors import fibre_channel
-from os_brick.initiator import linuxfc
 
 LOG = logging.getLogger(__name__)
 
@@ -36,7 +35,6 @@ class FibreChannelConnectorPPC64(fibre_channel.FibreChannelConnector):
             execute=execute,
             device_scan_attempts=device_scan_attempts,
             *args, **kwargs)
-        self._linuxfc = linuxfc.LinuxFibreChannelPPC64(root_helper, execute)
         self.use_multipath = use_multipath
 
     def set_execute(self, execute):
@@ -52,14 +50,3 @@ class FibreChannelConnectorPPC64(fibre_channel.FibreChannelConnector):
                 self._linuxscsi.process_lun_id(lun))
             host_devices.add(host_device)
         return list(host_devices)
-
-    def _get_possible_volume_paths(self, connection_properties, hbas):
-        ports = connection_properties['target_wwn']
-        it_map = connection_properties['initiator_target_map']
-        for hba in hbas:
-            if hba['node_name'] in it_map.keys():
-                hba['target_wwn'] = it_map.get(hba['node_name'])
-        possible_devs = self._get_possible_devices(hbas, ports)
-        lun = connection_properties.get('target_lun', 0)
-        host_paths = self._get_host_devices(possible_devs, lun)
-        return host_paths
