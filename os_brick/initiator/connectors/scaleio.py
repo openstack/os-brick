@@ -15,6 +15,7 @@
 import json
 import os
 import requests
+import six
 from six.moves import urllib
 
 from oslo_concurrency import lockutils
@@ -39,6 +40,7 @@ class ScaleIOConnector(base.BaseLinuxConnector):
     VOLUME_NOT_MAPPED_ERROR = 84
     VOLUME_ALREADY_MAPPED_ERROR = 81
     GET_GUID_CMD = ['/opt/emc/scaleio/sdc/bin/drv_cfg', '--query_guid']
+    RESCAN_VOLS_CMD = ['/opt/emc/scaleio/sdc/bin/drv_cfg', '--rescan']
 
     def __init__(self, root_helper, driver=None,
                  device_scan_attempts=initiator.DEVICE_SCAN_ATTEMPTS_DEFAULT,
@@ -488,5 +490,45 @@ class ScaleIOConnector(base.BaseLinuxConnector):
                 raise exception.BrickException(message=msg)
 
     def extend_volume(self, connection_properties):
-        # TODO(walter-boring): is this possible?
-        raise NotImplementedError
+        """Update the local kernel's size information.
+
+        Try and update the local kernel's size information
+        for a ScaleIO volume.
+        """
+
+        LOG.info("ScaleIO rescan volumes: %(cmd)s",
+                 {'cmd': self.RESCAN_VOLS_CMD})
+
+        try:
+            (out, err) = self._execute(*self.RESCAN_VOLS_CMD, run_as_root=True,
+                                       root_helper=self._root_helper)
+
+            LOG.debug("Rescan volumes %(cmd)s: stdout=%(out)s",
+                      {'cmd': self.RESCAN_VOLS_CMD, 'out': out})
+
+        except putils.ProcessExecutionError as e:
+            msg = (_("Error querying volumes: %(err)s") % {'err': e.stderr})
+            LOG.error(msg)
+            raise exception.BrickException(message=msg)
+
+        volume_paths = self.get_volume_paths(connection_properties)
+        if volume_paths:
+            return self.get_device_size(volume_paths[0])
+
+        # if we got here, the volume is not mapped
+        msg = (_("Error extending ScaleIO volume"))
+        LOG.error(msg)
+        raise exception.BrickException(message=msg)
+
+    def get_device_size(self, device):
+        """Get the size in bytes of a volume."""
+        (out, _err) = self._execute('blockdev', '--getsize64',
+                                    device, run_as_root=True,
+                                    root_helper=self._root_helper)
+        var = six.text_type(out.strip())
+        LOG.debug("Device %(dev)s size: %(var)s",
+                  {'dev': device, 'var': var})
+        if var.isnumeric():
+            return int(var)
+        else:
+            return None
