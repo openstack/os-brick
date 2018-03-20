@@ -1102,9 +1102,12 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         return (out, err)
 
     def _get_node_startup_values(self, connection_properties):
+        # Exit code 21 (ISCSI_ERR_NO_OBJS_FOUND) occurs when no nodes
+        # exist - must consider this an empty (successful) result.
         out, __ = self._run_iscsiadm_bare(
             ['-m', 'node', '--op', 'show', '-p',
-             connection_properties['target_portal']]) or ""
+             connection_properties['target_portal']],
+            check_exit_code=(0, 21)) or ""
         node_values = out.strip()
         node_values = node_values.split("\n")
         iqn = None
