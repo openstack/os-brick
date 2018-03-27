@@ -3,6 +3,7 @@
 !.gitignore
 !.mailmap
 !.testr.conf
+!.zuul.yaml
 /.*
 
 *.py[cod]
