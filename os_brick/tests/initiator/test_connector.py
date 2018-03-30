@@ -178,6 +178,25 @@ class ConnectorTestCase(test_base.TestCase):
                 'sudo', multipath=multipath,
                 enforce_multipath=enforce_multipath)
 
+    @mock.patch('sys.platform', 'win32')
+    def test_get_connector_mapping_win32(self):
+        mapping_win32 = connector.get_connector_mapping()
+        self.assertTrue('ISCSI' in mapping_win32)
+        self.assertFalse('RBD' in mapping_win32)
+        self.assertFalse('STORPOOL' in mapping_win32)
+
+    @mock.patch('os_brick.initiator.connector.platform.machine')
+    def test_get_connector_mapping(self, mock_platform_machine):
+        mock_platform_machine.return_value = 'x86_64'
+        mapping_x86 = connector.get_connector_mapping()
+        mock_platform_machine.return_value = 'ppc64le'
+        mapping_ppc = connector.get_connector_mapping()
+        self.assertNotEqual(mapping_x86, mapping_ppc)
+        mock_platform_machine.return_value = 's390x'
+        mapping_s390 = connector.get_connector_mapping()
+        self.assertNotEqual(mapping_x86, mapping_s390)
+        self.assertNotEqual(mapping_ppc, mapping_s390)
+
     def test_factory(self):
         obj = connector.InitiatorConnector.factory('iscsi', None)
         self.assertEqual("ISCSIConnector", obj.__class__.__name__)
