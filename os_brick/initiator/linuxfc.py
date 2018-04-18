@@ -77,14 +77,38 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
             return None
 
     def rescan_hosts(self, hbas, connection_properties):
+        LOG.debug('Rescaning HBAs %(hbas)s with connection properties '
+                  '%(conn_props)s', {'hbas': hbas,
+                                     'conn_props': connection_properties})
         target_lun = connection_properties['target_lun']
+        get_cts = self._get_hba_channel_scsi_target
 
-        for hba in hbas:
-            # Try to get HBA channel and SCSI target to use as filters
-            cts = self._get_hba_channel_scsi_target(hba, connection_properties)
-            # If we couldn't get the channel and target use wildcards
-            if not cts:
-                cts = [('-', '-')]
+        # Use initiator_target_map provided by backend as HBA exclussion map
+        ports = connection_properties.get('initiator_target_map')
+        if ports:
+            hbas = [hba for hba in hbas if hba['port_name'] in ports]
+            LOG.debug('Using initiator target map to exclude HBAs')
+            process = [(hba, get_cts(hba, connection_properties))
+                       for hba in hbas]
+
+        # With no target map we'll check if target implements single WWNN for
+        # all ports, if it does we only use HBAs connected (info was found),
+        # otherwise we are forced to blindly scan all HBAs.
+        else:
+            with_info = []
+            no_info = []
+
+            for hba in hbas:
+                cts = get_cts(hba, connection_properties)
+                target_list = with_info if cts else no_info
+                cts = cts or [('-', '-')]
+                target_list.append((hba, cts))
+
+            process = with_info or no_info
+            msg = "implements" if with_info else "doesn't implement"
+            LOG.debug('FC target %s single WWNN for all ports.', msg)
+
+        for hba, cts in process:
             for hba_channel, target_id in cts:
                 LOG.debug('Scanning host %(host)s (wwnn: %(wwnn)s, c: '
                           '%(channel)s, t: %(target)s, l: %(lun)s)',
