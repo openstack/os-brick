@@ -137,10 +137,58 @@ class LinuxFCTestCase(base.TestCase):
                 shell=True)
         self.assertIsNone(res)
 
-    def test_rescan_hosts(self):
+    def test_rescan_hosts_initiator_map(self):
+        """Test FC rescan with initiator map and not every HBA connected."""
         get_chan_results = [[['2', '3'], ['4', '5']], [['6', '7']]]
 
         hbas, con_props = self.__get_rescan_info(zone_manager=True)
+
+        # This HBA is not in the initiator map, so we should not scan it or try
+        # to get the channel and target
+        hbas.append({'device_path': ('/sys/devices/pci0000:00/0000:00:02.0/'
+                                     '0000:04:00.2/host8/fc_host/host8'),
+                     'host_device': 'host8',
+                     'node_name': '50014380186af83g',
+                     'port_name': '50014380186af83h'})
+
+        with mock.patch.object(self.lfc, '_execute',
+                               return_value=None) as execute_mock, \
+            mock.patch.object(self.lfc, '_get_hba_channel_scsi_target',
+                              side_effect=get_chan_results) as mock_get_chan:
+
+            self.lfc.rescan_hosts(hbas, con_props)
+            expected_commands = [
+                mock.call('tee', '-a', '/sys/class/scsi_host/host6/scan',
+                          process_input='2 3 1',
+                          root_helper=None, run_as_root=True),
+                mock.call('tee', '-a', '/sys/class/scsi_host/host6/scan',
+                          process_input='4 5 1',
+                          root_helper=None, run_as_root=True),
+                mock.call('tee', '-a', '/sys/class/scsi_host/host7/scan',
+                          process_input='6 7 1',
+                          root_helper=None, run_as_root=True)]
+
+            execute_mock.assert_has_calls(expected_commands)
+            self.assertEqual(len(expected_commands), execute_mock.call_count)
+
+            expected_calls = [mock.call(hbas[0], con_props),
+                              mock.call(hbas[1], con_props)]
+            mock_get_chan.assert_has_calls(expected_calls)
+
+    def test_rescan_hosts_single_wwnn(self):
+        """Test FC rescan with no initiator map and single WWNN for ports."""
+        get_chan_results = [[['2', '3'], ['4', '5']], [['6', '7']], None]
+
+        hbas, con_props = self.__get_rescan_info(zone_manager=True)
+        # Remove the initiator map
+        con_props.pop('initiator_target_map')
+        # This HBA is the one that is not included in the single WWNN.
+        hbas.append({'device_path': ('/sys/devices/pci0000:00/0000:00:02.0/'
+                                     '0000:04:00.2/host8/fc_host/host8'),
+                     'host_device': 'host8',
+                     'node_name': '50014380186af83g',
+                     'port_name': '50014380186af83h'})
+
         with mock.patch.object(self.lfc, '_execute',
                                return_value=None) as execute_mock, \
             mock.patch.object(self.lfc, '_get_hba_channel_scsi_target',
@@ -166,7 +214,10 @@ class LinuxFCTestCase(base.TestCase):
             mock_get_chan.assert_has_calls(expected_calls)
 
     def test_rescan_hosts_wildcard(self):
+        """Test when we don't have initiator map or target is single WWNN."""
         hbas, con_props = self.__get_rescan_info(zone_manager=True)
+        # Remove the initiator map
+        con_props.pop('initiator_target_map')
         with mock.patch.object(self.lfc, '_get_hba_channel_scsi_target',
                                side_effect=(None, [])), \
             mock.patch.object(self.lfc, '_execute',
