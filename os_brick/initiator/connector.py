@@ -160,6 +160,8 @@ _connector_mapping_linux_ppc64 = {
         'os_brick.initiator.connectors.vrtshyperscale.HyperScaleConnector',
     initiator.ISER:
         'os_brick.initiator.connectors.iscsi.ISCSIConnector',
+    initiator.SHEEPDOG:
+        'os_brick.initiator.connectors.sheepdog.SheepdogConnector',
 }
 
 # Mapping for the windows connectors
