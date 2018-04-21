@@ -12,11 +12,11 @@ brick
 ===============================
 
 .. image:: https://img.shields.io/pypi/v/os-brick.svg
-    :target: https://pypi.python.org/pypi/os-brick/
+    :target: https://pypi.org/project/os-brick/
     :alt: Latest Version
 
 .. image:: https://img.shields.io/pypi/dm/os-brick.svg
-    :target: https://pypi.python.org/pypi/os-brick/
+    :target: https://pypi.org/project/os-brick/
     :alt: Downloads
 
 OpenStack Cinder brick library for managing local volume attaches
