@@ -94,7 +94,7 @@ class NVMeConnector(base.BaseLinuxConnector):
         current_nvme_devices = self._get_nvme_devices()
 
         device_info = {'type': 'block'}
-        conn_nqn = connection_properties['nqn'].split('.', 1)[1]
+        conn_nqn = connection_properties['nqn']
         target_portal = connection_properties['target_portal']
         port = connection_properties['target_port']
         nvme_transport_type = connection_properties['transport_type']

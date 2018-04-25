@@ -76,7 +76,7 @@ class NVMeConnectorTestCase(test_connector.ConnectorTestCase):
         mock_execute.assert_called_once_with(
             'nvme', 'connect', '-t',
             connection_properties['transport_type'], '-n',
-            'volume_123',
+            'nqn.volume_123',
             '-a', connection_properties['target_portal'],
             '-s', connection_properties['target_port'],
             root_helper=None,
