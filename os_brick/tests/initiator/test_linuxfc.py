@@ -135,7 +135,7 @@ class LinuxFCTestCase(base.TestCase):
                 'grep -Gil "514f0c50023f6c00" '
                 '/sys/class/fc_transport/target6:*/port_name',
                 shell=True)
-        self.assertIsNone(res)
+        self.assertEqual([['-', '-']], res)
 
     def test_rescan_hosts_initiator_map(self):
         """Test FC rescan with initiator map and not every HBA connected."""
@@ -177,7 +177,8 @@ class LinuxFCTestCase(base.TestCase):
 
     def test_rescan_hosts_single_wwnn(self):
         """Test FC rescan with no initiator map and single WWNN for ports."""
-        get_chan_results = [[['2', '3'], ['4', '5']], [['6', '7']], None]
+        get_chan_results = [[['2', '3'], ['4', '5']],
+                            [['6', '7']], [['-', '-']]]
 
         hbas, con_props = self.__get_rescan_info(zone_manager=True)
         # Remove the initiator map
@@ -215,11 +216,12 @@ class LinuxFCTestCase(base.TestCase):
 
     def test_rescan_hosts_wildcard(self):
         """Test when we don't have initiator map or target is single WWNN."""
+        get_chan_results = [[['-', '-']], [['-', '-']]]
         hbas, con_props = self.__get_rescan_info(zone_manager=True)
         # Remove the initiator map
         con_props.pop('initiator_target_map')
         with mock.patch.object(self.lfc, '_get_hba_channel_scsi_target',
-                               side_effect=(None, [])), \
+                               side_effect=get_chan_results), \
             mock.patch.object(self.lfc, '_execute',
                               side_effect=None) as execute_mock:
 

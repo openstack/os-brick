@@ -40,9 +40,10 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
 
         This method only works for Fibre Channel targets that implement a
         single WWNN for all ports, so caller should expect us to return either
-        None or an empty list.
+        explicit channel and targets or wild cards if we cannot determine them.
 
-        :returns: List or None
+        :returns: List of lists with [c, t] entries, the channel and target
+        may be '-' wildcards if unable to determine them.
         """
         # We want the target's WWPNs, so we use the initiator_target_map if
         # present for this hba or default to target_wwns if not present.
@@ -74,7 +75,7 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
             LOG.debug('Could not get HBA channel and SCSI target ID, path: '
                       '%(path)s*, reason: %(reason)s', {'path': path,
                                                         'reason': exc})
-            return None
+            return [['-', '-']]
 
     def rescan_hosts(self, hbas, connection_properties):
         LOG.debug('Rescaning HBAs %(hbas)s with connection properties '
@@ -100,8 +101,11 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
 
             for hba in hbas:
                 cts = get_cts(hba, connection_properties)
-                target_list = with_info if cts else no_info
-                cts = cts or [('-', '-')]
+                found_info = True
+                for hba_channel, target_id in cts:
+                    if hba_channel == '-' or target_id == '-':
+                        found_info = False
+                target_list = with_info if found_info else no_info
                 target_list.append((hba, cts))
 
             process = with_info or no_info
