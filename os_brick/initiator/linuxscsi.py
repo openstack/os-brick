@@ -429,7 +429,8 @@ class LinuxSCSI(executor.Executor):
             lines = out.strip()
             lines = lines.split("\n")
             lines = [line for line in lines
-                     if not re.match(MULTIPATH_ERROR_REGEX, line)]
+                     if not re.match(MULTIPATH_ERROR_REGEX, line)
+                     and len(line)]
             if lines:
 
                 mdev_name = lines[0].split(" ")[0]
