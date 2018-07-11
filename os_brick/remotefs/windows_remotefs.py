@@ -42,7 +42,7 @@ class WindowsRemoteFsClient(remotefs.RemoteFsClient):
         }
 
         self._local_path_for_loopback = kwargs.get('local_path_for_loopback',
-                                                   False)
+                                                   True)
 
         if mount_type not in mount_type_to_option_prefix:
             raise exception.ProtocolNotSupported(protocol=mount_type)
