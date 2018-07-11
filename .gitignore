@@ -31,8 +31,6 @@ pip-log.txt
 # Unit test / coverage reports
 .coverage
 .tox
-nosetests.xml
-.testrepository
 .venv
 tools/lintstack.head.py
 tools/pylint_exceptions
