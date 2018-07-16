@@ -31,7 +31,7 @@ class WindowsSMBFSConnector(win_conn_base.BaseWindowsConnector):
         # shares. This is in fact mandatory in some cases, for example
         # for the Hyper-C scenario.
         self._local_path_for_loopback = kwargs.get('local_path_for_loopback',
-                                                   False)
+                                                   True)
 
         self._expect_raw_disk = kwargs.get('expect_raw_disk', False)
         self._remotefsclient = remotefs.WindowsRemoteFsClient(
