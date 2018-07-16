@@ -19,7 +19,6 @@ import os
 
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
-import six
 
 from os_brick.initiator import linuxscsi
 
@@ -42,20 +41,18 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
         single WWNN for all ports, so caller should expect us to return either
         explicit channel and targets or wild cards if we cannot determine them.
 
-        :returns: List of lists with [c, t] entries, the channel and target
+        The connection properties will need to have "target" values defined in
+        it which are expected to be tuples of (wwpn, lun).
+
+        :returns: List of lists with [c, t, l] entries, the channel and target
         may be '-' wildcards if unable to determine them.
         """
         # We want the target's WWPNs, so we use the initiator_target_map if
         # present for this hba or default to target_wwns if not present.
-        wwpns = conn_props['target_wwn']
+        targets = conn_props['targets']
         if 'initiator_target_map' in conn_props:
-            wwpns = conn_props['initiator_target_map'].get(hba['port_name'],
-                                                           wwpns)
-
-        # If it's not a string then it's an iterable (most likely a list),
-        # so we need to create a BRE for the grep query.
-        if not isinstance(wwpns, six.string_types):
-            wwpns = '\|'.join(wwpns)
+            targets = conn_props['initiator_target_lun_map'].get(
+                hba['port_name'], targets)
 
         # Leave only the number from the host_device field (ie: host6)
         host_device = hba['host_device']
@@ -63,33 +60,36 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
             host_device = host_device[4:]
 
         path = '/sys/class/fc_transport/target%s:' % host_device
-        # Since we'll run the command in a shell ensure BRE are being used
-        cmd = 'grep -Gil "%(wwpns)s" %(path)s*/port_name' % {'wwpns': wwpns,
-                                                             'path': path}
-        try:
-            # We need to run command in shell to expand the * glob
-            out, _err = self._execute(cmd, shell=True)
-            return [line.split('/')[4].split(':')[1:]
-                    for line in out.split('\n') if line.startswith(path)]
-        except Exception as exc:
-            LOG.debug('Could not get HBA channel and SCSI target ID, path: '
-                      '%(path)s*, reason: %(reason)s', {'path': path,
-                                                        'reason': exc})
-            return [['-', '-']]
+        ctls = []
+        for wwpn, lun in targets:
+            cmd = 'grep -Gil "%(wwpns)s" %(path)s*/port_name' % {'wwpns': wwpn,
+                                                                 'path': path}
+            try:
+                # We need to run command in shell to expand the * glob
+                out, _err = self._execute(cmd, shell=True)
+                ctls += [line.split('/')[4].split(':')[1:] + [lun]
+                         for line in out.split('\n') if line.startswith(path)]
+            except Exception as exc:
+                LOG.debug('Could not get HBA channel and SCSI target ID, path:'
+                          ' %(path)s*, reason: %(reason)s', {'path': path,
+                                                             'reason': exc})
+                # If we didn't find any paths just give back wildcards for
+                # the channel and target ids.
+                ctls.append(['-', '-', lun])
+        return ctls
 
     def rescan_hosts(self, hbas, connection_properties):
         LOG.debug('Rescaning HBAs %(hbas)s with connection properties '
                   '%(conn_props)s', {'hbas': hbas,
                                      'conn_props': connection_properties})
-        target_lun = connection_properties['target_lun']
-        get_cts = self._get_hba_channel_scsi_target
+        get_ctsl = self._get_hba_channel_scsi_target
 
-        # Use initiator_target_map provided by backend as HBA exclussion map
-        ports = connection_properties.get('initiator_target_map')
+        # Use initiator_target_map provided by backend as HBA exclusion map
+        ports = connection_properties.get('initiator_target_lun_map')
         if ports:
             hbas = [hba for hba in hbas if hba['port_name'] in ports]
             LOG.debug('Using initiator target map to exclude HBAs')
-            process = [(hba, get_cts(hba, connection_properties))
+            process = [(hba, get_ctsl(hba, connection_properties))
                        for hba in hbas]
 
         # With no target map we'll check if target implements single WWNN for
@@ -100,20 +100,20 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
             no_info = []
 
             for hba in hbas:
-                cts = get_cts(hba, connection_properties)
+                ctls = get_ctsl(hba, connection_properties)
                 found_info = True
-                for hba_channel, target_id in cts:
+                for hba_channel, target_id, target_lun in ctls:
                     if hba_channel == '-' or target_id == '-':
                         found_info = False
                 target_list = with_info if found_info else no_info
-                target_list.append((hba, cts))
+                target_list.append((hba, ctls))
 
             process = with_info or no_info
             msg = "implements" if with_info else "doesn't implement"
             LOG.debug('FC target %s single WWNN for all ports.', msg)
 
-        for hba, cts in process:
-            for hba_channel, target_id in cts:
+        for hba, ctls in process:
+            for hba_channel, target_id, target_lun in ctls:
                 LOG.debug('Scanning host %(host)s (wwnn: %(wwnn)s, c: '
                           '%(channel)s, t: %(target)s, l: %(lun)s)',
                           {'host': hba['host_device'],
