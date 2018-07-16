@@ -20,6 +20,7 @@ from oslo_service import loopingcall
 import six
 
 from os_brick import exception
+from os_brick.i18n import _
 from os_brick import initiator
 from os_brick.initiator.connectors import base
 from os_brick.initiator import linuxfc
@@ -70,12 +71,70 @@ class FibreChannelConnector(base.BaseLinuxConnector):
         """Where do we look for FC based volumes."""
         return '/dev/disk/by-path'
 
-    def _get_possible_volume_paths(self, connection_properties, hbas):
-        ports = connection_properties['target_wwn']
-        possible_devs = self._get_possible_devices(hbas, ports)
+    def _add_targets_to_connection_properties(self, connection_properties):
+        target_wwn = connection_properties.get('target_wwn')
+        target_wwns = connection_properties.get('target_wwns')
+        if target_wwns:
+            wwns = target_wwns
+        elif isinstance(target_wwn, list):
+            wwns = target_wwn
+        elif isinstance(target_wwn, six.string_types):
+            wwns = [target_wwn]
+        else:
+            wwns = []
 
-        lun = connection_properties.get('target_lun', 0)
-        host_paths = self._get_host_devices(possible_devs, lun)
+        target_lun = connection_properties.get('target_lun', 0)
+        target_luns = connection_properties.get('target_luns')
+        if target_luns:
+            luns = target_luns
+        elif isinstance(target_lun, int):
+            luns = [target_lun]
+        else:
+            luns = []
+
+        if len(luns) == len(wwns):
+            # Handles single wwwn + lun or multiple, potentially
+            # different wwns or luns
+            targets = list(zip(wwns, luns))
+        elif len(luns) == 1 and len(wwns) > 1:
+            # For the case of multiple wwns, but a single lun (old path)
+            targets = []
+            for wwn in wwns:
+                targets.append((wwn, luns[0]))
+        else:
+            # Something is wrong, this shouldn't happen
+            msg = _("Unable to find potential volume paths for FC device "
+                    "with lun: %(lun)s and wwn: %(wwn)s") % {
+                        "lun": target_lun, "wwn": target_wwn}
+            LOG.error(msg)
+            raise exception.VolumePathsNotFound(msg)
+
+        connection_properties['targets'] = targets
+
+        wwpn_lun_map = dict()
+        for wwpn, lun in targets:
+            wwpn_lun_map[wwpn] = lun
+
+        # If there is an initiator_target_map we can update it too
+        if 'initiator_target_map' in connection_properties:
+            itmap = connection_properties['initiator_target_map']
+            new_itmap = dict()
+            for init_wwpn in itmap:
+                target_wwpns = itmap[init_wwpn]
+                init_targets = []
+                for target_wwpn in target_wwpns:
+                    if target_wwpn in wwpn_lun_map:
+                        init_targets.append((target_wwpn,
+                                            wwpn_lun_map[target_wwpn]))
+                new_itmap[init_wwpn] = init_targets
+            connection_properties['initiator_target_lun_map'] = new_itmap
+
+        return connection_properties
+
+    def _get_possible_volume_paths(self, connection_properties, hbas):
+        targets = connection_properties['targets']
+        possible_devs = self._get_possible_devices(hbas, targets)
+        host_paths = self._get_host_devices(possible_devs)
         return host_paths
 
     def get_volume_paths(self, connection_properties):
@@ -100,6 +159,9 @@ class FibreChannelConnector(base.BaseLinuxConnector):
         Try and update the local kernel's size information
         for an FC volume.
         """
+        connection_properties = self._add_targets_to_connection_properties(
+            connection_properties)
+
         volume_paths = self.get_volume_paths(connection_properties)
         if volume_paths:
             return self._linuxscsi.extend_volume(volume_paths)
@@ -125,6 +187,9 @@ class FibreChannelConnector(base.BaseLinuxConnector):
         """
         LOG.debug("execute = %s", self._execute)
         device_info = {'type': 'block'}
+
+        connection_properties = self._add_targets_to_connection_properties(
+            connection_properties)
 
         hbas = self._linuxfc.get_fc_hbas_info()
         host_devices = self._get_possible_volume_paths(
@@ -194,9 +259,14 @@ class FibreChannelConnector(base.BaseLinuxConnector):
         LOG.debug("connect_volume returning %s", device_info)
         return device_info
 
-    def _get_host_devices(self, possible_devs, lun):
+    def _get_host_devices(self, possible_devs):
+        """Compute the device paths on the system with an id, wwn, and lun
+
+        :param possible_devs: list of (pci_id, wwn, lun) tuples
+        :return: list of device paths on the system based on the possible_devs
+        """
         host_devices = []
-        for pci_num, target_wwn in possible_devs:
+        for pci_num, target_wwn, lun in possible_devs:
             host_device = "/dev/disk/by-path/pci-%s-fc-%s-lun-%s" % (
                 pci_num,
                 target_wwn,
@@ -204,14 +274,13 @@ class FibreChannelConnector(base.BaseLinuxConnector):
             host_devices.append(host_device)
         return host_devices
 
-    def _get_possible_devices(self, hbas, wwnports):
+    def _get_possible_devices(self, hbas, targets):
         """Compute the possible fibre channel device options.
 
         :param hbas: available hba devices.
-        :param wwnports: possible wwn addresses. Can either be string
-        or list of strings.
+        :param targets: tuple of possible wwn addresses and lun combinations.
 
-        :returns: list of (pci_id, wwn) tuples
+        :returns: list of (pci_id, wwn, lun) tuples
 
         Given one or more wwn (mac addresses for fibre channel) ports
         do the matrix math to figure out a set of pci device, wwn
@@ -219,23 +288,13 @@ class FibreChannelConnector(base.BaseLinuxConnector):
         provides a search space for the device connection.
 
         """
-        # the wwn (think mac addresses for fiber channel devices) can
-        # either be a single value or a list. Normalize it to a list
-        # for further operations.
-        wwns = []
-        if isinstance(wwnports, list):
-            for wwn in wwnports:
-                wwns.append(str(wwn))
-        elif isinstance(wwnports, six.string_types):
-            wwns.append(str(wwnports))
-
         raw_devices = []
         for hba in hbas:
             pci_num = self._get_pci_num(hba)
             if pci_num is not None:
-                for wwn in wwns:
+                for wwn, lun in targets:
                     target_wwn = "0x%s" % wwn.lower()
-                    raw_devices.append((pci_num, target_wwn))
+                    raw_devices.append((pci_num, target_wwn, lun))
         return raw_devices
 
     @utils.trace
@@ -257,6 +316,10 @@ class FibreChannelConnector(base.BaseLinuxConnector):
 
         devices = []
         wwn = None
+
+        connection_properties = self._add_targets_to_connection_properties(
+            connection_properties)
+
         volume_paths = self.get_volume_paths(connection_properties)
         mpath_path = None
         for path in volume_paths:
