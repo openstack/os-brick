@@ -20,6 +20,7 @@ import os
 import re
 import tempfile
 
+from oslo_concurrency import processutils
 from oslo_log import log as logging
 import six
 
@@ -116,8 +117,16 @@ class RemoteFsClient(executor.Executor):
             mnt_cmd.extend(flags)
         mnt_cmd.extend([share, mount_path])
 
-        self._execute(*mnt_cmd, root_helper=self._root_helper,
-                      run_as_root=True, check_exit_code=0)
+        try:
+            self._execute(*mnt_cmd, root_helper=self._root_helper,
+                          run_as_root=True, check_exit_code=0)
+        except processutils.ProcessExecutionError as exc:
+            if 'already mounted' in exc.stderr:
+                LOG.info("Already mounted: %s", share)
+            else:
+                LOG.error("Failed to mount %(share)s, reason: %(reason)s",
+                          {'share': share, 'reason': exc.stderr})
+                raise
 
     def _mount_nfs(self, nfs_share, mount_path, flags=None):
         """Mount nfs share using present mount types."""
