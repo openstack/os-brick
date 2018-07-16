@@ -42,6 +42,8 @@ For any other information, refer to the developer documents:
   https://docs.openstack.org/os-brick/latest/
 OR refer to the parent project, Cinder:
   https://docs.openstack.org/cinder/latest/
+Release notes for the project can be found at:
+  https://docs.openstack.org/releasenotes/os-brick
 
 * License: Apache License, Version 2.0
 * Source: https://git.openstack.org/cgit/openstack/os-brick
