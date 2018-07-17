@@ -11,6 +11,8 @@
 #    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #    License for the specific language governing permissions and limitations
 #    under the License.
+
+import ddt
 import mock
 import os
 import six
@@ -23,6 +25,7 @@ from os_brick.initiator import linuxscsi
 from os_brick.tests.initiator import test_connector
 
 
+@ddt.ddt
 class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
 
     def setUp(self):
@@ -65,13 +68,13 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
                  'device_path': hbas[0]['ClassDevicePath']}]
         return info
 
-    def fibrechan_connection(self, volume, location, wwn):
+    def fibrechan_connection(self, volume, location, wwn, lun=1):
         return {'driver_volume_type': 'fibrechan',
                 'data': {
                     'volume_id': volume['id'],
                     'target_portal': location,
                     'target_wwn': wwn,
-                    'target_lun': 1,
+                    'target_lun': lun,
                 }}
 
     @mock.patch.object(linuxfc.LinuxFibreChannel, 'get_fc_hbas')
@@ -123,8 +126,10 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
         location = '10.0.2.15:3260'
         wwn = '1234567890123456'
         connection_info = self.fibrechan_connection(vol, location, wwn)
-        volume_paths = self.connector.get_volume_paths(
-            connection_info['data'])
+        conn_data = self.connector._add_targets_to_connection_properties(
+            connection_info['data']
+        )
+        volume_paths = self.connector.get_volume_paths(conn_data)
 
         expected = ['/dev/disk/by-path/pci-0000:05:00.2'
                     '-fc-0x1234567890123456-lun-1']
@@ -167,10 +172,15 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
         name = 'volume-00000001'
         vol = {'id': 1, 'name': name}
         # Should work for string, unicode, and list
-        wwns = ['1234567890123456', six.text_type('1234567890123456'),
-                ['1234567890123456', '1234567890123457']]
-        for wwn in wwns:
-            connection_info = self.fibrechan_connection(vol, location, wwn)
+        wwns_luns = [
+            ('1234567890123456', 1),
+            (six.text_type('1234567890123456'), 1),
+            (['1234567890123456', '1234567890123457'], 1),
+            (['1234567890123456', '1234567890123457'], 1),
+        ]
+        for wwn, lun in wwns_luns:
+            connection_info = self.fibrechan_connection(vol, location,
+                                                        wwn, lun)
             dev_info = self.connector.connect_volume(connection_info['data'])
             exp_wwn = wwn[0] if isinstance(wwn, list) else wwn
             dev_str = ('/dev/disk/by-path/pci-0000:05:00.2-fc-0x%s-lun-1' %
@@ -186,13 +196,13 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
 
         # Should not work for anything other than string, unicode, and list
         connection_info = self.fibrechan_connection(vol, location, 123)
-        self.assertRaises(exception.NoFibreChannelHostsFound,
+        self.assertRaises(exception.VolumePathsNotFound,
                           self.connector.connect_volume,
                           connection_info['data'])
 
         get_fc_hbas_mock.side_effect = [[]]
         get_fc_hbas_info_mock.side_effect = [[]]
-        self.assertRaises(exception.NoFibreChannelHostsFound,
+        self.assertRaises(exception.VolumePathsNotFound,
                           self.connector.connect_volume,
                           connection_info['data'])
 
@@ -450,3 +460,160 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
                           find_mp_dev_mock,
                           'rw',
                           True)
+
+    @ddt.data(
+        {
+            "target_info": {
+                "target_lun": 1,
+                "target_wwn": '1234567890123456',
+            },
+            "expected_targets": [
+                ('1234567890123456', 1)
+            ]
+        },
+        {
+            "target_info": {
+                "target_lun": 1,
+                "target_wwn": ['1234567890123456', '1234567890123457'],
+            },
+            "expected_targets": [
+                ('1234567890123456', 1),
+                ('1234567890123457', 1),
+            ]
+        },
+        {
+            "target_info": {
+                "target_luns": [1, 1],
+                "target_wwn": ['1234567890123456', '1234567890123457'],
+            },
+            "expected_targets": [
+                ('1234567890123456', 1),
+                ('1234567890123457', 1),
+            ]
+        },
+        {
+            "target_info": {
+                "target_luns": [1, 2],
+                "target_wwn": ['1234567890123456', '1234567890123457'],
+            },
+            "expected_targets": [
+                ('1234567890123456', 1),
+                ('1234567890123457', 2),
+            ]
+        },
+        {
+            "target_info": {
+                "target_luns": [1, 1],
+                "target_wwns": ['1234567890123456', '1234567890123457'],
+            },
+            "expected_targets": [
+                ('1234567890123456', 1),
+                ('1234567890123457', 1),
+            ]
+        },
+        {
+            "target_info": {
+                "target_lun": 7,
+                "target_luns": [1, 1],
+                "target_wwn": 'foo',
+                "target_wwns": ['1234567890123456', '1234567890123457'],
+            },
+            "expected_targets": [
+                ('1234567890123456', 1),
+                ('1234567890123457', 1),
+            ]
+        },
+        # Add the zone map in now
+        {
+            "target_info": {
+                "target_lun": 1,
+                "target_wwn": '1234567890123456',
+            },
+            "expected_targets": [
+                ('1234567890123456', 1)
+            ],
+            "itmap": {
+                '0004567890123456': ['1234567890123456']
+            },
+            "expected_map": {
+                '0004567890123456': [('1234567890123456', 1)]
+            }
+        },
+        {
+            "target_info": {
+                "target_lun": 1,
+                "target_wwn": ['1234567890123456', '1234567890123457'],
+            },
+            "expected_targets": [
+                ('1234567890123456', 1),
+                ('1234567890123457', 1),
+            ],
+            "itmap": {
+                '0004567890123456': ['1234567890123456',
+                                     '1234567890123457']
+            },
+            "expected_map": {
+                '0004567890123456': [('1234567890123456', 1),
+                                     ('1234567890123457', 1)]
+            }
+        },
+        {
+            "target_info": {
+                "target_luns": [1, 2],
+                "target_wwn": ['1234567890123456', '1234567890123457'],
+            },
+            "expected_targets": [
+                ('1234567890123456', 1),
+                ('1234567890123457', 2),
+            ],
+            "itmap": {
+                '0004567890123456': ['1234567890123456'],
+                '1004567890123456': ['1234567890123457'],
+            },
+            "expected_map": {
+                '0004567890123456': [('1234567890123456', 1)],
+                '1004567890123456': [('1234567890123457', 2)],
+            }
+        },
+        {
+            "target_info": {
+                "target_luns": [1, 2],
+                "target_wwn": ['1234567890123456', '1234567890123457'],
+            },
+            "expected_targets": [
+                ('1234567890123456', 1),
+                ('1234567890123457', 2),
+            ],
+            "itmap": {
+                '0004567890123456': ['1234567890123456',
+                                     '1234567890123457']
+            },
+            "expected_map": {
+                '0004567890123456': [('1234567890123456', 1),
+                                     ('1234567890123457', 2)]
+            }
+        },
+
+    )
+    @ddt.unpack
+    def test__add_targets_to_connection_properties(self, target_info,
+                                                   expected_targets,
+                                                   itmap=None,
+                                                   expected_map=None):
+        volume = {'id': 'fake_uuid'}
+        wwn = '1234567890123456'
+        conn = self.fibrechan_connection(volume, "10.0.2.15:3260", wwn)
+        conn['data'].update(target_info)
+
+        if itmap:
+            conn['data']['initiator_target_map'] = itmap
+
+        connection_info = self.connector._add_targets_to_connection_properties(
+            conn['data'])
+        self.assertIn('targets', connection_info)
+        self.assertEqual(expected_targets, connection_info['targets'])
+
+        if itmap:
+            self.assertIn('initiator_target_lun_map', connection_info)
+            self.assertEqual(expected_map,
+                             connection_info['initiator_target_lun_map'])
