@@ -60,14 +60,16 @@ class LinuxSCSI(executor.Executor):
         else:
             return None
 
-    def remove_scsi_device(self, device, force=False, exc=None):
+    def remove_scsi_device(self, device, force=False, exc=None,
+                           flush=True):
         """Removes a scsi device based upon /dev/sdX name."""
         path = "/sys/block/%s/device/delete" % device.replace("/dev/", "")
         if os.path.exists(path):
             exc = exception.ExceptionChainer() if exc is None else exc
-            # flush any outstanding IO first
-            with exc.context(force, 'Flushing %s failed', device):
-                self.flush_device_io(device)
+            if flush:
+                # flush any outstanding IO first
+                with exc.context(force, 'Flushing %s failed', device):
+                    self.flush_device_io(device)
 
             LOG.debug("Remove SCSI device %(device)s with %(path)s",
                       {'device': device, 'path': path})
@@ -193,14 +195,48 @@ class LinuxSCSI(executor.Executor):
                 return dm
         return None
 
+    @staticmethod
+    def get_dev_path(connection_properties, device_info):
+        """Determine what path was used by Nova/Cinder to access volume."""
+        if device_info and device_info.get('path'):
+            return device_info.get('path')
+
+        return connection_properties.get('device_path') or ''
+
+    @staticmethod
+    def requires_flush(path, path_used, was_multipath):
+        """Check if a device needs to be flushed when detaching.
+
+        A device representing a single path connection to a volume must only be
+        flushed if it has been used directly by Nova or Cinder to write data.
+
+        If the path has been used via a multipath DM or if the device was part
+        of a multipath but a different single path was used for I/O (instead of
+        the multipath) then we don't need to flush.
+        """
+        # No used path happens on failed attachs, when we don't care about
+        # individual flushes.
+        # When Nova used a multipath we don't need to do individual flushes.
+        if not path_used or was_multipath:
+            return False
+
+        # We need to flush the single path that was used.
+        # For encrypted volumes the symlink has been replaced, so realpath
+        # won't return device under /dev but under /dev/disk/...
+        path = os.path.realpath(path)
+        path_used = os.path.realpath(path_used)
+        return path_used == path or '/dev' != os.path.split(path_used)[0]
+
     def remove_connection(self, devices_names, is_multipath, force=False,
-                          exc=None):
+                          exc=None, path_used=None, was_multipath=False):
         """Remove LUNs and multipath associated with devices names.
 
         :param devices_names: Iterable with real device names ('sda', 'sdb')
         :param is_multipath: Whether this is a multipath connection or not
         :param force: Whether to forcefully disconnect even if flush fails.
         :param exc: ExceptionChainer where to add exceptions if forcing
+        :param path_used: What path was used by Nova/Cinder for I/O
+        :param was_multipath: If the path used for I/O was a multipath
         :returns: Multipath device map name if found and not flushed
         """
         if not devices_names:
@@ -220,7 +256,9 @@ class LinuxSCSI(executor.Executor):
                     multipath_name = None
 
         for device_name in devices_names:
-            self.remove_scsi_device('/dev/' + device_name, force, exc)
+            dev_path = '/dev/' + device_name
+            flush = self.requires_flush(dev_path, path_used, was_multipath)
+            self.remove_scsi_device(dev_path, force, exc, flush)
 
         # Wait until the symlinks are removed
         with exc.context(force, 'Some devices remain from %s', devices_names):
