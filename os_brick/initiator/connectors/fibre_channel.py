@@ -270,14 +270,21 @@ class FibreChannelConnector(base.BaseLinuxConnector):
             devices.append(device_info)
 
         LOG.debug("devices to remove = %s", devices)
-        self._remove_devices(connection_properties, devices)
+        self._remove_devices(connection_properties, devices, device_info)
 
-    def _remove_devices(self, connection_properties, devices):
+    def _remove_devices(self, connection_properties, devices, device_info):
         # There may have been more than 1 device mounted
         # by the kernel for this volume.  We have to remove
         # all of them
+        path_used = self._linuxscsi.get_dev_path(connection_properties,
+                                                 device_info)
+        was_multipath = '/pci-' not in path_used
         for device in devices:
-            self._linuxscsi.remove_scsi_device(device["device"])
+            device_path = device['device']
+            flush = self._linuxscsi.requires_flush(device_path,
+                                                   path_used,
+                                                   was_multipath)
+            self._linuxscsi.remove_scsi_device(device_path, flush=flush)
 
     def _get_pci_num(self, hba):
         # NOTE(walter-boring)
