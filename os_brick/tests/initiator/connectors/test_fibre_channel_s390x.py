@@ -68,7 +68,8 @@ class FibreChannelConnectorS390XTestCase(test_connector.ConnectorTestCase):
     def test_remove_devices(self, mock_deconfigure_scsi_device,
                             mock_get_fc_hbas_info, mock_get_possible_devices):
         connection_properties = {'target_wwn': 5, 'target_lun': 2}
-        self.connector._remove_devices(connection_properties, devices=None)
+        self.connector._remove_devices(connection_properties, devices=None,
+                                       device_info=None)
         mock_deconfigure_scsi_device.assert_called_with(3, 5,
                                                         "0x0002000000000000")
         mock_get_fc_hbas_info.assert_called_once_with()

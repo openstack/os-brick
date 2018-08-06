@@ -1,0 +1,10 @@
+---
+fixes:
+  - |
+    Under certain conditions detaching a multipath device may result in
+    failure when flushing one of the individual paths, but the disconnect
+    should have succeeded, because there were other paths available to flush
+    all the data.
+
+    The multipath disconnect mechanism is now more robust and will only fail
+    when disconnecting if multipath would lose data.
