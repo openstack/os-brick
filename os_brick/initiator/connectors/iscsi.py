@@ -836,10 +836,12 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         :type ignore_errors: bool
         """
         return self._cleanup_connection(connection_properties, force=force,
-                                        ignore_errors=ignore_errors)
+                                        ignore_errors=ignore_errors,
+                                        device_info=device_info)
 
     def _cleanup_connection(self, connection_properties, ips_iqns_luns=None,
-                            force=False, ignore_errors=False):
+                            force=False, ignore_errors=False,
+                            device_info=None):
         """Cleans up connection flushing and removing devices and multipath.
 
         :param connection_properties: The dictionary that describes all
@@ -855,6 +857,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         :param ignore_errors: When force is True, this will decide whether to
                               ignore errors or raise an exception once finished
                               the operation.  Default is False.
+        :param device_info: Attached device information.
         :type ignore_errors: bool
         """
         exc = exception.ExceptionChainer()
@@ -871,9 +874,14 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         remove_devices = set()
         for remove, __ in devices_map.values():
             remove_devices.update(remove)
-        multipath_name = self._linuxscsi.remove_connection(remove_devices,
-                                                           self.use_multipath,
-                                                           force, exc)
+
+        path_used = self._linuxscsi.get_dev_path(connection_properties,
+                                                 device_info)
+        was_multipath = (path_used.startswith('/dev/dm-') or
+                         'mpath' in path_used)
+        multipath_name = self._linuxscsi.remove_connection(
+            remove_devices, self.use_multipath, force, exc,
+            path_used, was_multipath)
 
         # Disconnect sessions and remove nodes that are left without devices
         disconnect = [conn for conn, (__, keep) in devices_map.items()

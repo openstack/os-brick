@@ -534,7 +534,8 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
         cleanup_mock.assert_called_once_with(
             mock.sentinel.con_props,
             force=mock.sentinel.Force,
-            ignore_errors=mock.sentinel.ignore_errors)
+            ignore_errors=mock.sentinel.ignore_errors,
+            device_info=mock.sentinel.dev_info)
 
     @ddt.data(True, False)
     @mock.patch.object(iscsi.ISCSIConnector, '_get_transport')
@@ -645,13 +646,21 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
             ['-m', 'discoverydb', '-o', 'show', '-P', 1])
         transport_mock.assert_called_once_with()
 
+    @ddt.data(('/dev/sda', False),
+              ('/dev/disk/by-id/scsi-WWID', False),
+              ('/dev/dm-11', True),
+              ('/dev/disk/by-id/dm-uuid-mpath-MPATH', True))
+    @ddt.unpack
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_dev_path')
     @mock.patch.object(iscsi.ISCSIConnector, '_disconnect_connection')
     @mock.patch.object(iscsi.ISCSIConnector, '_get_connection_devices')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'flush_multipath_device')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'remove_connection',
                        return_value=None)
-    def test_cleanup_connection(self, remove_mock, flush_mock, con_devs_mock,
-                                discon_mock):
+    def test_cleanup_connection(self, path_used, was_multipath, remove_mock,
+                                flush_mock, con_devs_mock, discon_mock,
+                                get_dev_path_mock):
+        get_dev_path_mock.return_value = path_used
         # Return an ordered dicts instead of normal dict for discon_mock.assert
         con_devs_mock.return_value = collections.OrderedDict((
             (('ip1:port1', 'tgt1'), ({'sda'}, set())),
@@ -662,12 +671,16 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
                                'use_multipath') as use_mp_mock:
             self.connector._cleanup_connection(
                 self.CON_PROPS, ips_iqns_luns=mock.sentinel.ips_iqns_luns,
-                force=False, ignore_errors=False)
+                force=False, ignore_errors=False,
+                device_info=mock.sentinel.device_info)
 
+        get_dev_path_mock.called_once_with(self.CON_PROPS,
+                                           mock.sentinel.device_info)
         con_devs_mock.assert_called_once_with(self.CON_PROPS,
                                               mock.sentinel.ips_iqns_luns)
         remove_mock.assert_called_once_with({'sda', 'sdb'}, use_mp_mock,
-                                            False, mock.ANY)
+                                            False, mock.ANY,
+                                            path_used, was_multipath)
         discon_mock.assert_called_once_with(
             self.CON_PROPS,
             [('ip1:port1', 'tgt1'), ('ip3:port3', 'tgt3')],
@@ -703,7 +716,8 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
         con_devs_mock.assert_called_once_with(self.CON_PROPS,
                                               mock.sentinel.ips_iqns_luns)
         remove_mock.assert_called_once_with({'sda', 'sdb'}, use_mp_mock,
-                                            mock.sentinel.force, mock.ANY)
+                                            mock.sentinel.force, mock.ANY,
+                                            '', False)
         discon_mock.assert_called_once_with(
             self.CON_PROPS,
             [('ip1:port1', 'tgt1'), ('ip3:port3', 'tgt3')],
