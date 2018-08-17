@@ -42,6 +42,7 @@ class InitiatorConnector(executor.Executor):
         """The driver is used to find used LUNs."""
         self.driver = driver
 
+    @staticmethod
     @abc.abstractmethod
     def get_connector_properties(root_helper, *args, **kwargs):
         """The generic connector properties."""
