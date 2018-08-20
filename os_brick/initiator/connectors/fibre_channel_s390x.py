@@ -87,7 +87,7 @@ class FibreChannelConnectorS390X(fibre_channel.FibreChannelConnector):
         ]
         return host_device
 
-    def _remove_devices(self, connection_properties, devices):
+    def _remove_devices(self, connection_properties, devices, device_info):
         hbas = self._linuxfc.get_fc_hbas_info()
         ports = connection_properties['target_wwn']
         possible_devs = self._get_possible_devices(hbas, ports)

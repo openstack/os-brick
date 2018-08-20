@@ -33,6 +33,7 @@ class LinuxSCSITestCase(base.TestCase):
     def setUp(self):
         super(LinuxSCSITestCase, self).setUp()
         self.cmds = []
+        self.realpath = os.path.realpath
         self.mock_object(os.path, 'realpath', return_value='/dev/sdc')
         self.mock_object(os, 'stat', returns=os.stat(__file__))
         self.linuxscsi = linuxscsi.LinuxSCSI(None, execute=self.fake_execute)
@@ -90,6 +91,16 @@ class LinuxSCSITestCase(base.TestCase):
         self.assertTrue(exc)
         flush_mock.assert_called_once_with(device)
         echo_mock.assert_called_once_with('/sys/block/sdc/device/delete', '1')
+
+    @mock.patch.object(os.path, 'exists', return_value=False)
+    def test_remove_scsi_device_no_flush(self, exists_mock):
+        self.linuxscsi.remove_scsi_device("/dev/sdc")
+        expected_commands = []
+        self.assertEqual(expected_commands, self.cmds)
+        exists_mock.return_value = True
+        self.linuxscsi.remove_scsi_device("/dev/sdc", flush=False)
+        expected_commands = [('tee -a /sys/block/sdc/device/delete')]
+        self.assertEqual(expected_commands, self.cmds)
 
     @mock.patch('time.sleep')
     @mock.patch('os.path.exists', return_value=True)
@@ -243,8 +254,8 @@ class LinuxSCSITestCase(base.TestCase):
         self.assertEqual(get_dm_name_mock.return_value if do_raise else None,
                          mp_name)
         remove_mock.assert_has_calls([
-            mock.call('/dev/sda', mock.sentinel.Force, exc),
-            mock.call('/dev/sdb', mock.sentinel.Force, exc)])
+            mock.call('/dev/sda', mock.sentinel.Force, exc, False),
+            mock.call('/dev/sdb', mock.sentinel.Force, exc, False)])
         wait_mock.assert_called_once_with(devices_names)
         self.assertEqual(do_raise, bool(exc))
         remove_link_mock.assert_called_once_with(devices_names)
@@ -285,8 +296,28 @@ class LinuxSCSITestCase(base.TestCase):
                                          force=mock.sentinel.Force,
                                          exc=exc)
         remove_mock.assert_has_calls(
-            [mock.call('/dev/sda', mock.sentinel.Force, exc),
-             mock.call('/dev/sdb', mock.sentinel.Force, exc)])
+            [mock.call('/dev/sda', mock.sentinel.Force, exc, False),
+             mock.call('/dev/sdb', mock.sentinel.Force, exc, False)])
+        wait_mock.assert_called_once_with(devices_names)
+        remove_link_mock.assert_called_once_with(devices_names)
+
+    @mock.patch.object(linuxscsi.LinuxSCSI, '_remove_scsi_symlinks')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'wait_for_volumes_removal')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'remove_scsi_device')
+    def test_remove_connection_singlepath_used(self, remove_mock, wait_mock,
+                                               remove_link_mock):
+        devices_names = ('sda', 'sdb')
+        exc = exception.ExceptionChainer()
+
+        # realpath was mocked on test setup
+        with mock.patch('os.path.realpath', side_effect=self.realpath):
+            self.linuxscsi.remove_connection(devices_names, is_multipath=True,
+                                             force=mock.sentinel.Force,
+                                             exc=exc, path_used='/dev/sdb',
+                                             was_multipath=False)
+        remove_mock.assert_has_calls(
+            [mock.call('/dev/sda', mock.sentinel.Force, exc, False),
+             mock.call('/dev/sdb', mock.sentinel.Force, exc, True)])
         wait_mock.assert_called_once_with(devices_names)
         remove_link_mock.assert_called_once_with(devices_names)
 
@@ -991,3 +1022,50 @@ loop0                                     0"""
     def test_multipath_add_path(self):
         self.linuxscsi.multipath_add_path('/dev/sda')
         self.assertEqual(['multipathd add path /dev/sda'], self.cmds)
+
+    @ddt.data({'con_props': {}, 'dev_info': {'path': mock.sentinel.path}},
+              {'con_props': None, 'dev_info': {'path': mock.sentinel.path}},
+              {'con_props': {'device_path': mock.sentinel.device_path},
+               'dev_info': {'path': mock.sentinel.path}})
+    @ddt.unpack
+    def test_get_dev_path_device_info(self, con_props, dev_info):
+        self.assertEqual(mock.sentinel.path,
+                         self.linuxscsi.get_dev_path(con_props, dev_info))
+
+    @ddt.data({'con_props': {'device_path': mock.sentinel.device_path},
+               'dev_info': {'path': None}},
+              {'con_props': {'device_path': mock.sentinel.device_path},
+               'dev_info': {'path': ''}},
+              {'con_props': {'device_path': mock.sentinel.device_path},
+               'dev_info': {}},
+              {'con_props': {'device_path': mock.sentinel.device_path},
+               'dev_info': None})
+    @ddt.unpack
+    def test_get_dev_path_conn_props(self, con_props, dev_info):
+        self.assertEqual(mock.sentinel.device_path,
+                         self.linuxscsi.get_dev_path(con_props, dev_info))
+
+    @ddt.data({'con_props': {'device_path': ''}, 'dev_info': {'path': None}},
+              {'con_props': {'device_path': None}, 'dev_info': {'path': ''}},
+              {'con_props': {}, 'dev_info': {}},
+              {'con_props': {}, 'dev_info': None})
+    @ddt.unpack
+    def test_get_dev_path_no_path(self, con_props, dev_info):
+        self.assertEqual('', self.linuxscsi.get_dev_path(con_props, dev_info))
+
+    @ddt.data(('/dev/sda', '/dev/sda', True, False, None),
+              ('/dev/sda', '', True, False, None),
+              ('/dev/link_sda', '/dev/link_sdb', False, False, ('/dev/sda',
+                                                                '/dev/sdb')),
+              ('/dev/link_sda', '/dev/link2_sda', False, True, ('/dev/sda',
+                                                                '/dev/sda')))
+    @ddt.unpack
+    def test_requires_flush(self, path, path_used, was_multipath, expected,
+                            real_paths):
+        with mock.patch('os.path.realpath', side_effect=real_paths) as mocked:
+            self.assertEqual(
+                expected,
+                self.linuxscsi.requires_flush(path, path_used, was_multipath))
+            if real_paths:
+                mocked.assert_has_calls([mock.call(path),
+                                         mock.call(path_used)])
