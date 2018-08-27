@@ -220,10 +220,10 @@ class LinuxSCSITestCase(base.TestCase):
     @mock.patch.object(time, 'sleep')
     def test_wait_for_path_not_found(self, exists_mock, sleep_mock):
         path = "/dev/disk/by-id/dm-uuid-mpath-%s" % '1234567890'
-        self.assertRaisesRegexp(exception.VolumeDeviceNotFound,
-                                r'Volume device not found at %s' % path,
-                                self.linuxscsi.wait_for_path,
-                                path)
+        self.assertRaisesRegex(exception.VolumeDeviceNotFound,
+                               r'Volume device not found at %s' % path,
+                               self.linuxscsi.wait_for_path,
+                               path)
 
     @ddt.data({'do_raise': False, 'force': False},
               {'do_raise': True, 'force': True})
