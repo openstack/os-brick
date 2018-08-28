@@ -1327,12 +1327,13 @@ Setting up iSCSI targets: unused
         find_dm_mock.assert_not_called()
         self.assertEqual(12, connect_mock.call_count)
 
-    @mock.patch('time.sleep', mock.Mock())
+    @mock.patch('time.sleep')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'scan_iscsi')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'device_name_by_hctl',
                        return_value='sda')
     @mock.patch.object(iscsi.ISCSIConnector, '_connect_to_iscsi_portal')
-    def test_connect_vol(self, connect_mock, dev_name_mock, scan_mock):
+    def test_connect_vol(self, connect_mock, dev_name_mock, scan_mock,
+                         sleep_mock):
         lscsi = self.connector._linuxscsi
         data = self._get_connect_vol_data()
         hctl = [mock.sentinel.host, mock.sentinel.channel,
@@ -1355,8 +1356,72 @@ Setting up iSCSI targets: unused
                                     mock.call(mock.sentinel.session,
                                               self.CON_PROPS['target_lun'])])
 
-        scan_mock.assert_called_once_with(*hctl)
+        scan_mock.assert_not_called()
         dev_name_mock.assert_called_once_with(mock.sentinel.session, hctl)
+        sleep_mock.assert_called_once_with(1)
+
+    @mock.patch('time.sleep')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'scan_iscsi')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'device_name_by_hctl',
+                       side_effect=(None, None, None, None, 'sda'))
+    @mock.patch.object(iscsi.ISCSIConnector, '_connect_to_iscsi_portal')
+    def test_connect_vol_rescan(self, connect_mock, dev_name_mock, scan_mock,
+                                sleep_mock):
+        lscsi = self.connector._linuxscsi
+        data = self._get_connect_vol_data()
+        hctl = [mock.sentinel.host, mock.sentinel.channel,
+                mock.sentinel.target, mock.sentinel.lun]
+
+        connect_mock.return_value = (mock.sentinel.session, False)
+
+        with mock.patch.object(lscsi, 'get_hctl',
+                               return_value=hctl) as hctl_mock:
+            self.connector._connect_vol(3, self.CON_PROPS, data)
+
+        expected = self._get_connect_vol_data()
+        expected.update(num_logins=1, stopped_threads=1,
+                        found_devices=['sda'], just_added_devices=['sda'])
+        self.assertDictEqual(expected, data)
+
+        connect_mock.assert_called_once_with(self.CON_PROPS)
+        hctl_mock.assert_called_once_with(mock.sentinel.session,
+                                          self.CON_PROPS['target_lun'])
+
+        scan_mock.assert_called_once_with(*hctl)
+        self.assertEqual(5, dev_name_mock.call_count)
+        self.assertEqual(4, sleep_mock.call_count)
+
+    @mock.patch('time.sleep')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'scan_iscsi')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'device_name_by_hctl',
+                       side_effect=(None, None, None, None, 'sda'))
+    @mock.patch.object(iscsi.ISCSIConnector, '_connect_to_iscsi_portal')
+    def test_connect_vol_manual(self, connect_mock, dev_name_mock, scan_mock,
+                                sleep_mock):
+        lscsi = self.connector._linuxscsi
+        data = self._get_connect_vol_data()
+        hctl = [mock.sentinel.host, mock.sentinel.channel,
+                mock.sentinel.target, mock.sentinel.lun]
+
+        # Simulate manual scan
+        connect_mock.return_value = (mock.sentinel.session, True)
+
+        with mock.patch.object(lscsi, 'get_hctl',
+                               return_value=hctl) as hctl_mock:
+            self.connector._connect_vol(3, self.CON_PROPS, data)
+
+        expected = self._get_connect_vol_data()
+        expected.update(num_logins=1, stopped_threads=1,
+                        found_devices=['sda'], just_added_devices=['sda'])
+        self.assertDictEqual(expected, data)
+
+        connect_mock.assert_called_once_with(self.CON_PROPS)
+        hctl_mock.assert_called_once_with(mock.sentinel.session,
+                                          self.CON_PROPS['target_lun'])
+
+        self.assertEqual(2, scan_mock.call_count)
+        self.assertEqual(5, dev_name_mock.call_count)
+        self.assertEqual(4, sleep_mock.call_count)
 
     @mock.patch.object(iscsi.ISCSIConnector, '_connect_to_iscsi_portal',
                        return_value=(None, False))
