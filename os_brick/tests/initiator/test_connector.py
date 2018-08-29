@@ -89,7 +89,7 @@ class ConnectorUtilsTestCase(test_base.TestCase):
     def test_brick_get_connector_properties(self):
         self._test_brick_get_connector_properties(False, False, False)
 
-    @mock.patch.object(priv_rootwrap, 'execute')
+    @mock.patch.object(priv_rootwrap, 'execute', return_value=('', ''))
     def test_brick_get_connector_properties_multipath(self, mock_execute):
         self._test_brick_get_connector_properties(True, True, True)
         mock_execute.assert_called_once_with('multipathd', 'show', 'status',
@@ -149,7 +149,7 @@ class ConnectorTestCase(test_base.TestCase):
 
     def test_get_connector_properties(self):
         with mock.patch.object(priv_rootwrap, 'execute') as mock_exec:
-            mock_exec.return_value = True
+            mock_exec.return_value = ('', '')
             multipath = True
             enforce_multipath = True
             props = base.BaseLinuxConnector.get_connector_properties(
