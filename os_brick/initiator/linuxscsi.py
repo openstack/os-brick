@@ -157,8 +157,13 @@ class LinuxSCSI(executor.Executor):
         try:
             if execute is None:
                 execute = priv_rootwrap.execute
-            execute('multipathd', 'show', 'status',
-                    run_as_root=True, root_helper=root_helper)
+            cmd = ('multipathd', 'show', 'status')
+            out, _err = execute(*cmd, run_as_root=True,
+                                root_helper=root_helper)
+            # There was a bug in multipathd where it didn't return an error
+            # code and just printed the error message in stdout.
+            if out and out.startswith('error receiving packet'):
+                raise putils.ProcessExecutionError('', out, 1, cmd, None)
         except putils.ProcessExecutionError as err:
             LOG.error('multipathd is not running: exit code %(err)s',
                       {'err': err.exit_code})

@@ -19,6 +19,7 @@ import time
 
 import ddt
 import mock
+from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
 
 from os_brick import exception
@@ -829,12 +830,20 @@ loop0                                     0"""
         expected = 13
         self.assertEqual(expected, result)
 
-    @mock.patch('os_brick.privileged.rootwrap')
-    def test_is_multipath_running_default_executor(self, mock_rootwrap):
-        self.assertTrue(
-            linuxscsi.LinuxSCSI.is_multipath_running(
-                False, None, mock_rootwrap.execute))
-        mock_rootwrap.execute.assert_called_once_with(
+    @mock.patch('os_brick.privileged.rootwrap.execute', return_value=('', ''))
+    def test_is_multipath_running_default_executor(self, mock_exec):
+        res = linuxscsi.LinuxSCSI.is_multipath_running(False, None, mock_exec)
+        self.assertTrue(res)
+        mock_exec.assert_called_once_with(
+            'multipathd', 'show', 'status', run_as_root=True, root_helper=None)
+
+    @mock.patch('os_brick.privileged.rootwrap.execute')
+    def test_is_multipath_running_failure_exit_code_0(self, mock_exec):
+        mock_exec.return_value = ('error receiving packet', '')
+        self.assertRaises(putils.ProcessExecutionError,
+                          linuxscsi.LinuxSCSI.is_multipath_running,
+                          True, None, mock_exec)
+        mock_exec.assert_called_once_with(
             'multipathd', 'show', 'status', run_as_root=True, root_helper=None)
 
     @mock.patch('glob.glob')
