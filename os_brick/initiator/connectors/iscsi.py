@@ -618,8 +618,16 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         device = hctl = None
         portal = props['target_portal']
         session, manual_scan = self._connect_to_iscsi_portal(props)
-        do_scans = rescans > 0
-        retry = 1
+        do_scans = rescans > 0 or manual_scan
+        # Scan is sent on connect by iscsid, but we must do it manually on
+        # manual scan mode.  This scan cannot count towards total rescans.
+        if manual_scan:
+            num_rescans = -1
+            seconds_next_scan = 0
+        else:
+            num_rescans = 0
+            seconds_next_scan = 4
+
         if session:
             data['num_logins'] += 1
             LOG.debug('Connected to %s', portal)
@@ -628,11 +636,12 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                     if not hctl:
                         hctl = self._linuxscsi.get_hctl(session,
                                                         props['target_lun'])
-                    # Scan is sent on connect by iscsid, so skip first rescan
-                    # but on manual scan mode we have to do it ourselves.
                     if hctl:
-                        if retry > 1 or manual_scan:
+                        if seconds_next_scan <= 0:
+                            num_rescans += 1
                             self._linuxscsi.scan_iscsi(*hctl)
+                            # 4 seconds on 1st rescan, 9s on 2nd, 16s on 3rd
+                            seconds_next_scan = (num_rescans + 2) ** 2
 
                         device = self._linuxscsi.device_name_by_hctl(session,
                                                                      hctl)
@@ -642,11 +651,12 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                 except Exception:
                     LOG.exception('Exception scanning %s', portal)
                     pass
-                retry += 1
-                do_scans = (retry <= rescans and
+                do_scans = (num_rescans <= rescans and
                             not (device or data['stop_connecting']))
                 if do_scans:
-                    time.sleep(retry ** 2)
+                    time.sleep(1)
+                    seconds_next_scan -= 1
+
             if device:
                 LOG.debug('Connected to %s using %s', device,
                           strutils.mask_password(props))
