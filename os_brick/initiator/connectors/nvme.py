@@ -18,12 +18,12 @@ from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
 
 from os_brick import exception
-from os_brick import initiator
+from os_brick.i18n import _
 from os_brick.initiator.connectors import base
 from os_brick import utils
 
 
-DEVICE_SCAN_ATTEMPTS_DEFAULT = 3
+DEVICE_SCAN_ATTEMPTS_DEFAULT = 5
 
 LOG = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ class NVMeConnector(base.BaseLinuxConnector):
     """Connector class to attach/detach NVMe over fabric volumes."""
 
     def __init__(self, root_helper, driver=None,
-                 device_scan_attempts=initiator.DEVICE_SCAN_ATTEMPTS_DEFAULT,
+                 device_scan_attempts=DEVICE_SCAN_ATTEMPTS_DEFAULT,
                  *args, **kwargs):
         super(NVMeConnector, self).__init__(
             root_helper,
@@ -60,21 +60,28 @@ class NVMeConnector(base.BaseLinuxConnector):
         nvme_devices = []
         pattern = r'/dev/nvme[0-9]n[0-9]'
         cmd = ['nvme', 'list']
-        try:
-            (out, err) = self._execute(*cmd, root_helper=self._root_helper,
-                                       run_as_root=True)
-            for line in out.split('\n'):
-                result = re.match(pattern, line)
-                if result:
-                    nvme_devices.append(result.group(0))
-            LOG.debug("_get_nvme_devices returned %(nvme_devices)s",
-                      {'nvme_devices': nvme_devices})
-            return nvme_devices
+        for retry in range(1, self.device_scan_attempts + 1):
+            try:
+                (out, err) = self._execute(*cmd,
+                                           root_helper=self._root_helper,
+                                           run_as_root=True)
+                for line in out.split('\n'):
+                    result = re.match(pattern, line)
+                    if result:
+                        nvme_devices.append(result.group(0))
+                LOG.debug("_get_nvme_devices returned %(nvme_devices)s",
+                          {'nvme_devices': nvme_devices})
+                return nvme_devices
 
-        except putils.ProcessExecutionError:
-            LOG.error(
-                "Failed to list available NVMe connected controllers.")
-            raise
+            except putils.ProcessExecutionError:
+                LOG.warning(
+                    "Failed to list available NVMe connected controllers, "
+                    "retrying.")
+                time.sleep(retry ** 2)
+        else:
+            msg = _("Failed to retrieve available connected NVMe controllers "
+                    "when running nvme list.")
+            raise exception.CommandExecutionFailed(message=msg)
 
     @utils.trace
     @synchronized('connect_volume')
@@ -113,18 +120,12 @@ class NVMeConnector(base.BaseLinuxConnector):
                 "%(conn_nqn)s", {'conn_nqn': conn_nqn})
             raise
 
-        for retry in range(1, self.device_scan_attempts + 1):
-            all_nvme_devices = self._get_nvme_devices()
-            path = set(all_nvme_devices) - set(current_nvme_devices)
-            if path:
-                break
-            time.sleep(retry ** 2)
-        else:
-            LOG.error("Failed to retrieve available connected NVMe "
-                      "controllers when running nvme list")
+        all_nvme_devices = self._get_nvme_devices()
+        path = set(all_nvme_devices) - set(current_nvme_devices)
+        path = list(path)
+        if not path:
             raise exception.TargetPortalNotFound(target_portal)
 
-        path = list(path)
         LOG.debug("all_nvme_devices are %(all_nvme_devices)s",
                   {'all_nvme_devices': all_nvme_devices})
         device_info['path'] = path[0]
