@@ -175,7 +175,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         :param connection_properties: The dictionary that describes all
                                       of the target volume attributes.
         :type connection_properties: dict
-        :param discover: Wheter doing an iSCSI discovery is acceptable.
+        :param discover: Whether doing an iSCSI discovery is acceptable.
         :type discover: bool
         :returns: list of tuples of (ip, iqn, lun)
         """
