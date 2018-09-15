@@ -1,0 +1,28 @@
+- project:
+    templates:
+      - check-requirements
+      - publish-openstack-sphinx-docs
+      - openstack-python-jobs
+      - openstack-python35-jobs
+      - lib-forward-testing
+      - release-notes-jobs
+    check:
+      jobs:
+        - legacy-tempest-dsvm-full-ceph-plugin-src-os-brick:
+            voting: false
+            irrelevant-files:
+              - ^(test-|)requirements.txt$
+              - ^setup.cfg$
+        - legacy-tempest-dsvm-full-lio-src-os-brick:
+            irrelevant-files:
+              - ^(test-|)requirements.txt$
+              - ^setup.cfg$
+    gate:
+      jobs:
+        - legacy-tempest-dsvm-full-lio-src-os-brick:
+            irrelevant-files:
+              - ^(test-|)requirements.txt$
+              - ^setup.cfg$
+    experimental:
+      jobs:
+        - openstack-tox-pylint
