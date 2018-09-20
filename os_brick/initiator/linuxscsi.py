@@ -615,7 +615,7 @@ class LinuxSCSI(executor.Executor):
         """Find the device name given a session and the hctl.
 
         :param session: A string with the session number
-        "param hctl: An iterable with the host, channel, target, and lun as
+        :param hctl: An iterable with the host, channel, target, and lun as
                      passed to scan.  ie: ('5', '-', '-', '0')
         """
         if '-' in hctl:

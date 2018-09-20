@@ -109,7 +109,8 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         """Get iSCSI session information as a list of tuples.
 
         Uses iscsiadm -m session and from a command output like
-            tcp: [1] 192.168.121.250:3260,1 iqn.2010-10.org.openstack:volume-
+            tcp: [1] 192.168.121.250:3260,1 iqn.2010-10.org.openstack:
+            volume- (non-flash)
 
         This method will drop the node type and return a list like this:
             [('tcp:', '1', '192.168.121.250:3260', '1',
@@ -135,7 +136,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
     def _get_iscsi_nodes(self):
         """Get iSCSI node information (portal, iqn) as a list of tuples.
 
-        Uses iscsi_adm -m node and from a command output like
+        Uses iscsiadm -m node and from a command output like
             192.168.121.250:3260,1 iqn.2010-10.org.openstack:volume
 
         This method will drop the tpgt and return a list like this:
