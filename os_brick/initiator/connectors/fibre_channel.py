@@ -192,13 +192,12 @@ class FibreChannelConnector(base.BaseLinuxConnector):
             connection_properties)
 
         hbas = self._linuxfc.get_fc_hbas_info()
+        if not hbas:
+            LOG.warning("We are unable to locate any Fibre Channel devices.")
+            raise exception.NoFibreChannelHostsFound()
+
         host_devices = self._get_possible_volume_paths(
             connection_properties, hbas)
-
-        if len(host_devices) == 0:
-            # this is empty because we don't have any FC HBAs
-            LOG.warning("We are unable to locate any Fibre Channel devices")
-            raise exception.NoFibreChannelHostsFound()
 
         # The /dev/disk/by-path/... node is not always present immediately
         # We only need to find the first device.  Once we see the first device
@@ -232,10 +231,9 @@ class FibreChannelConnector(base.BaseLinuxConnector):
             _wait_for_device_discovery, host_devices)
         timer.start(interval=2).wait()
 
-        if self.host_device is not None and self.device_name is not None:
-            LOG.debug("Found Fibre Channel volume %(name)s "
-                      "(after %(tries)s rescans)",
-                      {'name': self.device_name, 'tries': self.tries})
+        LOG.debug("Found Fibre Channel volume %(name)s "
+                  "(after %(tries)s rescans.)",
+                  {'name': self.device_name, 'tries': self.tries})
 
         # find out the WWN of the device
         device_wwn = self._linuxscsi.get_scsi_wwn(self.host_device)
