@@ -117,9 +117,8 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         """
         out, err = self._run_iscsi_session()
         if err:
-            LOG.warning("Couldn't find iscsi sessions because "
-                        "iscsiadm err: %s", err)
-            return []
+            LOG.warning("iscsiadm stderr output when getting sessions: %s",
+                        err)
 
         # Parse and clean the output from iscsiadm, which is in the form of:
         # transport_name: [session_id] ip_address:port,tpgt iqn node_type
@@ -1080,7 +1079,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
 
     def _run_iscsi_session(self):
         (out, err) = self._run_iscsiadm_bare(('-m', 'session'),
-                                             check_exit_code=[0, 1, 21, 255])
+                                             check_exit_code=[0, 21, 255])
         LOG.debug("iscsi session list stdout=%(out)s stderr=%(err)s",
                   {'out': out, 'err': err})
         return (out, err)
