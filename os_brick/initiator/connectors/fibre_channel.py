@@ -185,7 +185,6 @@ class FibreChannelConnector(base.BaseLinuxConnector):
         target_wwn - World Wide Name
         target_lun - LUN id of the volume
         """
-        LOG.debug("execute = %s", self._execute)
         device_info = {'type': 'block'}
 
         connection_properties = self._add_targets_to_connection_properties(
@@ -254,7 +253,6 @@ class FibreChannelConnector(base.BaseLinuxConnector):
             device_path = self.host_device
 
         device_info['path'] = device_path
-        LOG.debug("connect_volume returning %s", device_info)
         return device_info
 
     def _get_host_devices(self, possible_devs):
