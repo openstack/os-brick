@@ -19,10 +19,11 @@
 import glob
 import os
 import re
-import six
+import time
 
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
+import six
 
 from os_brick import exception
 from os_brick import executor
@@ -76,18 +77,28 @@ class LinuxSCSI(executor.Executor):
             with exc.context(force, 'Removing %s failed', device):
                 self.echo_scsi_command(path, "1")
 
-    @utils.retry(exceptions=exception.VolumePathNotRemoved)
     def wait_for_volumes_removal(self, volumes_names):
         """Wait for device paths to be removed from the system."""
         str_names = ', '.join(volumes_names)
         LOG.debug('Checking to see if SCSI volumes %s have been removed.',
                   str_names)
-        exist = [volume_name for volume_name in volumes_names
-                 if os.path.exists('/dev/' + volume_name)]
-        if exist:
-            LOG.debug('%s still exist.', ', '.join(exist))
-            raise exception.VolumePathNotRemoved(volume_path=exist)
-        LOG.debug("SCSI volumes %s have been removed.", str_names)
+        exist = ['/dev/' + volume_name for volume_name in volumes_names]
+
+        # It can take up to 30 seconds to remove a SCSI device if the path
+        # failed right before we start detaching, which is unlikely, but we
+        # still shouldn't fail in that case.
+        for i in range(61):
+            exist = [path for path in exist if os.path.exists(path)]
+            if not exist:
+                LOG.debug("SCSI volumes %s have been removed.", str_names)
+                return
+            # Don't sleep on the last try since we are quitting
+            if i < 60:
+                time.sleep(0.5)
+                # Log every 5 seconds
+                if i % 10 == 0:
+                    LOG.debug('%s still exist.', ', '.join(exist))
+        raise exception.VolumePathNotRemoved(volume_path=exist)
 
     def get_device_info(self, device):
         (out, _err) = self._execute('sg_scan', device, run_as_root=True,
