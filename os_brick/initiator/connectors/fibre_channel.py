@@ -102,10 +102,10 @@ class FibreChannelConnector(base.BaseLinuxConnector):
             for wwn in wwns:
                 targets.append((wwn, luns[0]))
         else:
-            # Something is wrong, this shouldn't happen
+            # Something is wrong, this shouldn't happen.
             msg = _("Unable to find potential volume paths for FC device "
-                    "with lun: %(lun)s and wwn: %(wwn)s") % {
-                        "lun": target_lun, "wwn": target_wwn}
+                    "with luns: %(luns)s and wwns: %(wwns)s.") % {
+                        "luns": luns, "wwns": wwns}
             LOG.error(msg)
             raise exception.VolumePathsNotFound(msg)
 
