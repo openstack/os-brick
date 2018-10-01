@@ -106,7 +106,7 @@ class LinuxSCSITestCase(base.TestCase):
     @mock.patch('time.sleep')
     @mock.patch('os.path.exists', return_value=True)
     def test_wait_for_volumes_removal_failure(self, exists_mock, sleep_mock):
-        retries = 3
+        retries = 61
         names = ('sda', 'sdb')
         self.assertRaises(exception.VolumePathNotRemoved,
                           self.linuxscsi.wait_for_volumes_removal, names)
