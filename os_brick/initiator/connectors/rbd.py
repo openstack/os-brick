@@ -103,12 +103,12 @@ class RBDConnector(base.BaseLinuxConnector):
         try:
             user = connection_properties['auth_username']
             pool, volume = connection_properties['name'].split('/')
-            cluster_name = connection_properties.get('cluster_name')
-            monitor_ips = connection_properties.get('hosts')
-            monitor_ports = connection_properties.get('ports')
+            cluster_name = connection_properties['cluster_name']
+            monitor_ips = connection_properties['hosts']
+            monitor_ports = connection_properties['ports']
             keyring = connection_properties.get('keyring')
-        except IndexError:
-            msg = _("Connect volume failed, malformed connection properties")
+        except (KeyError, ValueError):
+            msg = _("Connect volume failed, malformed connection properties.")
             raise exception.BrickException(msg=msg)
 
         conf = self._create_ceph_conf(monitor_ips, monitor_ports,
