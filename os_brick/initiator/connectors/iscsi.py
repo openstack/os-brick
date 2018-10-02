@@ -1050,7 +1050,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
             for s in sessions:
                 # Found our session, return session_id
                 if (s[0] in self.VALID_SESSIONS_PREFIX and
-                        portal == s[2] and s[4] == target_iqn):
+                        portal.lower() == s[2].lower() and s[4] == target_iqn):
                     return s[1], manual_scan
 
             try:
