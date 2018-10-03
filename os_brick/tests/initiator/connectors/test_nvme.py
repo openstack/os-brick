@@ -111,13 +111,15 @@ class NVMeConnectorTestCase(test_connector.ConnectorTestCase):
                           self.connector.connect_volume,
                           connection_properties)
 
+    @mock.patch.object(nvme.NVMeConnector, '_get_nvme_devices')
     @mock.patch.object(nvme.NVMeConnector, '_execute')
-    def test_disconnect_volume(self, mock_execute):
+    def test_disconnect_volume(self, mock_devices, mock_execute):
         connection_properties = {'target_portal': 'portal',
                                  'target_port': 1,
                                  'nqn': 'nqn.volume_123',
-                                 'device_path': '',
+                                 'device_path': '/dev/nvme0n1',
                                  'transport_type': 'rdma'}
+        mock_devices.return_value = '/dev/nvme0n1'
         self.connector.disconnect_volume(connection_properties, None)
 
         mock_execute.asert_called_once_with(
@@ -126,13 +128,15 @@ class NVMeConnectorTestCase(test_connector.ConnectorTestCase):
             root_helper=None,
             run_as_root=True)
 
+    @mock.patch.object(nvme.NVMeConnector, '_get_nvme_devices')
     @mock.patch.object(nvme.NVMeConnector, '_execute')
-    def test_disconnect_volume_raise(self, mock_execute):
+    def test_disconnect_volume_raise(self, mock_devices, mock_execute):
         mock_execute.side_effect = putils.ProcessExecutionError
+        mock_devices.return_value = '/dev/nvme0n1'
         connection_properties = {'target_portal': 'portal',
                                  'target_port': 1,
                                  'nqn': 'nqn.volume_123',
-                                 'device_path': '',
+                                 'device_path': '/dev/nvme0n1',
                                  'transport_type': 'rdma'}
 
         self.assertRaises(putils.ProcessExecutionError,
