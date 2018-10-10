@@ -123,10 +123,15 @@ class RemoteFsClient(executor.Executor):
         except processutils.ProcessExecutionError as exc:
             if 'already mounted' in exc.stderr:
                 LOG.info("Already mounted: %s", share)
-            else:
-                LOG.error("Failed to mount %(share)s, reason: %(reason)s",
-                          {'share': share, 'reason': exc.stderr})
-                raise
+
+                # The error message can say "busy or already mounted" when the
+                # share didn't actually mount, so look for it.
+                if share in self._read_mounts():
+                    return
+
+            LOG.error("Failed to mount %(share)s, reason: %(reason)s",
+                      {'share': share, 'reason': exc.stderr})
+            raise
 
     def _mount_nfs(self, nfs_share, mount_path, flags=None):
         """Mount nfs share using present mount types."""
