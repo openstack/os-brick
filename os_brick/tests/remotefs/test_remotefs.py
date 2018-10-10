@@ -82,6 +82,28 @@ class RemoteFsClientTestCase(base.TestCase):
             self.assertEqual(mock_do_mount.call_count, 0)
             self.assertEqual(mock_execute.call_count, 0)
 
+    @mock.patch.object(priv_rootwrap, 'execute')
+    def test_mount_race(self, mock_execute):
+        err_msg = 'mount.nfs: /var/asdf is already mounted'
+        mock_execute.side_effect = putils.ProcessExecutionError(stderr=err_msg)
+        mounts = {'192.0.2.20:/share': '/var/asdf/'}
+        client = remotefs.RemoteFsClient("nfs", root_helper='true',
+                                         nfs_mount_point_base='/var/asdf')
+
+        with mock.patch.object(client, '_read_mounts',
+                               return_value=mounts):
+            client._do_mount('nfs', '192.0.2.20:/share', '/var/asdf')
+
+    @mock.patch.object(priv_rootwrap, 'execute')
+    def test_mount_failure(self, mock_execute):
+        err_msg = 'mount.nfs: nfs broke'
+        mock_execute.side_effect = putils.ProcessExecutionError(stderr=err_msg)
+        client = remotefs.RemoteFsClient("nfs", root_helper='true',
+                                         nfs_mount_point_base='/var/asdf')
+        self.assertRaises(putils.ProcessExecutionError,
+                          client._do_mount,
+                          'nfs', '192.0.2.20:/share', '/var/asdf')
+
     def _test_no_mount_point(self, fs_type):
         self.assertRaises(exception.InvalidParameterValue,
                           remotefs.RemoteFsClient,
