@@ -86,9 +86,13 @@ class RemoteFsClientTestCase(base.TestCase):
     def test_mount_race(self, mock_execute):
         err_msg = 'mount.nfs: /var/asdf is already mounted'
         mock_execute.side_effect = putils.ProcessExecutionError(stderr=err_msg)
+        mounts = {'192.0.2.20:/share': '/var/asdf/'}
         client = remotefs.RemoteFsClient("nfs", root_helper='true',
                                          nfs_mount_point_base='/var/asdf')
-        client._do_mount('nfs', '192.0.2.20:/share', '/var/asdf')
+
+        with mock.patch.object(client, '_read_mounts',
+                               return_value=mounts):
+            client._do_mount('nfs', '192.0.2.20:/share', '/var/asdf')
 
     @mock.patch.object(priv_rootwrap, 'execute')
     def test_mount_failure(self, mock_execute):
