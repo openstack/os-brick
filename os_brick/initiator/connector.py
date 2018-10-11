@@ -67,7 +67,7 @@ connector_list = [
     'os_brick.initiator.connectors.nvme.NVMeConnector',
 ]
 
-# Mappings used to determine who to contruct in the factory
+# Mappings used to determine who to construct in the factory
 _connector_mapping_linux = {
     initiator.AOE:
         'os_brick.initiator.connectors.aoe.AoEConnector',
