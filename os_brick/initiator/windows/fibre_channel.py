@@ -162,7 +162,7 @@ class WindowsFCConnector(win_conn_base.BaseWindowsConnector):
                         local_port_wwn, remote_port_wwn, fcp_lun)
 
                     # This may raise a DiskNotFound exception if the disks
-                    # are meanwhile claimed by the MPIO serivce.
+                    # are meanwhile claimed by the MPIO service.
                     disk_paths = [
                         self._diskutils.get_device_name_by_device_number(
                             dev_num)
