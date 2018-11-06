@@ -32,6 +32,7 @@ from os_brick.i18n import _
 from os_brick import initiator
 from os_brick.initiator.connectors import base
 from os_brick.initiator.connectors import base_iscsi
+from os_brick.initiator import utils as initiator_utils
 from os_brick import utils
 
 synchronized = lockutils.synchronized_with_prefix('os-brick-')
@@ -1030,6 +1031,11 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                                     'node.session.scan', 'manual',
                                     check_exit_code=False)
         manual_scan = not res[1]
+        # Update global indicator of manual scan support used for
+        # shared_targets locking so we support upgrading open iscsi to a
+        # version supporting the manual scan feature without restarting Nova
+        # or Cinder.
+        initiator_utils.ISCSI_SUPPORTS_MANUAL_SCAN = manual_scan
 
         if connection_properties.get('auth_method'):
             self._iscsiadm_update(connection_properties,

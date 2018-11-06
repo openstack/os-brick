@@ -21,6 +21,7 @@ from oslo_concurrency import processutils as putils
 from os_brick import exception
 from os_brick.initiator.connectors import iscsi
 from os_brick.initiator import linuxscsi
+from os_brick.initiator import utils
 from os_brick.privileged import rootwrap as priv_rootwrap
 from os_brick.tests.initiator import test_connector
 
@@ -987,6 +988,7 @@ Setting up iSCSI targets: unused
             [('tcp:', 'session1', 'ip1:port1', '1', 'tgt'),
              ('tcp:', session, 'ip1:port1', '-1', 'tgt1')]
         ]
+        utils.ISCSI_SUPPORTS_MANUAL_SCAN = None
         with mock.patch.object(self.connector, '_execute') as exec_mock:
             exec_mock.side_effect = [('', 'error'), ('', None),
                                      ('', None), ('', None),
@@ -996,6 +998,7 @@ Setting up iSCSI targets: unused
         # True refers to "manual scans", since the call to update
         # node.session.scan didn't fail they are set to manual
         self.assertEqual((session, True), res)
+        self.assertTrue(utils.ISCSI_SUPPORTS_MANUAL_SCAN)
         prefix = 'iscsiadm -m node -T tgt1 -p ip1:port1'
         expected_cmds = [
             prefix,
@@ -1018,6 +1021,7 @@ Setting up iSCSI targets: unused
             [('tcp:', 'session1', 'Ip1:port1', '1', 'tgt'),
              ('tcp:', session, 'IP1:port1', '-1', 'tgt1')]
         ]
+        utils.ISCSI_SUPPORTS_MANUAL_SCAN = None
         with mock.patch.object(self.connector, '_execute') as exec_mock:
             exec_mock.side_effect = [('', 'error'), ('', None),
                                      ('', None), ('', None),
@@ -1027,6 +1031,7 @@ Setting up iSCSI targets: unused
         # True refers to "manual scans", since the call to update
         # node.session.scan didn't fail they are set to manual
         self.assertEqual((session, True), res)
+        self.assertTrue(utils.ISCSI_SUPPORTS_MANUAL_SCAN)
         prefix = 'iscsiadm -m node -T tgt1 -p ip1:port1'
         expected_cmds = [
             prefix,
@@ -1048,9 +1053,11 @@ Setting up iSCSI targets: unused
         con_props = self.CON_PROPS.copy()
         con_props.update(auth_method='CHAP', auth_username='user',
                          auth_password='pwd')
+        utils.ISCSI_SUPPORTS_MANUAL_SCAN = None
         res = self.connector._connect_to_iscsi_portal(con_props)
         # False refers to "manual scans", so we have manual iscsi scans
         self.assertEqual((session, True), res)
+        self.assertTrue(utils.ISCSI_SUPPORTS_MANUAL_SCAN)
         prefix = 'iscsiadm -m node -T tgt1 -p ip1:port1'
         expected_cmds = [
             prefix,
