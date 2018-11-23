@@ -1,0 +1,4 @@
+---
+features:
+  - |
+    Extended nvme connector to support RSD with NVMe-oF.

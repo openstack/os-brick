@@ -23,6 +23,7 @@ from os_brick.initiator import connector
 from os_brick.initiator.connectors import base
 from os_brick.initiator.connectors import fake
 from os_brick.initiator.connectors import iscsi
+from os_brick.initiator.connectors import nvme
 from os_brick.initiator import linuxfc
 from os_brick.privileged import rootwrap as priv_rootwrap
 from os_brick.tests import base as test_base
@@ -33,6 +34,8 @@ FAKE_SCSI_WWN = '1234567890'
 
 class ConnectorUtilsTestCase(test_base.TestCase):
 
+    @mock.patch.object(nvme.NVMeConnector, '_get_system_uuid',
+                       return_value=None)
     @mock.patch.object(iscsi.ISCSIConnector, 'get_initiator',
                        return_value='fakeinitiator')
     @mock.patch.object(linuxfc.LinuxFibreChannel, 'get_fc_wwpns',
@@ -46,6 +49,7 @@ class ConnectorUtilsTestCase(test_base.TestCase):
                                              multipath_result,
                                              mock_wwnns, mock_wwpns,
                                              mock_initiator,
+                                             mock_sysuuid,
                                              host='fakehost'):
         props_actual = connector.get_connector_properties('sudo',
                                                           MY_IP,
