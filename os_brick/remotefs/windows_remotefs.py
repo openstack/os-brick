@@ -57,11 +57,24 @@ class WindowsRemoteFsClient(remotefs.RemoteFsClient):
         self._pathutils = utilsfactory.get_pathutils()
 
     def get_local_share_path(self, share, expect_existing=True):
-        local_share_path = self._smbutils.get_smb_share_path(share)
+        share = self._get_share_norm_path(share)
+        share_name = self.get_share_name(share)
+        share_subdir = self.get_share_subdir(share)
+        is_local_share = self._smbutils.is_local_share(share)
+
+        if not is_local_share:
+            LOG.debug("Share '%s' is not exposed by the current host.", share)
+            local_share_path = None
+        else:
+            local_share_path = self._smbutils.get_smb_share_path(share_name)
+
         if not local_share_path and expect_existing:
             err_msg = _("Could not find the local "
                         "share path for %(share)s.")
             raise exception.VolumePathsNotFound(err_msg % dict(share=share))
+
+        if local_share_path and share_subdir:
+            local_share_path = os.path.join(local_share_path, share_subdir)
 
         return local_share_path
 
@@ -69,7 +82,11 @@ class WindowsRemoteFsClient(remotefs.RemoteFsClient):
         return share.replace('/', '\\')
 
     def get_share_name(self, share):
-        return self._get_share_norm_path(share).lstrip('\\').split('\\', 1)[1]
+        return self._get_share_norm_path(share).lstrip('\\').split('\\')[1]
+
+    def get_share_subdir(self, share):
+        return "\\".join(
+            self._get_share_norm_path(share).lstrip('\\').split('\\')[2:])
 
     def mount(self, share, flags=None):
         share_norm_path = self._get_share_norm_path(share)
@@ -102,9 +119,8 @@ class WindowsRemoteFsClient(remotefs.RemoteFsClient):
         # what the caller will expect.
         mnt_point = self.get_mount_point(share)
         share_norm_path = self._get_share_norm_path(share)
-        share_name = self.get_share_name(share)
         symlink_dest = (share_norm_path if not use_local_path
-                        else self.get_local_share_path(share_name))
+                        else self.get_local_share_path(share))
 
         if not os.path.isdir(self._mount_base):
             os.makedirs(self._mount_base)

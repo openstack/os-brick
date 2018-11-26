@@ -149,10 +149,8 @@ class WindowsSMBFSConnectorTestCase(test_base.WindowsConnectorTestBase):
         elif expecting_local:
             self._connector._smbutils.is_local_share.assert_called_once_with(
                 fake_export_path)
-            self._remotefs.get_share_name.assert_called_once_with(
-                fake_export_path)
             self._remotefs.get_local_share_path.assert_called_once_with(
-                fake_share_name)
+                fake_export_path)
 
     def test_get_search_path(self):
         search_path = self._connector.get_search_path()

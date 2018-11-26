@@ -39,24 +39,44 @@ class WindowsRemotefsClientTestCase(base.TestCase):
         self._smbutils = self._remotefs._smbutils
         self._pathutils = self._remotefs._pathutils
 
-    @ddt.data({},
-              {'expect_existing': False},
-              {'local_path': mock.sentinel.local_path})
+    @ddt.data({'is_local_share': False},
+              {'expect_existing': False})
     @ddt.unpack
-    def test_get_local_share_path(self, expect_existing=True,
-                                  local_path=None):
-        self._smbutils.get_smb_share_path.return_value = local_path
-        if not local_path and expect_existing:
+    def test_get_local_share_path_missing(self, expect_existing=True,
+                                          is_local_share=True):
+        self._smbutils.get_smb_share_path.return_value = None
+        self._smbutils.is_local_share.return_value = is_local_share
+        if expect_existing:
             self.assertRaises(
                 exception.VolumePathsNotFound,
                 self._remotefs.get_local_share_path,
-                mock.sentinel.share_name,
+                self._FAKE_SHARE,
                 expect_existing=expect_existing)
         else:
             share_path = self._remotefs.get_local_share_path(
-                mock.sentinel.share_name,
+                self._FAKE_SHARE,
                 expect_existing=expect_existing)
-            self.assertEqual(local_path, share_path)
+            self.assertIsNone(share_path)
+
+        self.assertEqual(is_local_share,
+                         self._smbutils.get_smb_share_path.called)
+        self._smbutils.is_local_share.assert_called_once_with(self._FAKE_SHARE)
+
+    @ddt.data({'share': '//addr/share_name/subdir_a/subdir_b',
+               'exp_path': r'C:\shared_dir\subdir_a\subdir_b'},
+              {'share': '//addr/share_name',
+               'exp_path': r'C:\shared_dir'})
+    @ddt.unpack
+    @mock.patch('os.path.join', lambda *args: '\\'.join(args))
+    def test_get_local_share_path(self, share, exp_path):
+        fake_local_path = 'C:\\shared_dir'
+        self._smbutils.get_smb_share_path.return_value = fake_local_path
+
+        share_path = self._remotefs.get_local_share_path(share)
+        self.assertEqual(exp_path, share_path)
+
+        self._smbutils.get_smb_share_path.assert_called_once_with(
+            'share_name')
 
     def test_get_share_name(self):
         resulted_name = self._remotefs.get_share_name(self._FAKE_SHARE)
@@ -126,7 +146,7 @@ class WindowsRemotefsClientTestCase(base.TestCase):
 
         if use_local_path:
             mock_get_local_share_path.assert_called_once_with(
-                self._FAKE_SHARE_NAME)
+                self._FAKE_SHARE)
             expected_symlink_target = mock_get_local_share_path.return_value
         else:
             expected_symlink_target = self._FAKE_SHARE.replace('/', '\\')
