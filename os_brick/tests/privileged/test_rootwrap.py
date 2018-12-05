@@ -98,7 +98,7 @@ class PrivRootwrapTestCase(base.TestCase):
                           interval=2, backoff_rate=3, attempts=3,
                           on_execute=on_execute, on_completion=on_completion)
         t1 = time.time()
-        self.assertLess(t1 - t0, 0.3)
+        self.assertLess(t1 - t0, 0.6)
         sleep_mock.assert_has_calls([mock.call(0), mock.call(6), mock.call(0),
                                      mock.call(18), mock.call(0)])
         expected_calls = [mock.call(args[0][0])
