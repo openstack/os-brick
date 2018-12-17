@@ -10,8 +10,6 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import time
-
 import mock
 from oslo_concurrency import processutils as putils
 import six
@@ -91,14 +89,11 @@ class PrivRootwrapTestCase(base.TestCase):
     def test_custom_execute_timeout_raises_with_retries(self, sleep_mock):
         on_execute = mock.Mock()
         on_completion = mock.Mock()
-        t0 = time.time()
         self.assertRaises(exception.ExecutionTimeout,
                           priv_rootwrap.custom_execute,
                           'sleep', '2', timeout=0.05, raise_timeout=True,
                           interval=2, backoff_rate=3, attempts=3,
                           on_execute=on_execute, on_completion=on_completion)
-        t1 = time.time()
-        self.assertLess(t1 - t0, 0.6)
         sleep_mock.assert_has_calls([mock.call(0), mock.call(6), mock.call(0),
                                      mock.call(18), mock.call(0)])
         expected_calls = [mock.call(args[0][0])
@@ -107,13 +102,10 @@ class PrivRootwrapTestCase(base.TestCase):
         on_completion.assert_has_calls(expected_calls)
 
     def test_custom_execute_timeout_no_raise(self):
-        t0 = time.time()
         out, err = priv_rootwrap.custom_execute('sleep', '2', timeout=0.05,
                                                 raise_timeout=False)
-        t1 = time.time()
         self.assertEqual('', out)
         self.assertIsInstance(err, six.string_types)
-        self.assertLess(t1 - t0, 0.3)
 
     def test_custom_execute_check_exit_code(self):
         self.assertRaises(putils.ProcessExecutionError,
