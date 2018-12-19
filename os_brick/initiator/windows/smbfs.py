@@ -102,8 +102,7 @@ class WindowsSMBFSConnector(win_conn_base.BaseWindowsConnector):
             disk_dir = self._remotefsclient.get_mount_point(
                 export_path)
         elif use_local_path:
-            share_name = self._remotefsclient.get_share_name(export_path)
-            disk_dir = self._remotefsclient.get_local_share_path(share_name)
+            disk_dir = self._remotefsclient.get_local_share_path(export_path)
 
         disk_name = connection_properties['name']
         disk_path = os.path.join(disk_dir, disk_name)
