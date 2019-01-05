@@ -43,10 +43,39 @@ class NVMeConnector(base.BaseLinuxConnector):
             device_scan_attempts=device_scan_attempts,
             *args, **kwargs)
 
+    def _get_system_uuid(self):
+        # RSD requires system_uuid to let Cinder RSD Driver identify
+        # Nova node for later RSD volume attachment.
+        try:
+            out, err = self._execute("dmidecode",
+                                     root_helper=self._root_helper,
+                                     run_as_root=True)
+            if err:
+                LOG.warning("dmidecode execute error: %s", err)
+                return ""
+            for line in out.split("\n"):
+                line = line.strip()
+                if line.startswith("UUID:"):
+                    uuid = line.split(" ")[1]
+                    LOG.debug("got system uuid: %s", uuid)
+                    return uuid
+            LOG.warning("Cannot get system uuid from %s", out)
+            return ""
+        except putils.ProcessExecutionError as e:
+            LOG.warning("Unable to locate dmidecode. For Cinder RSD Backend, "
+                        "please make sure it is installed: %s", e)
+            return ""
+
     @staticmethod
     def get_connector_properties(root_helper, *args, **kwargs):
         """The NVMe connector properties."""
-        return {}
+        nvme = NVMeConnector(root_helper=root_helper,
+                             execute=kwargs.get('execute'))
+        uuid = nvme._get_system_uuid()
+        if uuid:
+            return {"system uuid": uuid}
+        else:
+            return {}
 
     def get_search_path(self):
         return '/dev'
@@ -58,7 +87,8 @@ class NVMeConnector(base.BaseLinuxConnector):
 
     def _get_nvme_devices(self):
         nvme_devices = []
-        pattern = r'/dev/nvme[0-9]n[0-9]'
+        # match nvme devices like /dev/nvme10n10
+        pattern = r'/dev/nvme[0-9]+n[0-9]+'
         cmd = ['nvme', 'list']
         for retry in range(1, self.device_scan_attempts + 1):
             try:
@@ -83,6 +113,16 @@ class NVMeConnector(base.BaseLinuxConnector):
                     "when running nvme list.")
             raise exception.CommandExecutionFailed(message=msg)
 
+    @utils.retry(exceptions=exception.VolumePathsNotFound)
+    def _get_device_path(self, current_nvme_devices):
+        all_nvme_devices = self._get_nvme_devices()
+        LOG.debug("all_nvme_devices are %(all_nvme_devices)s",
+                  {'all_nvme_devices': all_nvme_devices})
+        path = set(all_nvme_devices) - set(current_nvme_devices)
+        if not path:
+            raise exception.VolumePathsNotFound()
+        return list(path)
+
     @utils.trace
     @synchronized('connect_volume')
     def connect_volume(self, connection_properties):
@@ -105,12 +145,15 @@ class NVMeConnector(base.BaseLinuxConnector):
         target_portal = connection_properties['target_portal']
         port = connection_properties['target_port']
         nvme_transport_type = connection_properties['transport_type']
+        host_nqn = connection_properties.get('host_nqn')
         cmd = [
             'nvme', 'connect',
             '-t', nvme_transport_type,
             '-n', conn_nqn,
             '-a', target_portal,
             '-s', port]
+        if host_nqn:
+            cmd.extend(['-q', host_nqn])
         try:
             self._execute(*cmd, root_helper=self._root_helper,
                           run_as_root=True)
@@ -120,14 +163,7 @@ class NVMeConnector(base.BaseLinuxConnector):
                 "%(conn_nqn)s", {'conn_nqn': conn_nqn})
             raise
 
-        all_nvme_devices = self._get_nvme_devices()
-        path = set(all_nvme_devices) - set(current_nvme_devices)
-        path = list(path)
-        if not path:
-            raise exception.TargetPortalNotFound(target_portal)
-
-        LOG.debug("all_nvme_devices are %(all_nvme_devices)s",
-                  {'all_nvme_devices': all_nvme_devices})
+        path = self._get_device_path(current_nvme_devices)
         device_info['path'] = path[0]
         LOG.debug("NVMe device to be connected to is %(path)s",
                   {'path': path[0]})
@@ -135,7 +171,8 @@ class NVMeConnector(base.BaseLinuxConnector):
 
     @utils.trace
     @synchronized('disconnect_volume')
-    def disconnect_volume(self, connection_properties, device_info):
+    def disconnect_volume(self, connection_properties, device_info,
+                          force=False, ignore_errors=False):
         """Detach and flush the volume.
 
         :param connection_properties: The dictionary that describes all
@@ -150,7 +187,10 @@ class NVMeConnector(base.BaseLinuxConnector):
         """
 
         conn_nqn = connection_properties['nqn']
-        device_path = connection_properties['device_path']
+        if device_info and device_info.get('path'):
+            device_path = device_info.get('path')
+        else:
+            device_path = connection_properties['device_path'] or ''
         current_nvme_devices = self._get_nvme_devices()
         if device_path not in current_nvme_devices:
             LOG.warning("Trying to disconnect device %(device_path)s that "
@@ -177,7 +217,8 @@ class NVMeConnector(base.BaseLinuxConnector):
                 "Failed to disconnect from NVMe nqn "
                 "%(conn_nqn)s with device_path %(device_path)s",
                 {'conn_nqn': conn_nqn, 'device_path': device_path})
-            raise
+            if not ignore_errors:
+                raise
 
     @utils.trace
     @synchronized('extend_volume')

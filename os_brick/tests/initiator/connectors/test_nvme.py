@@ -26,6 +26,8 @@ Node             SN                   Model                                  \
 - --------- -------------------------- ---------------- --------\n
 /dev/nvme0n1     67ff9467da6e5567     Linux                                  \
   10          1.07  GB /   1.07  GB    512   B +  0 B   4.8.0-58\n
+/dev/nvme11n12   fecc8e73584753d7     Linux                                  \
+  1           3.22  GB /   3.22  GB    512   B +  0 B   4.8.0-56\n
 """
 
 
@@ -38,11 +40,28 @@ class NVMeConnectorTestCase(test_connector.ConnectorTestCase):
         self.connector = nvme.NVMeConnector(None,
                                             execute=self.fake_execute)
 
+    @mock.patch.object(nvme.NVMeConnector, '_execute')
+    def test_get_connector_properties_without_sysuuid(
+            self, mock_execute):
+        mock_execute.side_effect = putils.ProcessExecutionError
+        props = self.connector.get_connector_properties('sudo')
+        expected_props = {}
+        self.assertEqual(expected_props, props)
+
+    @mock.patch.object(nvme.NVMeConnector, '_get_system_uuid')
+    def test_get_connector_properties_with_sysuuid(
+            self, mock_sysuuid):
+        mock_sysuuid.return_value = "9126E942-396D-11E7-B0B7-A81E84C186D1"
+        props = self.connector.get_connector_properties('sudo')
+        expected_props = {
+            "system uuid": "9126E942-396D-11E7-B0B7-A81E84C186D1"}
+        self.assertEqual(expected_props, props)
+
     def _nvme_list_cmd(self, *args, **kwargs):
         return FAKE_NVME_LIST_OUTPUT, None
 
     def test__get_nvme_devices(self):
-        expected = ['/dev/nvme0n1']
+        expected = ['/dev/nvme0n1', '/dev/nvme11n12']
         self.connector._execute = self._nvme_list_cmd
         actual = self.connector._get_nvme_devices()
         self.assertEqual(expected, actual)
@@ -83,6 +102,38 @@ class NVMeConnectorTestCase(test_connector.ConnectorTestCase):
             root_helper=None,
             run_as_root=True)
 
+    @mock.patch.object(nvme.NVMeConnector, '_get_nvme_devices')
+    @mock.patch.object(nvme.NVMeConnector, '_execute')
+    @mock.patch('time.sleep')
+    def test_connect_volume_hostnqn(
+            self, mock_sleep, mock_execute, mock_devices):
+        connection_properties = {'target_portal': 'portal',
+                                 'target_port': 1,
+                                 'nqn': 'nqn.volume_123',
+                                 'device_path': '',
+                                 'transport_type': 'rdma',
+                                 'host_nqn': 'nqn.host_456'}
+
+        mock_devices.side_effect = [
+            ['/dev/nvme0n1'], ['/dev/nvme0n2']]
+
+        device_info = self.connector.connect_volume(
+            connection_properties)
+        self.assertEqual('/dev/nvme0n2', device_info['path'])
+        self.assertEqual('block', device_info['type'])
+
+        self.assertEqual(2, mock_devices.call_count)
+
+        mock_execute.assert_called_once_with(
+            'nvme', 'connect',
+            '-t', connection_properties['transport_type'],
+            '-n', connection_properties['nqn'],
+            '-a', connection_properties['target_portal'],
+            '-s', connection_properties['target_port'],
+            '-q', connection_properties['host_nqn'],
+            root_helper=None,
+            run_as_root=True)
+
     @mock.patch.object(nvme.NVMeConnector, '_execute')
     @mock.patch('time.sleep')
     def test_connect_volume_raise(self, mock_sleep, mock_execute):
@@ -109,14 +160,34 @@ class NVMeConnectorTestCase(test_connector.ConnectorTestCase):
 
         mock_devices.return_value = '/dev/nvme0n1'
 
-        self.assertRaises(exception.TargetPortalNotFound,
+        self.assertRaises(exception.VolumePathsNotFound,
                           self.connector.connect_volume,
                           connection_properties)
 
     @mock.patch.object(nvme.NVMeConnector, '_get_nvme_devices')
     @mock.patch.object(nvme.NVMeConnector, '_execute')
     @mock.patch('time.sleep')
-    def test_disconnect_volume(self, mock_sleep, mock_execute, mock_devices):
+    def test_connect_volume_nvmelist_retry_success(
+            self, mock_sleep, mock_execute, mock_devices):
+        connection_properties = {'target_portal': 'portal',
+                                 'target_port': 1,
+                                 'nqn': 'nqn.volume_123',
+                                 'device_path': '',
+                                 'transport_type': 'rdma'}
+        mock_devices.side_effect = [
+            ['/dev/nvme0n1'],
+            ['/dev/nvme0n1'],
+            ['/dev/nvme0n1', '/dev/nvme0n2']]
+        device_info = self.connector.connect_volume(
+            connection_properties)
+        self.assertEqual('/dev/nvme0n2', device_info['path'])
+        self.assertEqual('block', device_info['type'])
+
+    @mock.patch.object(nvme.NVMeConnector, '_get_nvme_devices')
+    @mock.patch.object(nvme.NVMeConnector, '_execute')
+    @mock.patch('time.sleep')
+    def test_disconnect_volume_nova(
+            self, mock_sleep, mock_execute, mock_devices):
         connection_properties = {'target_portal': 'portal',
                                  'target_port': 1,
                                  'nqn': 'nqn.volume_123',
@@ -124,6 +195,27 @@ class NVMeConnectorTestCase(test_connector.ConnectorTestCase):
                                  'transport_type': 'rdma'}
         mock_devices.return_value = '/dev/nvme0n1'
         self.connector.disconnect_volume(connection_properties, None)
+
+        mock_execute.asert_called_once_with(
+            'nvme', 'disconnect', '-n',
+            'volume_123',
+            root_helper=None,
+            run_as_root=True)
+
+    @mock.patch.object(nvme.NVMeConnector, '_get_nvme_devices')
+    @mock.patch.object(nvme.NVMeConnector, '_execute')
+    @mock.patch('time.sleep')
+    def test_disconnect_volume_cinder(
+            self, mock_sleep, mock_execute, mock_devices):
+        connection_properties = {'target_portal': 'portal',
+                                 'target_port': 1,
+                                 'nqn': 'nqn.volume_123',
+                                 'transport_type': 'rdma'}
+        device_info = {'path': '/dev/nvme0n1'}
+        mock_devices.return_value = '/dev/nvme0n1'
+        self.connector.disconnect_volume(connection_properties,
+                                         device_info,
+                                         ignore_errors=True)
 
         mock_execute.asert_called_once_with(
             'nvme', 'disconnect', '-n',

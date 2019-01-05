@@ -116,6 +116,8 @@ _connector_mapping_linux = {
         'os_brick.initiator.connectors.storpool.StorPoolConnector',
     initiator.NVME:
         'os_brick.initiator.connectors.nvme.NVMeConnector',
+    initiator.NVMEOF:
+        'os_brick.initiator.connectors.nvme.NVMeConnector',
 }
 
 # Mapping for the S390X platform
