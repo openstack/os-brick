@@ -186,6 +186,28 @@ class NVMeConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(nvme.NVMeConnector, '_get_nvme_devices')
     @mock.patch.object(nvme.NVMeConnector, '_execute')
     @mock.patch('time.sleep')
+    def test_connect_nvme_retry_success(
+            self, mock_sleep, mock_execute, mock_devices):
+        connection_properties = {'target_portal': 'portal',
+                                 'target_port': 1,
+                                 'nqn': 'nqn.volume_123',
+                                 'device_path': '',
+                                 'transport_type': 'rdma'}
+        mock_devices.side_effect = [
+            ['/dev/nvme0n1'],
+            ['/dev/nvme0n1', '/dev/nvme0n2']]
+        device_info = self.connector.connect_volume(
+            connection_properties)
+        mock_execute.side_effect = [
+            putils.ProcessExecutionError,
+            putils.ProcessExecutionError,
+            None]
+        self.assertEqual('/dev/nvme0n2', device_info['path'])
+        self.assertEqual('block', device_info['type'])
+
+    @mock.patch.object(nvme.NVMeConnector, '_get_nvme_devices')
+    @mock.patch.object(nvme.NVMeConnector, '_execute')
+    @mock.patch('time.sleep')
     def test_disconnect_volume_nova(
             self, mock_sleep, mock_execute, mock_devices):
         connection_properties = {'target_portal': 'portal',

@@ -123,6 +123,11 @@ class NVMeConnector(base.BaseLinuxConnector):
             raise exception.VolumePathsNotFound()
         return list(path)
 
+    @utils.retry(exceptions=putils.ProcessExecutionError)
+    def _try_connect_nvme(self, cmd):
+        self._execute(*cmd, root_helper=self._root_helper,
+                      run_as_root=True)
+
     @utils.trace
     @synchronized('connect_volume')
     def connect_volume(self, connection_properties):
@@ -154,14 +159,8 @@ class NVMeConnector(base.BaseLinuxConnector):
             '-s', port]
         if host_nqn:
             cmd.extend(['-q', host_nqn])
-        try:
-            self._execute(*cmd, root_helper=self._root_helper,
-                          run_as_root=True)
-        except putils.ProcessExecutionError:
-            LOG.error(
-                "Failed to connect to NVMe nqn "
-                "%(conn_nqn)s", {'conn_nqn': conn_nqn})
-            raise
+
+        self._try_connect_nvme(cmd)
 
         path = self._get_device_path(current_nvme_devices)
         device_info['path'] = path[0]
