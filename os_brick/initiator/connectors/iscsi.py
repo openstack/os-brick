@@ -707,6 +707,13 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         for ip, iqn, lun in ips_iqns_luns:
             props = connection_properties.copy()
             props.update(target_portal=ip, target_iqn=iqn, target_lun=lun)
+
+            # NOTE(yenai): The method _connect_vol is used for parallelize
+            # logins, we shouldn't give these arguments; and it will make a
+            # mess in the debug message in _connect_vol. So, kick them out:
+            for key in ('target_portals', 'target_iqns', 'target_luns'):
+                props.pop(key, None)
+
             threads.append(executor.Thread(target=self._connect_vol,
                                            args=(retries, props, data)))
         for thread in threads:
