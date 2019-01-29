@@ -538,6 +538,9 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         return symlink
 
     def _get_connect_result(self, con_props, wwn, devices_names, mpath=None):
+        if 'wwn' in con_props:
+            self._linuxscsi.verify_sysfs_wwns(devices_names, con_props['wwn'])
+
         device = '/dev/' + (mpath or devices_names[0])
 
         # NOTE(geguileo): This is only necessary because of the current

@@ -1,0 +1,9 @@
+---
+fixes:
+  - |
+    Adds verification that found iSCSI devices have the expected WWN
+    (must be provided in connection_properties). The attachment fails if
+    the WWNs do not match. This prevents cases where a device already
+    exists on the host from an old attachment that wasn't fully cleaned
+    up, and the new attachment got the same LUN. Using this old device
+    could lead to data corruption.

@@ -920,6 +920,18 @@ loop0                                     0"""
         open_mock.assert_has_calls([mock.call('/sys/block/sda/device/wwid'),
                                     mock.call('/sys/block/sdb/device/wwid')])
 
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_sysfs_wwn')
+    def test_verify_sysfs_wwns_valid(self, get_wwn):
+        get_wwn.side_effect = ['123', '123', '123', '123']
+        self.linuxscsi.verify_sysfs_wwns(['sda', 'sdb', 'sdc', 'sdd'], '123')
+
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_sysfs_wwn')
+    def test_verify_sysfs_wwns_invalid(self, get_wwn):
+        get_wwn.side_effect = ['123', '456', '123', '123']
+        self.assertRaises(exception.VolumeDeviceValidationFailed,
+                          self.linuxscsi.verify_sysfs_wwns,
+                          ['sda', 'sdb', 'sdc', 'sdd'], '123')
+
     @mock.patch.object(linuxscsi.priv_rootwrap, 'unlink_root')
     @mock.patch('glob.glob')
     @mock.patch('os.path.realpath', side_effect=['/dev/sda', '/dev/sdb',
