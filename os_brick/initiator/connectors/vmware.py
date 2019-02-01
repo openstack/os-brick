@@ -189,7 +189,64 @@ class VmdkConnector(initiator_connector.InitiatorConnector):
                                                   cacerts=cacerts)
         image_transfer._start_transfer(read_handle, write_handle, timeout_secs)
 
-    def _disconnect(self, tmp_file_path, session, ds_ref, dc_ref, vmdk_path):
+    def _get_disk_device(self, session, backing):
+        hardware_devices = session.invoke_api(vim_util,
+                                              'get_object_property',
+                                              session.vim,
+                                              backing,
+                                              'config.hardware.device')
+        if hardware_devices.__class__.__name__ == "ArrayOfVirtualDevice":
+            hardware_devices = hardware_devices.VirtualDevice
+        for device in hardware_devices:
+            if device.__class__.__name__ == "VirtualDisk":
+                return device
+
+    def _create_spec_for_disk_remove(self, session, disk_device):
+        cf = session.vim.client.factory
+        disk_spec = cf.create('ns0:VirtualDeviceConfigSpec')
+        disk_spec.operation = 'remove'
+        disk_spec.fileOperation = 'destroy'
+        disk_spec.device = disk_device
+        return disk_spec
+
+    def _reconfigure_backing(self, session, backing, reconfig_spec):
+        LOG.debug("Reconfiguring backing VM: %(backing)s with spec: %(spec)s.",
+                  {'backing': backing,
+                   'spec': reconfig_spec})
+        reconfig_task = session.invoke_api(session.vim,
+                                           "ReconfigVM_Task",
+                                           backing,
+                                           spec=reconfig_spec)
+        LOG.debug("Task: %s created for reconfiguring backing VM.",
+                  reconfig_task)
+        session.wait_for_task(reconfig_task)
+
+    def _detach_disk_from_backing(self, session, backing, disk_device):
+        LOG.debug("Reconfiguring backing VM: %(backing)s to remove disk: "
+                  "%(disk_device)s.",
+                  {'backing': backing, 'disk_device': disk_device})
+
+        cf = session.vim.client.factory
+        reconfig_spec = cf.create('ns0:VirtualMachineConfigSpec')
+        spec = self._create_spec_for_disk_remove(session, disk_device)
+        reconfig_spec.deviceChange = [spec]
+        self._reconfigure_backing(session, backing, reconfig_spec)
+
+    def _attach_disk_to_backing(self, session, backing, disk_device):
+        LOG.debug("Reconfiguring backing VM: %(backing)s to add disk: "
+                  "%(disk_device)s.",
+                  {'backing': backing, 'disk_device': disk_device})
+
+        cf = session.vim.client.factory
+        reconfig_spec = cf.create('ns0:VirtualMachineConfigSpec')
+        disk_spec = cf.create('ns0:VirtualDeviceConfigSpec')
+        disk_spec.operation = 'add'
+        disk_spec.device = disk_device
+        reconfig_spec.deviceChange = [disk_spec]
+        self._reconfigure_backing(session, backing, reconfig_spec)
+
+    def _disconnect(
+            self, backing, tmp_file_path, session, ds_ref, dc_ref, vmdk_path):
         # The restored volume is in compressed (streamOptimized) format.
         # So we upload it to a temporary location in vCenter datastore and copy
         # the compressed vmdk to the volume vmdk. The copy operation
@@ -212,20 +269,13 @@ class VmdkConnector(initiator_connector.InitiatorConnector):
                 ds_path.rel_path, os.path.getsize(tmp_file_path), cacerts,
                 self._timeout)
 
-        # Delete the current volume vmdk because the copy operation does not
-        # overwrite.
-        LOG.debug("Deleting %s", vmdk_path)
-        disk_mgr = session.vim.service_content.virtualDiskManager
-        task = session.invoke_api(session.vim,
-                                  'DeleteVirtualDisk_Task',
-                                  disk_mgr,
-                                  name=vmdk_path,
-                                  datacenter=dc_ref)
-        session.wait_for_task(task)
+        disk_device = self._get_disk_device(session, backing)
+        self._detach_disk_from_backing(session, backing, disk_device)
 
         src = six.text_type(ds_path)
         LOG.debug("Copying %(src)s to %(dest)s", {'src': src,
                                                   'dest': vmdk_path})
+        disk_mgr = session.vim.service_content.virtualDiskManager
         task = session.invoke_api(session.vim,
                                   'CopyVirtualDisk_Task',
                                   disk_mgr,
@@ -234,6 +284,8 @@ class VmdkConnector(initiator_connector.InitiatorConnector):
                                   destName=vmdk_path,
                                   destDatacenter=dc_ref)
         session.wait_for_task(task)
+
+        self._attach_disk_to_backing(session, backing, disk_device)
 
         # Delete the compressed vmdk at the temporary location.
         LOG.debug("Deleting %s", src)
@@ -275,7 +327,7 @@ class VmdkConnector(initiator_connector.InitiatorConnector):
                     connection_properties['datacenter'], "Datacenter")
                 vmdk_path = connection_properties['vmdk_path']
                 self._disconnect(
-                    tmp_file_path, session, ds_ref, dc_ref, vmdk_path)
+                    backing, tmp_file_path, session, ds_ref, dc_ref, vmdk_path)
         finally:
             os.remove(tmp_file_path)
             if session:
