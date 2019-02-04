@@ -195,6 +195,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         except exception.TargetPortalsNotFound:
             raise
         except Exception:
+            LOG.exception('Exception encountered during portal discovery')
             if 'target_portals' in connection_properties:
                 raise exception.TargetPortalsNotFound(
                     target_portals=connection_properties['target_portals'])
