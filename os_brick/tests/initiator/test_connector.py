@@ -17,6 +17,7 @@ import sys
 
 import mock
 from oslo_concurrency import processutils as putils
+from oslo_service import loopingcall
 
 from os_brick import exception
 from os_brick.initiator import connector
@@ -30,6 +31,12 @@ from os_brick.tests import base as test_base
 
 MY_IP = '10.0.0.1'
 FAKE_SCSI_WWN = '1234567890'
+
+
+class ZeroIntervalLoopingCall(loopingcall.FixedIntervalLoopingCall):
+    def start(self, interval, initial_delay=None, stop_on_exception=True):
+        return super(ZeroIntervalLoopingCall, self).start(
+            0, 0, stop_on_exception)
 
 
 class ConnectorUtilsTestCase(test_base.TestCase):
@@ -126,6 +133,8 @@ class ConnectorTestCase(test_base.TestCase):
     def setUp(self):
         super(ConnectorTestCase, self).setUp()
         self.cmds = []
+        self.mock_object(loopingcall, 'FixedIntervalLoopingCall',
+                         ZeroIntervalLoopingCall)
 
     def fake_execute(self, *cmd, **kwargs):
         self.cmds.append(" ".join(cmd))
