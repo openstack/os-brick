@@ -47,24 +47,21 @@ class NVMeConnector(base.BaseLinuxConnector):
         # RSD requires system_uuid to let Cinder RSD Driver identify
         # Nova node for later RSD volume attachment.
         try:
-            out, err = self._execute("dmidecode",
+            out, err = self._execute('cat', '/sys/class/dmi/id/product_uuid',
                                      root_helper=self._root_helper,
                                      run_as_root=True)
-            if err:
-                LOG.warning("dmidecode execute error: %s", err)
-                return ""
-            for line in out.split("\n"):
-                line = line.strip()
-                if line.startswith("UUID:"):
-                    uuid = line.split(" ")[1]
-                    LOG.debug("got system uuid: %s", uuid)
-                    return uuid
-            LOG.warning("Cannot get system uuid from %s", out)
-            return ""
-        except putils.ProcessExecutionError as e:
-            LOG.warning("Unable to locate dmidecode. For Cinder RSD Backend, "
-                        "please make sure it is installed: %s", e)
-            return ""
+        except putils.ProcessExecutionError:
+            try:
+                out, err = self._execute('dmidecode', '-ssystem-uuid',
+                                         root_helper=self._root_helper,
+                                         run_as_root=True)
+                if not out:
+                    LOG.warning('dmidecode returned empty system-uuid')
+            except putils.ProcessExecutionError as e:
+                LOG.debug("Unable to locate dmidecode. For Cinder RSD Backend,"
+                          " please make sure it is installed: %s", e)
+                out = ""
+        return out
 
     @staticmethod
     def get_connector_properties(root_helper, *args, **kwargs):
