@@ -36,8 +36,8 @@ class NoOpEncryptor(base.VolumeEncryptor):
             execute=execute,
             *args, **kwargs)
 
-    def attach_volume(self, context):
+    def attach_volume(self, context, **kwargs):
         pass
 
-    def detach_volume(self):
+    def detach_volume(self, **kwargs):
         pass

@@ -24,7 +24,15 @@ class NoOpEncryptorTestCase(test_base.VolumeEncryptorTestCase):
                                  keymgr=self.keymgr)
 
     def test_attach_volume(self):
-        self.encryptor.attach_volume(None)
+        test_args = {
+            'control_location': 'front-end',
+            'provider': 'NoOpEncryptor',
+        }
+        self.encryptor.attach_volume(None, **test_args)
 
     def test_detach_volume(self):
-        self.encryptor.detach_volume()
+        test_args = {
+            'control_location': 'front-end',
+            'provider': 'NoOpEncryptor',
+        }
+        self.encryptor.detach_volume(**test_args)
