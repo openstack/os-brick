@@ -83,6 +83,13 @@ class FibreChannelConnector(base.BaseLinuxConnector):
         else:
             wwns = []
 
+        # Convert wwns to lower case
+        wwns = [wwn.lower() for wwn in wwns]
+        if target_wwns:
+            connection_properties['target_wwns'] = wwns
+        elif target_wwn:
+            connection_properties['target_wwn'] = wwns
+
         target_lun = connection_properties.get('target_lun', 0)
         target_luns = connection_properties.get('target_luns')
         if target_luns:
@@ -116,8 +123,13 @@ class FibreChannelConnector(base.BaseLinuxConnector):
             wwpn_lun_map[wwpn] = lun
 
         # If there is an initiator_target_map we can update it too
-        if 'initiator_target_map' in connection_properties:
+        if connection_properties.get('initiator_target_map') is not None:
+            # Convert it to lower case
             itmap = connection_properties['initiator_target_map']
+            itmap = {k.lower(): [port.lower() for port in v]
+                     for k, v in itmap.items()}
+            connection_properties['initiator_target_map'] = itmap
+
             new_itmap = dict()
             for init_wwpn in itmap:
                 target_wwpns = itmap[init_wwpn]
@@ -125,7 +137,7 @@ class FibreChannelConnector(base.BaseLinuxConnector):
                 for target_wwpn in target_wwpns:
                     if target_wwpn in wwpn_lun_map:
                         init_targets.append((target_wwpn,
-                                            wwpn_lun_map[target_wwpn]))
+                                             wwpn_lun_map[target_wwpn]))
                 new_itmap[init_wwpn] = init_targets
             connection_properties['initiator_target_lun_map'] = new_itmap
 
