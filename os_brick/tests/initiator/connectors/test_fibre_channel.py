@@ -591,7 +591,29 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
                                      ('1234567890123457', 2)]
             }
         },
-
+        {
+            "target_info": {
+                "target_lun": 1,
+                "target_wwn": ['20320002AC01E166', '21420002AC01E166',
+                               '20410002AC01E166', '21410002AC01E166']
+            },
+            "expected_targets": [
+                ('20320002ac01e166', 1),
+                ('21420002ac01e166', 1),
+                ('20410002ac01e166', 1),
+                ('21410002ac01e166', 1)
+            ],
+            "itmap": {
+                '10001409DCD71FF6': ['20320002AC01E166', '21420002AC01E166'],
+                '10001409DCD71FF7': ['20410002AC01E166', '21410002AC01E166']
+            },
+            "expected_map": {
+                '10001409dcd71ff6': [('20320002ac01e166', 1),
+                                     ('21420002ac01e166', 1)],
+                '10001409dcd71ff7': [('20410002ac01e166', 1),
+                                     ('21410002ac01e166', 1)]
+            }
+        },
     )
     @ddt.unpack
     def test__add_targets_to_connection_properties(self, target_info,
@@ -609,6 +631,14 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
             conn['data'])
         self.assertIn('targets', connection_info)
         self.assertEqual(expected_targets, connection_info['targets'])
+
+        # Check that we turn to lowercase target wwns
+        key = 'target_wwns' if 'target_wwns' in target_info else 'target_wwn'
+        wwns = target_info.get(key)
+        wwns = [wwns] if isinstance(wwns, six.string_types) else wwns
+        wwns = [w.lower() for w in wwns]
+        if wwns:
+            self.assertEqual(wwns, conn['data'][key])
 
         if itmap:
             self.assertIn('initiator_target_lun_map', connection_info)
