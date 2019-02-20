@@ -221,9 +221,13 @@ class VmdkConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch('os_brick.initiator.connectors.vmware.open', create=True)
     @mock.patch.object(VMDK_CONNECTOR, '_upload_vmdk')
     @mock.patch('os.path.getsize')
+    @mock.patch.object(VMDK_CONNECTOR, '_get_disk_device')
+    @mock.patch.object(VMDK_CONNECTOR, '_detach_disk_from_backing')
+    @mock.patch.object(VMDK_CONNECTOR, '_attach_disk_to_backing')
     def test_disconnect(
-            self, getsize, upload_vmdk, file_open, create_temp_ds_folder,
-            get_ds_by_ref):
+            self, attach_disk_to_backing, detach_disk_from_backing,
+            get_disk_device, getsize, upload_vmdk, file_open,
+            create_temp_ds_folder, get_ds_by_ref):
         ds_ref = mock.sentinel.ds_ref
         ds_name = 'datastore-1'
         dstore = datastore.Datastore(ds_ref, ds_name)
@@ -236,20 +240,21 @@ class VmdkConnectorTestCase(test_connector.ConnectorTestCase):
         file_open.return_value = file_open_ret
 
         dc_name = mock.sentinel.dc_name
-        delete_task = mock.sentinel.delete_vdisk_task
         copy_task = mock.sentinel.copy_vdisk_task
         delete_file_task = mock.sentinel.delete_file_task
         session = mock.Mock()
-        session.invoke_api.side_effect = [
-            dc_name, delete_task, copy_task, delete_file_task]
+        session.invoke_api.side_effect = [dc_name, copy_task, delete_file_task]
 
         getsize.return_value = units.Gi
+        disk_device = mock.sentinel.disk_device
+        get_disk_device.return_value = disk_device
 
+        backing = mock.sentinel.backing
         tmp_file_path = '/tmp/foo.vmdk'
         dc_ref = mock.sentinel.dc_ref
         vmdk_path = mock.sentinel.vmdk_path
         self._connector._disconnect(
-            tmp_file_path, session, ds_ref, dc_ref, vmdk_path)
+            backing, tmp_file_path, session, ds_ref, dc_ref, vmdk_path)
 
         tmp_folder_path = self._connector.TMP_IMAGES_DATASTORE_FOLDER_PATH
         ds_folder_path = '[%s] %s' % (ds_name, tmp_folder_path)
@@ -268,30 +273,30 @@ class VmdkConnectorTestCase(test_connector.ConnectorTestCase):
             exp_rel_path, units.Gi, self._connector._ca_file,
             self._connector._timeout)
 
-        disk_mgr = session.vim.service_content.virtualDiskManager
-        self.assertEqual(
-            mock.call(session.vim, 'DeleteVirtualDisk_Task', disk_mgr,
-                      name=vmdk_path, datacenter=dc_ref),
-            session.invoke_api.call_args_list[1])
-        self.assertEqual(mock.call(delete_task),
-                         session.wait_for_task.call_args_list[0])
+        get_disk_device.assert_called_once_with(session, backing)
+        detach_disk_from_backing.assert_called_once_with(
+            session, backing, disk_device)
 
         src = '[%s] %s' % (ds_name, exp_rel_path)
+        disk_mgr = session.vim.service_content.virtualDiskManager
         self.assertEqual(
             mock.call(session.vim, 'CopyVirtualDisk_Task', disk_mgr,
                       sourceName=src, sourceDatacenter=dc_ref,
                       destName=vmdk_path, destDatacenter=dc_ref),
-            session.invoke_api.call_args_list[2])
+            session.invoke_api.call_args_list[1])
         self.assertEqual(mock.call(copy_task),
-                         session.wait_for_task.call_args_list[1])
+                         session.wait_for_task.call_args_list[0])
+
+        attach_disk_to_backing.assert_called_once_with(
+            session, backing, disk_device)
 
         file_mgr = session.vim.service_content.fileManager
         self.assertEqual(
             mock.call(session.vim, 'DeleteDatastoreFile_Task', file_mgr,
                       name=src, datacenter=dc_ref),
-            session.invoke_api.call_args_list[3])
+            session.invoke_api.call_args_list[2])
         self.assertEqual(mock.call(delete_file_task),
-                         session.wait_for_task.call_args_list[2])
+                         session.wait_for_task.call_args_list[1])
 
     @mock.patch('os.path.exists')
     def test_disconnect_volume_with_missing_temp_file(self, path_exists):
@@ -361,6 +366,80 @@ class VmdkConnectorTestCase(test_connector.ConnectorTestCase):
         create_session.assert_called_once_with()
         snapshot_exists.assert_called_once_with(session, backing)
         disconnect.assert_called_once_with(
-            path, session, ds_ref, dc_ref, props['vmdk_path'])
+            backing, path, session, ds_ref, dc_ref, props['vmdk_path'])
         remove.assert_called_once_with(path)
         session.logout.assert_called_once_with()
+
+    def test_get_disk_device(self):
+        disk_device = mock.Mock()
+        disk_device.__class__.__name__ = 'VirtualDisk'
+
+        controller_device = mock.Mock()
+        controller_device.__class__.__name__ = 'VirtualLSILogicController'
+
+        devices = mock.Mock()
+        devices.__class__.__name__ = "ArrayOfVirtualDevice"
+        devices.VirtualDevice = [disk_device, controller_device]
+        session = mock.Mock()
+        session.invoke_api.return_value = devices
+
+        backing = mock.sentinel.backing
+        self.assertEqual(disk_device,
+                         self._connector._get_disk_device(session, backing))
+        session.invoke_api.assert_called_once_with(
+            vim_util, 'get_object_property', session.vim,
+            backing, 'config.hardware.device')
+
+    def test_create_spec_for_disk_remove(self):
+        disk_spec = mock.Mock()
+        session = mock.Mock()
+        session.vim.client.factory.create.return_value = disk_spec
+
+        disk_device = mock.sentinel.disk_device
+        self._connector._create_spec_for_disk_remove(session, disk_device)
+
+        session.vim.client.factory.create.assert_called_once_with(
+            'ns0:VirtualDeviceConfigSpec')
+        self.assertEqual('remove', disk_spec.operation)
+        self.assertEqual('destroy', disk_spec.fileOperation)
+        self.assertEqual(disk_device, disk_spec.device)
+
+    @mock.patch.object(VMDK_CONNECTOR, '_create_spec_for_disk_remove')
+    @mock.patch.object(VMDK_CONNECTOR, '_reconfigure_backing')
+    def test_detach_disk_from_backing(self, reconfigure_backing, create_spec):
+        disk_spec = mock.sentinel.disk_spec
+        create_spec.return_value = disk_spec
+
+        reconfig_spec = mock.Mock()
+        session = mock.Mock()
+        session.vim.client.factory.create.return_value = reconfig_spec
+
+        backing = mock.sentinel.backing
+        disk_device = mock.sentinel.disk_device
+        self._connector._detach_disk_from_backing(
+            session, backing, disk_device)
+
+        create_spec.assert_called_once_with(session, disk_device)
+        session.vim.client.factory.create.assert_called_once_with(
+            'ns0:VirtualMachineConfigSpec')
+        self.assertEqual([disk_spec], reconfig_spec.deviceChange)
+        reconfigure_backing.assert_called_once_with(
+            session, backing, reconfig_spec)
+
+    @mock.patch.object(VMDK_CONNECTOR, '_reconfigure_backing')
+    def test_attach_disk_to_backing(self, reconfigure_backing):
+        reconfig_spec = mock.Mock()
+        disk_spec = mock.Mock()
+        session = mock.Mock()
+        session.vim.client.factory.create.side_effect = [
+            reconfig_spec, disk_spec]
+
+        backing = mock.Mock()
+        disk_device = mock.sentinel.disk_device
+        self._connector._attach_disk_to_backing(session, backing, disk_device)
+
+        self.assertEqual([disk_spec], reconfig_spec.deviceChange)
+        self.assertEqual('add', disk_spec.operation)
+        self.assertEqual(disk_device, disk_spec.device)
+        reconfigure_backing.assert_called_once_with(
+            session, backing, reconfig_spec)
