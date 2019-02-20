@@ -14,34 +14,9 @@
 import mock
 import os
 
-from oslo_service import loopingcall
-
 from os_brick import exception
 from os_brick.initiator.connectors import aoe
 from os_brick.tests.initiator import test_connector
-
-
-class FakeFixedIntervalLoopingCall(object):
-    def __init__(self, f=None, *args, **kw):
-        self.args = args
-        self.kw = kw
-        self.f = f
-        self._stop = False
-
-    def stop(self):
-        self._stop = True
-
-    def wait(self):
-        return self
-
-    def start(self, interval, initial_delay=None):
-        while not self._stop:
-            try:
-                self.f(*self.args, **self.kw)
-            except loopingcall.LoopingCallDone:
-                return self
-            except Exception:
-                raise
 
 
 class AoEConnectorTestCase(test_connector.ConnectorTestCase):
@@ -52,8 +27,6 @@ class AoEConnectorTestCase(test_connector.ConnectorTestCase):
         self.connector = aoe.AoEConnector('sudo')
         self.connection_properties = {'target_shelf': 'fake_shelf',
                                       'target_lun': 'fake_lun'}
-        self.mock_object(loopingcall, 'FixedIntervalLoopingCall',
-                         FakeFixedIntervalLoopingCall)
 
     def test_get_search_path(self):
         expected = "/dev/etherd"
