@@ -140,8 +140,8 @@ class WindowsFCConnector(win_conn_base.BaseWindowsConnector):
         for node_name in hba_mappings:
             target_mappings = self._fc_utils.get_fc_target_mappings(node_name)
             for mapping in target_mappings:
-                if (mapping['port_name'] in target_wwpns
-                        and mapping['lun'] == target_lun):
+                if (mapping['port_name'] in target_wwpns and
+                        mapping['lun'] == target_lun):
                     volume_mappings.append(mapping)
 
         return volume_mappings
