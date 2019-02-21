@@ -32,8 +32,8 @@ from os_brick import utils
 
 LOG = logging.getLogger(__name__)
 
-MULTIPATH_ERROR_REGEX = re.compile("\w{3} \d+ \d\d:\d\d:\d\d \|.*$")
-MULTIPATH_WWID_REGEX = re.compile("\((?P<wwid>.+)\)")
+MULTIPATH_ERROR_REGEX = re.compile(r"\w{3} \d+ \d\d:\d\d:\d\d \|.*$")
+MULTIPATH_WWID_REGEX = re.compile(r"\((?P<wwid>.+)\)")
 MULTIPATH_DEVICE_ACTIONS = ['unchanged:', 'reject:', 'reload:',
                             'switchpg:', 'rename:', 'create:',
                             'resize:']

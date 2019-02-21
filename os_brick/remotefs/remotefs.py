@@ -158,7 +158,7 @@ class RemoteFsClient(executor.Executor):
     def _check_nfs_options(self):
         """Checks and prepares nfs mount type options."""
         self._nfs_mount_type_opts = {'nfs': self._mount_options}
-        nfs_vers_opt_patterns = ['^nfsvers', '^vers', '^v[\d]']
+        nfs_vers_opt_patterns = ['^nfsvers', '^vers', r'^v[\d]']
         for opt in nfs_vers_opt_patterns:
             if self._option_exists(self._mount_options, opt):
                 return
@@ -246,7 +246,7 @@ class VZStorageRemoteFSClient(RemoteFsClient):
 
     def _do_mount(self, mount_type, vz_share, mount_path,
                   mount_options=None, flags=None):
-        m = re.search("(?:(\S+):\/)?([a-zA-Z0-9_-]+)(?::(\S+))?", vz_share)
+        m = re.search(r"(?:(\S+):\/)?([a-zA-Z0-9_-]+)(?::(\S+))?", vz_share)
         if not m:
             msg = (_("Invalid Virtuozzo Storage share specification: %r."
                      "Must be: [MDS1[,MDS2],...:/]<CLUSTER NAME>[:PASSWORD].")

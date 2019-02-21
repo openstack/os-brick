@@ -24,8 +24,8 @@ import re
 
 
 DEVICE_SCAN_ATTEMPTS_DEFAULT = 3
-MULTIPATH_ERROR_REGEX = re.compile("\w{3} \d+ \d\d:\d\d:\d\d \|.*$")
-MULTIPATH_PATH_CHECK_REGEX = re.compile("\s+\d+:\d+:\d+:\d+\s+")
+MULTIPATH_ERROR_REGEX = re.compile(r"\w{3} \d+ \d\d:\d\d:\d\d \|.*$")
+MULTIPATH_PATH_CHECK_REGEX = re.compile(r"\s+\d+:\d+:\d+:\d+\s+")
 
 PLATFORM_ALL = 'ALL'
 PLATFORM_x86 = 'X86'
