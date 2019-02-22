@@ -55,7 +55,6 @@ connector_list = [
     'os_brick.initiator.connectors.drbd.DRBDConnector',
     'os_brick.initiator.connectors.huawei.HuaweiStorHyperConnector',
     'os_brick.initiator.connectors.hgst.HGSTConnector',
-    'os_brick.initiator.connectors.scaleio.ScaleIOConnector',
     'os_brick.initiator.connectors.disco.DISCOConnector',
     'os_brick.initiator.connectors.vmware.VmdkConnector',
     'os_brick.initiator.windows.base.BaseWindowsConnector',
@@ -65,7 +64,15 @@ connector_list = [
     'os_brick.initiator.connectors.vrtshyperscale.HyperScaleConnector',
     'os_brick.initiator.connectors.storpool.StorPoolConnector',
     'os_brick.initiator.connectors.nvme.NVMeConnector',
+    'os_brick.initiator.connectors.vxflexos.VxFlexOsConnector'
 ]
+
+
+# protocol_mapping is used for protocol renames
+# place old protocol name in dict key and new protocol name in value
+protocol_mapping = {
+    initiator.SCALEIO: initiator.VXFLEXOS
+}
 
 # Mappings used to determine who to construct in the factory
 _connector_mapping_linux = {
@@ -100,8 +107,6 @@ _connector_mapping_linux = {
         'os_brick.initiator.connectors.hgst.HGSTConnector',
     initiator.RBD:
         'os_brick.initiator.connectors.rbd.RBDConnector',
-    initiator.SCALEIO:
-        'os_brick.initiator.connectors.scaleio.ScaleIOConnector',
     initiator.DISCO:
         'os_brick.initiator.connectors.disco.DISCOConnector',
     initiator.SHEEPDOG:
@@ -118,6 +123,8 @@ _connector_mapping_linux = {
         'os_brick.initiator.connectors.nvme.NVMeConnector',
     initiator.NVMEOF:
         'os_brick.initiator.connectors.nvme.NVMeConnector',
+    initiator.VXFLEXOS:
+        'os_brick.initiator.connectors.vxflexos.VxFlexOsConnector',
 }
 
 # Mapping for the S390X platform
@@ -276,6 +283,15 @@ class InitiatorConnector(object):
         LOG.debug("Factory for %(protocol)s on %(arch)s",
                   {'protocol': protocol, 'arch': arch})
         protocol = protocol.upper()
+
+        if protocol in protocol_mapping:
+            _protocol = protocol
+            protocol = protocol_mapping[_protocol]
+            LOG.warning("Protocol %(old_name)s is deprecated and "
+                        "will be removed in future release, "
+                        "use %(new_name)s protocol instead",
+                        {'old_name': _protocol,
+                         'new_name': protocol})
 
         # set any special kwargs needed by connectors
         if protocol in (initiator.NFS, initiator.GLUSTERFS,

@@ -1,0 +1,14 @@
+---
+
+upgrade:
+  - |
+    Dell EMC ScaleIO has been rebranded to VxFlex OS.
+    To follow this changes "scaleio" protocol renamed to "vxflexos",
+    "ScaleIOConnector" class renamed to "VxFlexOsConnector".
+    Old names will continue to work but will be removed in the Train
+    release.
+
+deprecations:
+  - |
+    The "scaleio" protocol was renamed and is deprecated now, it will
+    be removed in the Train release. New protocol name is "vxflexos".
