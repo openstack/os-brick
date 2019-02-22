@@ -123,6 +123,9 @@ class RBDConnectorTestCase(test_connector.ConnectorTestCase):
             self.assertEqual(
                 conn._check_or_get_keyring_contents(keyring, 'cluster',
                                                     'user'), keyring_data)
+            self.assertEqual(
+                conn._check_or_get_keyring_contents(keyring, 'cluster',
+                                                    None), '')
 
     def test_keyring_raise_error(self):
         conn = rbd.RBDConnector(None)
