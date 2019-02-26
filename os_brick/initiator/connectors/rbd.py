@@ -71,11 +71,14 @@ class RBDConnector(base.BaseLinuxConnector):
 
     def _check_or_get_keyring_contents(self, keyring, cluster_name, user):
         try:
-            if keyring is None and user:
-                keyring_path = ("/etc/ceph/%s.client.%s.keyring" %
-                                (cluster_name, user))
-                with open(keyring_path, 'r') as keyring_file:
-                    keyring = keyring_file.read()
+            if keyring is None:
+                if user:
+                    keyring_path = ("/etc/ceph/%s.client.%s.keyring" %
+                                    (cluster_name, user))
+                    with open(keyring_path, 'r') as keyring_file:
+                        keyring = keyring_file.read()
+                else:
+                    keyring = ''
             return keyring
         except IOError:
             msg = (_("Keyring path %s is not readable.") % (keyring_path))
