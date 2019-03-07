@@ -61,7 +61,7 @@ class NVMeConnector(base.BaseLinuxConnector):
                 LOG.debug("Unable to locate dmidecode. For Cinder RSD Backend,"
                           " please make sure it is installed: %s", e)
                 out = ""
-        return out
+        return out.strip()
 
     @staticmethod
     def get_connector_properties(root_helper, *args, **kwargs):

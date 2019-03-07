@@ -41,6 +41,14 @@ class NVMeConnectorTestCase(test_connector.ConnectorTestCase):
                                             execute=self.fake_execute)
 
     @mock.patch.object(nvme.NVMeConnector, '_execute')
+    def test_get_sysuuid_without_newline(self, mock_execute):
+        mock_execute.return_value = (
+            "9126E942-396D-11E7-B0B7-A81E84C186D1\n", "")
+        uuid = self.connector._get_system_uuid()
+        expected_uuid = "9126E942-396D-11E7-B0B7-A81E84C186D1"
+        self.assertEqual(expected_uuid, uuid)
+
+    @mock.patch.object(nvme.NVMeConnector, '_execute')
     def test_get_connector_properties_without_sysuuid(
             self, mock_execute):
         mock_execute.side_effect = putils.ProcessExecutionError
