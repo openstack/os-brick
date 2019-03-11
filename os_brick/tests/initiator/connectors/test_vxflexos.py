@@ -171,6 +171,13 @@ class VxFlexOsConnectorTestCase(test_connector.ConnectorTestCase):
         """Successful connect to volume"""
         self.connector.connect_volume(self.fake_connection_properties)
 
+    def test_connect_volume_without_volume_id(self):
+        """Successful connect to volume without a Volume Id"""
+        connection_properties = dict(self.fake_connection_properties)
+        connection_properties.pop('vxflexos_volume_id')
+
+        self.connector.connect_volume(connection_properties)
+
     def test_connect_with_bandwidth_limit(self):
         """Successful connect to volume with bandwidth limit"""
         self.fake_connection_properties['bandwidthLimit'] = '500'
@@ -190,6 +197,13 @@ class VxFlexOsConnectorTestCase(test_connector.ConnectorTestCase):
     def test_disconnect_volume(self):
         """Successful disconnect from volume"""
         self.connector.disconnect_volume(self.fake_connection_properties, None)
+
+    def test_disconnect_volume_without_volume_id(self):
+        """Successful disconnect from volume without a Volume Id"""
+        connection_properties = dict(self.fake_connection_properties)
+        connection_properties.pop('vxflexos_volume_id')
+
+        self.connector.disconnect_volume(connection_properties, None)
 
     def test_error_id(self):
         """Fail to connect with bad volume name"""
