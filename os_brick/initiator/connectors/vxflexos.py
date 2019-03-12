@@ -276,7 +276,7 @@ class VxFlexOsConnector(base.BaseLinuxConnector):
         try:
             self.volume_id = connection_properties['vxflexos_volume_id']
         except KeyError:
-            self.volume_id = connection_properties.get('scaleIO_volume_id')
+            self.volume_id = connection_properties['scaleIO_volume_id']
             d_option_used = True
         if d_option_used:
             LOG.warning("Deprecated: scaleIO_volname and scaleIO_volume_id "
