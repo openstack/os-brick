@@ -154,16 +154,6 @@ class LinuxSCSI(executor.Executor):
             return udev_wwid
         return ''
 
-    def verify_sysfs_wwns(self, device_names, expected_wwn):
-        """Verify that all specified devices have the expected WWN."""
-
-        for device_name in device_names:
-            found_wwn = self.get_sysfs_wwn([device_name])
-            if found_wwn != expected_wwn:
-                raise exception.VolumeDeviceValidationFailed(
-                    device=device_name, expected=expected_wwn,
-                    found=found_wwn)
-
     def get_scsi_wwn(self, path):
         """Read the WWN from page 0x83 value for a SCSI device."""
 

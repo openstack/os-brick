@@ -153,11 +153,6 @@ class InvalidIOHandleObject(BrickException):
                 'type %(actual_type)s.')
 
 
-class VolumeDeviceValidationFailed(BrickException):
-    message = _("Volume device validation failed for device %(device)s "
-                "(expected %(expected)s, found %(found)s.")
-
-
 class VolumeEncryptionNotSupported(Invalid):
     message = _("Volume encryption is not supported for %(volume_type)s "
                 "volume %(volume_id)s.")
