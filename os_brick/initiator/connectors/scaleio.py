@@ -33,8 +33,8 @@ DEVICE_SCAN_ATTEMPTS_DEFAULT = 3
 synchronized = lockutils.synchronized_with_prefix('os-brick-')
 
 
-class VxFlexOsConnector(base.BaseLinuxConnector):
-    """Class implements the connector driver for VxFlex OS."""
+class ScaleIOConnector(base.BaseLinuxConnector):
+    """Class implements the connector driver for ScaleIO."""
 
     OK_STATUS_CODE = 200
     VOLUME_NOT_MAPPED_ERROR = 84
@@ -45,7 +45,7 @@ class VxFlexOsConnector(base.BaseLinuxConnector):
     def __init__(self, root_helper, driver=None,
                  device_scan_attempts=initiator.DEVICE_SCAN_ATTEMPTS_DEFAULT,
                  *args, **kwargs):
-        super(VxFlexOsConnector, self).__init__(
+        super(ScaleIOConnector, self).__init__(
             root_helper,
             driver=driver,
             device_scan_attempts=device_scan_attempts,
@@ -66,7 +66,7 @@ class VxFlexOsConnector(base.BaseLinuxConnector):
 
     @staticmethod
     def get_connector_properties(root_helper, *args, **kwargs):
-        """The VxFlex OS connector properties."""
+        """The ScaleIO connector properties."""
         return {}
 
     def get_search_path(self):
@@ -106,7 +106,7 @@ class VxFlexOsConnector(base.BaseLinuxConnector):
     def _wait_for_volume_path(self, path):
         if not os.path.isdir(path):
             msg = (
-                _("VxFlex OS volume %(volume_id)s not found at "
+                _("ScaleIO volume %(volume_id)s not found at "
                   "expected path.") % {'volume_id': self.volume_id}
             )
 
@@ -127,7 +127,7 @@ class VxFlexOsConnector(base.BaseLinuxConnector):
                 break
 
         if not disk_filename:
-            msg = (_("VxFlex OS volume %(volume_id)s not found.") %
+            msg = (_("ScaleIO volume %(volume_id)s not found.") %
                    {'volume_id': self.volume_id})
             LOG.debug(msg)
             raise exception.BrickException(message=msg)
@@ -145,7 +145,7 @@ class VxFlexOsConnector(base.BaseLinuxConnector):
             }
         )
 
-        LOG.info("VxFlex OS get client id by ip request: %(request)s",
+        LOG.info("ScaleIO get client id by ip request: %(request)s",
                  {'request': request})
 
         r = requests.get(
@@ -168,7 +168,7 @@ class VxFlexOsConnector(base.BaseLinuxConnector):
             LOG.error(msg)
             raise exception.BrickException(message=msg)
 
-        LOG.info("VxFlex os sdc id is %(sdc_id)s.",
+        LOG.info("ScaleIO sdc id is %(sdc_id)s.",
                  {'sdc_id': sdc_id})
         return sdc_id
 
@@ -191,7 +191,7 @@ class VxFlexOsConnector(base.BaseLinuxConnector):
         )
 
         LOG.info(
-            "VxFlex OS get volume id by name request: %(request)s",
+            "ScaleIO get volume id by name request: %(request)s",
             {'request': request}
         )
 
@@ -219,7 +219,7 @@ class VxFlexOsConnector(base.BaseLinuxConnector):
             LOG.error(msg)
             raise exception.BrickException(message=msg)
 
-        LOG.info("VxFlex OS volume id is %(volume_id)s.",
+        LOG.info("ScaleIO volume id is %(volume_id)s.",
                  {'volume_id': volume_id})
         return volume_id
 
@@ -266,24 +266,8 @@ class VxFlexOsConnector(base.BaseLinuxConnector):
 
     def get_config(self, connection_properties):
         self.local_sdc_ip = connection_properties['hostIP']
-        # handle deprecated parameters for backward compatibility
-        d_option_used = False
-        try:
-            self.volume_name = connection_properties['vxflexos_volname']
-        except KeyError:
-            self.volume_name = connection_properties['scaleIO_volname']
-            d_option_used = True
-        try:
-            self.volume_id = connection_properties['vxflexos_volume_id']
-        except KeyError:
-            self.volume_id = connection_properties['scaleIO_volume_id']
-            d_option_used = True
-        if d_option_used:
-            LOG.warning("Deprecated: scaleIO_volname and scaleIO_volume_id "
-                        "connector parameters are deprecated and will be "
-                        "removed in future release, use "
-                        "vxflexos_volname and vxflexos_volume_id parameters "
-                        "instead.")
+        self.volume_name = connection_properties['scaleIO_volname']
+        self.volume_id = connection_properties['scaleIO_volume_id']
         self.server_ip = connection_properties['serverIP']
         self.server_port = connection_properties['serverPort']
         self.server_username = connection_properties['serverUsername']
@@ -296,7 +280,7 @@ class VxFlexOsConnector(base.BaseLinuxConnector):
         return device_info
 
     @utils.trace
-    @lockutils.synchronized('vxflexos', 'vxflexos-')
+    @lockutils.synchronized('scaleio', 'scaleio-')
     def connect_volume(self, connection_properties):
         """Connect the volume.
 
@@ -308,7 +292,7 @@ class VxFlexOsConnector(base.BaseLinuxConnector):
         device_info = self.get_config(connection_properties)
         LOG.debug(
             _(
-                "VxFlex OS Volume name: %(volume_name)s, SDC IP: %(sdc_ip)s, "
+                "scaleIO Volume name: %(volume_name)s, SDC IP: %(sdc_ip)s, "
                 "REST Server IP: %(server_ip)s, "
                 "REST Server username: %(username)s, "
                 "iops limit:%(iops_limit)s, "
@@ -324,7 +308,7 @@ class VxFlexOsConnector(base.BaseLinuxConnector):
             }
         )
 
-        LOG.info("VxFlex OS sdc query guid command: %(cmd)s",
+        LOG.info("ScaleIO sdc query guid command: %(cmd)s",
                  {'cmd': self.GET_GUID_CMD})
 
         try:
@@ -427,10 +411,10 @@ class VxFlexOsConnector(base.BaseLinuxConnector):
         return device_info
 
     @utils.trace
-    @lockutils.synchronized('vxflexos', 'vxflexos-')
+    @lockutils.synchronized('scaleio', 'scaleio-')
     def disconnect_volume(self, connection_properties, device_info,
                           force=False, ignore_errors=False):
-        """Disconnect the VxFlex OS volume.
+        """Disconnect the ScaleIO volume.
 
         :param connection_properties: The dictionary that describes all
                                       of the target volume attributes.
@@ -441,17 +425,17 @@ class VxFlexOsConnector(base.BaseLinuxConnector):
         self.get_config(connection_properties)
         self.volume_id = self.volume_id or self._get_volume_id()
         LOG.info(
-            "VxFlex OS disconnect volume in VxFlex OS brick volume driver."
+            "ScaleIO disconnect volume in ScaleIO brick volume driver."
         )
 
         LOG.debug(
-            _("VxFlex OS Volume name: %(volume_name)s, SDC IP: %(sdc_ip)s, "
+            _("ScaleIO Volume name: %(volume_name)s, SDC IP: %(sdc_ip)s, "
               "REST Server IP: %(server_ip)s"),
             {'volume_name': self.volume_name, 'sdc_ip': self.local_sdc_ip,
              'server_ip': self.server_ip}
         )
 
-        LOG.info("VxFlex OS sdc query guid command: %(cmd)s",
+        LOG.info("ScaleIO sdc query guid command: %(cmd)s",
                  {'cmd': self.GET_GUID_CMD})
 
         try:
@@ -509,10 +493,10 @@ class VxFlexOsConnector(base.BaseLinuxConnector):
         """Update the local kernel's size information.
 
         Try and update the local kernel's size information
-        for a VxFlex OS volume.
+        for a ScaleIO volume.
         """
 
-        LOG.info("VxFlex OS rescan volumes: %(cmd)s",
+        LOG.info("ScaleIO rescan volumes: %(cmd)s",
                  {'cmd': self.RESCAN_VOLS_CMD})
 
         try:
@@ -532,7 +516,7 @@ class VxFlexOsConnector(base.BaseLinuxConnector):
             return self.get_device_size(volume_paths[0])
 
         # if we got here, the volume is not mapped
-        msg = (_("Error extending VxFlex OS volume"))
+        msg = (_("Error extending ScaleIO volume"))
         LOG.error(msg)
         raise exception.BrickException(message=msg)
 
