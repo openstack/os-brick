@@ -267,7 +267,10 @@ class ScaleIOConnector(base.BaseLinuxConnector):
     def get_config(self, connection_properties):
         self.local_sdc_ip = connection_properties['hostIP']
         self.volume_name = connection_properties['scaleIO_volname']
-        self.volume_id = connection_properties['scaleIO_volume_id']
+        # instances which were created before Newton release don't have
+        # 'scaleIO_volume_id' property, in such cases connector will resolve
+        # volume_id from volname
+        self.volume_id = connection_properties.get('scaleIO_volume_id')
         self.server_ip = connection_properties['serverIP']
         self.server_port = connection_properties['serverPort']
         self.server_username = connection_properties['serverUsername']
