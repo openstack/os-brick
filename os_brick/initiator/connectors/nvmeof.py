@@ -30,14 +30,14 @@ LOG = logging.getLogger(__name__)
 synchronized = lockutils.synchronized_with_prefix('os-brick-')
 
 
-class NVMeConnector(base.BaseLinuxConnector):
+class NVMeOFConnector(base.BaseLinuxConnector):
 
     """Connector class to attach/detach NVMe over fabric volumes."""
 
     def __init__(self, root_helper, driver=None, use_multipath=False,
                  device_scan_attempts=DEVICE_SCAN_ATTEMPTS_DEFAULT,
                  *args, **kwargs):
-        super(NVMeConnector, self).__init__(
+        super(NVMeOFConnector, self).__init__(
             root_helper,
             driver=driver,
             device_scan_attempts=device_scan_attempts,
@@ -66,9 +66,9 @@ class NVMeConnector(base.BaseLinuxConnector):
 
     @staticmethod
     def get_connector_properties(root_helper, *args, **kwargs):
-        """The NVMe connector properties."""
-        nvme = NVMeConnector(root_helper=root_helper,
-                             execute=kwargs.get('execute'))
+        """The NVMeOF connector properties."""
+        nvme = NVMeOFConnector(root_helper=root_helper,
+                               execute=kwargs.get('execute'))
         uuid = nvme._get_system_uuid()
         if uuid:
             return {"system uuid": uuid}

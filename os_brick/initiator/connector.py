@@ -64,7 +64,7 @@ connector_list = [
     'os_brick.initiator.windows.smbfs.WindowsSMBFSConnector',
     'os_brick.initiator.connectors.vrtshyperscale.HyperScaleConnector',
     'os_brick.initiator.connectors.storpool.StorPoolConnector',
-    'os_brick.initiator.connectors.nvme.NVMeConnector',
+    'os_brick.initiator.connectors.nvmeof.NVMeOFConnector',
 ]
 
 # Mappings used to determine who to construct in the factory
@@ -114,10 +114,12 @@ _connector_mapping_linux = {
         'os_brick.initiator.connectors.vrtshyperscale.HyperScaleConnector',
     initiator.STORPOOL:
         'os_brick.initiator.connectors.storpool.StorPoolConnector',
+    # Leave this in for backwards compatibility
+    # This isn't an NVME connector, but NVME Over Fabrics
     initiator.NVME:
-        'os_brick.initiator.connectors.nvme.NVMeConnector',
+        'os_brick.initiator.connectors.nvmeof.NVMeOFConnector',
     initiator.NVMEOF:
-        'os_brick.initiator.connectors.nvme.NVMeConnector',
+        'os_brick.initiator.connectors.nvmeof.NVMeOFConnector',
 }
 
 # Mapping for the S390X platform
