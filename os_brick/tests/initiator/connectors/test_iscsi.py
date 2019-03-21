@@ -70,12 +70,17 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
                     ('tcp:', 'session3', 'ip3:port3', '1', 'tgt3')]
         self.assertListEqual(expected, res)
 
-    @mock.patch.object(iscsi.ISCSIConnector, '_run_iscsi_session',
-                       return_value=(None, 'error'))
-    def test_get_iscsi_sessions_full_error(self, sessions_mock):
+    @mock.patch.object(iscsi.ISCSIConnector, '_run_iscsi_session')
+    def test_get_iscsi_sessions_full_stderr(self, sessions_mock):
+        iscsiadm_result = ('tcp: [session1] ip1:port1,1 tgt1 (non-flash)\n'
+                           'tcp: [session2] ip2:port2,-1 tgt2 (non-flash)\n'
+                           'tcp: [session3] ip3:port3,1 tgt3\n')
+        sessions_mock.return_value = (iscsiadm_result, 'error')
         res = self.connector._get_iscsi_sessions_full()
-        self.assertEqual([], res)
-        sessions_mock.assert_called()
+        expected = [('tcp:', 'session1', 'ip1:port1', '1', 'tgt1'),
+                    ('tcp:', 'session2', 'ip2:port2', '-1', 'tgt2'),
+                    ('tcp:', 'session3', 'ip3:port3', '1', 'tgt3')]
+        self.assertListEqual(expected, res)
 
     @mock.patch.object(iscsi.ISCSIConnector, '_get_iscsi_sessions_full')
     def test_get_iscsi_sessions(self, sessions_mock):
