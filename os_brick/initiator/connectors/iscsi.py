@@ -348,7 +348,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         ip, port = connection_properties['target_portal'].rsplit(':', 1)
         # NOTE(geguileo): I don't know if IPv6 will be reported with []
         # or not, so we'll make them optional.
-        ip = ip.replace('[', '\[?').replace(']', '\]?')
+        ip = ip.replace('[', r'\[?').replace(']', r'\]?')
         out = self._run_iscsiadm_bare(['-m', 'discoverydb',
                                        '-o', 'show',
                                        '-P', 1])[0] or ""
