@@ -7,9 +7,9 @@ Team and repository tags
 
 .. Change things from this point on
 
-===============================
+=====
 brick
-===============================
+=====
 
 .. image:: https://img.shields.io/pypi/v/os-brick.svg
     :target: https://pypi.org/project/os-brick/
@@ -46,5 +46,5 @@ Release notes for the project can be found at:
   https://docs.openstack.org/releasenotes/os-brick
 
 * License: Apache License, Version 2.0
-* Source: https://git.openstack.org/cgit/openstack/os-brick
+* Source: https://opendev.org/openstack/os-brick
 * Bugs: https://bugs.launchpad.net/os-brick
