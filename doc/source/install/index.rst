@@ -19,6 +19,6 @@ Or, from source:
 
 .. code-block:: shell
 
-   $ git clone https://github.com/openstack/os-brick
+   $ git clone https://opendev.org/openstack/os-brick
    $ cd os-brick
    $ python setup.py install
