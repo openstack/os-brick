@@ -1,0 +1,10 @@
+---
+fixes:
+  - |
+    Always check if we are dealing with a single WWNN Fibre Channel target,
+    even when we receive an initiator_target_map.
+    This allows us to exclude unconnected HBAs from our scan for storage arrays
+    that automatically connect all target ports (due to their architecture and
+    design) even if the Cinder driver returns the initiator_target_map,
+    provided the target has a single WWNN.
+    Excluding these HBAs prevents undesired volumes from being connected.
