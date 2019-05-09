@@ -89,28 +89,28 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
         if ports:
             hbas = [hba for hba in hbas if hba['port_name'] in ports]
             LOG.debug('Using initiator target map to exclude HBAs')
-            process = [(hba, get_ctsl(hba, connection_properties))
-                       for hba in hbas]
 
-        # With no target map we'll check if target implements single WWNN for
-        # all ports, if it does we only use HBAs connected (info was found),
-        # otherwise we are forced to blindly scan all HBAs.
-        else:
-            with_info = []
-            no_info = []
+        # Check if target implements single WWNN for all ports, if it does we
+        # only use HBAs connected (info was found), otherwise we are forced to
+        # blindly scan all HBAs.  We also do this when we have
+        # initiator_target_map, because some drivers return all HBAs but they
+        # implement single WWNN and we avoid adding unrelated LUNs this way
+        # (LP bug#1765000).
+        with_info = []
+        no_info = []
 
-            for hba in hbas:
-                ctls = get_ctsl(hba, connection_properties)
-                found_info = True
-                for hba_channel, target_id, target_lun in ctls:
-                    if hba_channel == '-' or target_id == '-':
-                        found_info = False
-                target_list = with_info if found_info else no_info
-                target_list.append((hba, ctls))
+        for hba in hbas:
+            ctls = get_ctsl(hba, connection_properties)
+            found_info = True
+            for hba_channel, target_id, target_lun in ctls:
+                if hba_channel == '-' or target_id == '-':
+                    found_info = False
+            target_list = with_info if found_info else no_info
+            target_list.append((hba, ctls))
 
-            process = with_info or no_info
-            msg = "implements" if with_info else "doesn't implement"
-            LOG.debug('FC target %s single WWNN for all ports.', msg)
+        process = with_info or no_info
+        msg = "implements" if with_info else "doesn't implement"
+        LOG.debug('FC target %s single WWNN for all ports.', msg)
 
         for hba, ctls in process:
             for hba_channel, target_id, target_lun in ctls:
