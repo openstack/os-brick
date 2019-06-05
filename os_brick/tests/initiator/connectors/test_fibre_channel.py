@@ -664,3 +664,65 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
                                            was_multipath)
         remove_mock.assert_called_once_with('/dev/sda',
                                             flush=flush_mock.return_value)
+
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'find_multipath_device')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'wait_for_rw')
+    @mock.patch.object(os.path, 'exists', return_value=True)
+    @mock.patch.object(os.path, 'realpath', return_value='/dev/sdb')
+    @mock.patch.object(linuxfc.LinuxFibreChannel, 'get_fc_hbas')
+    @mock.patch.object(linuxfc.LinuxFibreChannel, 'get_fc_hbas_info')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_scsi_wwn')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_device_info')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'find_multipath_device_path')
+    @mock.patch.object(base.BaseLinuxConnector, 'check_valid_device')
+    def test_disconnect_volume(self, check_valid_device_mock,
+                               find_mp_device_path_mock,
+                               get_device_info_mock,
+                               get_scsi_wwn_mock,
+                               get_fc_hbas_info_mock,
+                               get_fc_hbas_mock,
+                               realpath_mock,
+                               exists_mock,
+                               wait_for_rw_mock,
+                               find_mp_dev_mock):
+
+        check_valid_device_mock.return_value = True
+        self.connector.use_multipath = True
+        get_fc_hbas_mock.side_effect = self.fake_get_fc_hbas
+        get_fc_hbas_info_mock.side_effect = self.fake_get_fc_hbas_info
+
+        wwn = '1234567890'
+        multipath_devname = '/dev/md-1'
+        devices = {"device": multipath_devname,
+                   "id": wwn,
+                   "devices": [{'device': '/dev/sdb',
+                                'address': '1:0:0:1',
+                                'host': 1, 'channel': 0,
+                                'id': 0, 'lun': 1},
+                               {'device': '/dev/sdc',
+                                'address': '1:0:0:2',
+                                'host': 1, 'channel': 0,
+                                'id': 0, 'lun': 1}]}
+        get_device_info_mock.side_effect = devices['devices']
+        get_scsi_wwn_mock.return_value = wwn
+
+        location = '10.0.2.15:3260'
+        name = 'volume-00000001'
+        vol = {'id': 1, 'name': name}
+        initiator_wwn = ['1234567890123456', '1234567890123457']
+
+        find_mp_device_path_mock.return_value = '/dev/mapper/mpatha'
+        find_mp_dev_mock.return_value = {"device": "dm-3",
+                                         "id": wwn,
+                                         "name": "mpatha"}
+
+        connection_info = self.fibrechan_connection(vol, location,
+                                                    initiator_wwn)
+        self.connector.disconnect_volume(connection_info['data'],
+                                         devices['devices'][0])
+        expected_commands = [
+            'multipath -f ' + find_mp_device_path_mock.return_value,
+            'tee -a /sys/block/sdb/device/delete',
+            'tee -a /sys/block/sdc/device/delete',
+        ]
+        self.assertEqual(expected_commands, self.cmds)
