@@ -336,7 +336,8 @@ class FibreChannelConnector(base.BaseLinuxConnector):
         mpath_path = None
         for path in volume_paths:
             real_path = self._linuxscsi.get_name_from_path(path)
-            if self.use_multipath and not mpath_path:
+            if (self.use_multipath and not mpath_path and
+                    self.check_valid_device(path)):
                 wwn = self._linuxscsi.get_scsi_wwn(path)
                 mpath_path = self._linuxscsi.find_multipath_device_path(wwn)
                 if mpath_path:
