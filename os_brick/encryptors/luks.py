@@ -61,15 +61,29 @@ class LuksEncryptor(cryptsetup.CryptsetupEncryptor):
             *args, **kwargs)
 
     def _format_volume(self, passphrase, **kwargs):
-        """Creates a LUKS header on the volume.
+        """Creates a LUKS v1 header on the volume.
 
         :param passphrase: the passphrase used to access the volume
+        """
+        self._format_luks_volume(passphrase, 'luks1', **kwargs)
+
+    def _format_luks_volume(self, passphrase, version, **kwargs):
+        """Creates a LUKS header of a given version or type on the volume.
+
+        :param passphrase: the passphrase used to access the volume
+        :param version: the LUKS version or type to use: one of `luks`,
+                        `luks1`, or `luks2`.  Be aware that `luks` gives you
+                        the default LUKS format preferred by the particular
+                        cryptsetup being used (depends on version and compile
+                        time parameters), which could be either LUKS1 or
+                        LUKS2, so it's better to be specific about what you
+                        want here
         """
         LOG.debug("formatting encrypted volume %s", self.dev_path)
 
         # NOTE(joel-coffman): cryptsetup will strip trailing newlines from
         # input specified on stdin unless --key-file=- is specified.
-        cmd = ["cryptsetup", "--batch-mode", "luksFormat", "--type", "luks1",
+        cmd = ["cryptsetup", "--batch-mode", "luksFormat", "--type", version,
                "--key-file=-"]
 
         cipher = kwargs.get("cipher", None)
@@ -191,3 +205,28 @@ class LuksEncryptor(cryptsetup.CryptsetupEncryptor):
                       run_as_root=True, check_exit_code=[0, 4],
                       root_helper=self._root_helper,
                       attempts=3)
+
+
+class Luks2Encryptor(LuksEncryptor):
+    """A VolumeEncryptor based on LUKS v2.
+
+    This VolumeEncryptor uses dm-crypt to encrypt the specified volume.
+    """
+    def __init__(self, root_helper,
+                 connection_info,
+                 keymgr,
+                 execute=None,
+                 *args, **kwargs):
+        super(Luks2Encryptor, self).__init__(
+            root_helper=root_helper,
+            connection_info=connection_info,
+            keymgr=keymgr,
+            execute=execute,
+            *args, **kwargs)
+
+    def _format_volume(self, passphrase, **kwargs):
+        """Creates a LUKS v2 header on the volume.
+
+        :param passphrase: the passphrase used to access the volume
+        """
+        self._format_luks_volume(passphrase, 'luks2', **kwargs)

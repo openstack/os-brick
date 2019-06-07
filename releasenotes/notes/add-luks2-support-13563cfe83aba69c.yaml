@@ -1,0 +1,6 @@
+---
+features:
+  - |
+    A LUKS2 encryptor has been introduced providing support for this latest
+    version of the Linux Unified Key Setup disk encryption format. This
+    requires ``cryptsetup`` version 2.0.0 or greater.

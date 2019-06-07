@@ -22,10 +22,12 @@ from oslo_utils import strutils
 LOG = logging.getLogger(__name__)
 
 LUKS = "luks"
+LUKS2 = "luks2"
 PLAIN = "plain"
 
 FORMAT_TO_FRONTEND_ENCRYPTOR_MAP = {
     LUKS: 'os_brick.encryptors.luks.LuksEncryptor',
+    LUKS2: 'os_brick.encryptors.luks.Luks2Encryptor',
     PLAIN: 'os_brick.encryptors.cryptsetup.CryptsetupEncryptor'
 }
 
