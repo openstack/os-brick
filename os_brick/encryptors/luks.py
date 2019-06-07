@@ -69,7 +69,8 @@ class LuksEncryptor(cryptsetup.CryptsetupEncryptor):
 
         # NOTE(joel-coffman): cryptsetup will strip trailing newlines from
         # input specified on stdin unless --key-file=- is specified.
-        cmd = ["cryptsetup", "--batch-mode", "luksFormat", "--key-file=-"]
+        cmd = ["cryptsetup", "--batch-mode", "luksFormat", "--type", "luks",
+               "--key-file=-"]
 
         cipher = kwargs.get("cipher", None)
         if cipher is not None:
