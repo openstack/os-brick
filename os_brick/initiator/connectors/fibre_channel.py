@@ -176,7 +176,8 @@ class FibreChannelConnector(base.BaseLinuxConnector):
 
         volume_paths = self.get_volume_paths(connection_properties)
         if volume_paths:
-            return self._linuxscsi.extend_volume(volume_paths)
+            return self._linuxscsi.extend_volume(
+                volume_paths, use_multipath=self.use_multipath)
         else:
             LOG.warning("Couldn't find any volume paths on the host to "
                         "extend volume for %(props)s",
