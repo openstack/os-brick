@@ -38,7 +38,8 @@ class NVMeConnectorTestCase(test_connector.ConnectorTestCase):
     def setUp(self):
         super(NVMeConnectorTestCase, self).setUp()
         self.connector = nvme.NVMeConnector(None,
-                                            execute=self.fake_execute)
+                                            execute=self.fake_execute,
+                                            use_multipath=False)
 
     @mock.patch.object(nvme.NVMeConnector, '_execute')
     def test_get_sysuuid_without_newline(self, mock_execute):
@@ -284,9 +285,11 @@ class NVMeConnectorTestCase(test_connector.ConnectorTestCase):
                           self.connector.extend_volume,
                           connection_properties)
 
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'find_multipath_device_path')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'extend_volume')
     @mock.patch.object(nvme.NVMeConnector, 'get_volume_paths')
-    def test_extend_volume(self, mock_volume_paths, mock_scsi_extend):
+    def test_extend_volume(self, mock_volume_paths, mock_scsi_extend,
+                           mock_scsi_find_mpath):
         fake_new_size = 1024
         mock_volume_paths.return_value = ['/dev/vdx']
         mock_scsi_extend.return_value = fake_new_size
@@ -297,3 +300,4 @@ class NVMeConnectorTestCase(test_connector.ConnectorTestCase):
                                  'transport_type': 'rdma'}
         new_size = self.connector.extend_volume(connection_properties)
         self.assertEqual(fake_new_size, new_size)
+        mock_scsi_find_mpath.assert_not_called()
