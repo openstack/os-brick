@@ -97,7 +97,7 @@ class RemoteFsClient(executor.Executor):
         mount_path = self.get_mount_point(share)
 
         if mount_path in self._read_mounts():
-            LOG.info('Already mounted: %s', mount_path)
+            LOG.debug('Already mounted: %s', mount_path)
             return
 
         self._execute('mkdir', '-p', mount_path, check_exit_code=0)
@@ -122,7 +122,7 @@ class RemoteFsClient(executor.Executor):
                           run_as_root=True, check_exit_code=0)
         except processutils.ProcessExecutionError as exc:
             if 'already mounted' in exc.stderr:
-                LOG.info("Already mounted: %s", share)
+                LOG.debug("Already mounted: %s", share)
 
                 # The error message can say "busy or already mounted" when the
                 # share didn't actually mount, so look for it.
@@ -218,7 +218,7 @@ class ScalityRemoteFsClient(RemoteFsClient):
         same method signature for class inheritance purpose.
         """
         if self._mount_base in self._read_mounts():
-            LOG.info('Already mounted: %s', self._mount_base)
+            LOG.debug('Already mounted: %s', self._mount_base)
             return
         self._execute('mkdir', '-p', self._mount_base, check_exit_code=0)
         super(ScalityRemoteFsClient, self)._do_mount(
