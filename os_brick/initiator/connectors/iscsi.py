@@ -571,10 +571,12 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                 for __ in range(10):
                     wwn = self._linuxscsi.get_sysfs_wwn(found_devs)
                     if wwn:
-                        return self._get_connect_result(connection_properties,
-                                                        wwn, found_devs)
+                        break
                     time.sleep(1)
-                LOG.debug('Could not find the WWN for %s.', found_devs[0])
+                else:
+                    LOG.debug('Could not find the WWN for %s.', found_devs[0])
+                return self._get_connect_result(connection_properties,
+                                                wwn, found_devs)
 
             # If we failed we must cleanup the connection, as we could be
             # leaving the node entry if it's not being used by another device.
