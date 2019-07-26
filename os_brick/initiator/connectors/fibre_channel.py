@@ -255,9 +255,8 @@ class FibreChannelConnector(base.BaseLinuxConnector):
         # see if the new drive is part of a multipath
         # device.  If so, we'll use the multipath device.
         if self.use_multipath:
-            (device_path, multipath_id) = (super(
-                FibreChannelConnector, self)._discover_mpath_device(
-                device_wwn, connection_properties, self.device_name))
+            (device_path, multipath_id) = self._discover_mpath_device(
+                device_wwn, connection_properties, self.device_name)
             if multipath_id:
                 # only set the multipath_id if we found one
                 device_info['multipath_id'] = multipath_id
