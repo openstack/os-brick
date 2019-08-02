@@ -25,7 +25,6 @@ extensions = [
 master_doc = 'index'
 
 # General information about the project.
-project = u'os-brick'
 copyright = u'2015, OpenStack Foundation'
 
 # If true, '()' will be appended to :func: etc. cross-reference text.
@@ -43,10 +42,6 @@ pygments_style = 'sphinx'
 # The theme to use for HTML and HTML Help pages.  Major themes that come with
 # Sphinx are currently 'default' and 'sphinxdoc'.
 html_theme = 'openstackdocs'
-
-# If not '', a 'Last updated on:' timestamp is inserted at every page bottom,
-# using the given strftime format.
-html_last_updated_fmt = '%Y-%m-%d %H:%M'
 
 # -- Options for openstackdocstheme -------------------------------------------
 
