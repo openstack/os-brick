@@ -1665,8 +1665,8 @@ Setting up iSCSI targets: unused
         iqn1 = 'iqn.2010-10.org.openstack:%s' % name1
         iqn2 = 'iqn.2010-10.org.openstack:%s' % name2
         iqn3 = 'iqn.2010-10.org.openstack:%s' % name3
-        connection_properties = self.iscsi_connection(vol, [location], [iqn1])
-        recover_connection = self.iscsi_connection(vol, [location], [iqn2])
+        connection_properties = self.iscsi_connection(vol, [location], iqn1)
+        recover_connection = self.iscsi_connection(vol, [location], iqn2)
 
         node_startup1 = "manual"
         node_startup2 = "automatic"

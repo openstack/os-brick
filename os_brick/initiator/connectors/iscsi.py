@@ -1178,7 +1178,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                 # as discovering target.
                 # So target_iqn is updated, and other values aren't updated.
                 recover_connection = copy.deepcopy(connection_properties)
-                recover_connection['target_iqn'] = [iqn]
+                recover_connection['target_iqn'] = iqn
                 self._iscsiadm_update(recover_connection,
                                       "node.startup",
                                       old_node_startup)
