@@ -34,7 +34,6 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = u'OS-Brick Release Notes'
 copyright = u'2015, Cinder Developers'
 
 # Release notes are unversioned, so we don't need to set version and release
@@ -46,10 +45,6 @@ release = ''
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 html_theme = 'openstackdocs'
-
-# If not '', a 'Last updated on:' timestamp is inserted at every page bottom,
-# using the given strftime format.
-html_last_updated_fmt = '%Y-%m-%d %H:%M'
 
 # -- Options for openstackdocstheme -------------------------------------------
 
