@@ -46,9 +46,9 @@ class FibreChannelConnectorS390X(fibre_channel.FibreChannelConnector):
         self._linuxscsi.set_execute(execute)
         self._linuxfc.set_execute(execute)
 
-    def _get_host_devices(self, possible_devs, lun):
+    def _get_host_devices(self, possible_devs):
         host_devices = []
-        for pci_num, target_wwn in possible_devs:
+        for pci_num, target_wwn, lun in possible_devs:
             host_device = self._get_device_file_path(
                 pci_num,
                 target_wwn,
@@ -89,11 +89,10 @@ class FibreChannelConnectorS390X(fibre_channel.FibreChannelConnector):
 
     def _remove_devices(self, connection_properties, devices, device_info):
         hbas = self._linuxfc.get_fc_hbas_info()
-        ports = connection_properties['target_wwn']
-        possible_devs = self._get_possible_devices(hbas, ports)
-        lun = connection_properties.get('target_lun', 0)
-        target_lun = self._get_lun_string(lun)
-        for pci_num, target_wwn in possible_devs:
+        targets = connection_properties['targets']
+        possible_devs = self._get_possible_devices(hbas, targets)
+        for pci_num, target_wwn, lun in possible_devs:
+            target_lun = self._get_lun_string(lun)
             self._linuxfc.deconfigure_scsi_device(pci_num,
                                                   target_wwn,
                                                   target_lun)
