@@ -22,6 +22,7 @@ from os_brick.encryptors import base
 from os_brick import exception
 from oslo_concurrency import processutils
 from oslo_log import log as logging
+from oslo_log import versionutils
 
 LOG = logging.getLogger(__name__)
 
@@ -146,6 +147,15 @@ class CryptsetupEncryptor(base.VolumeEncryptor):
         instance is unaware of the underlying encryption due to modifying the
         original symbolic link to refer to the device mounted by dm-crypt.
         """
+        # TODO(lyarwood): Remove this encryptor and refactor the LUKS based
+        # encryptors in the U release.
+        versionutils.report_deprecated_feature(
+            LOG,
+            "The plain CryptsetupEncryptor is deprecated and will be removed "
+            "in a future release. Existing users are encouraged to retype "
+            "any existing volumes using this encryptor to the 'luks' "
+            "LuksEncryptor or 'luks2' Luks2Encryptor encryptors as soon as "
+            "possible.")
         key = self._get_key(context).get_encoded()
         passphrase = self._get_passphrase(key)
 

@@ -1,0 +1,7 @@
+---
+deprecations:
+  - |
+    The plain CryptsetupEncryptor is deprecated and will be removed in a future
+    release. Existing users are encouraged to retype any existing volumes using
+    this encryptor to the luks LuksEncryptor or luks2 Luks2Encryptor encryptors
+    as soon as possible
