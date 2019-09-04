@@ -15,7 +15,7 @@ import mock
 from oslo_concurrency import processutils as putils
 
 from os_brick import exception
-from os_brick.initiator.connectors import nvme
+from os_brick.initiator.connectors import nvmeof
 from os_brick.initiator import linuxscsi
 from os_brick.tests.initiator import test_connector
 
@@ -31,17 +31,17 @@ Node             SN                   Model                                  \
 """
 
 
-class NVMeConnectorTestCase(test_connector.ConnectorTestCase):
+class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
 
     """Test cases for NVMe initiator class."""
 
     def setUp(self):
-        super(NVMeConnectorTestCase, self).setUp()
-        self.connector = nvme.NVMeConnector(None,
-                                            execute=self.fake_execute,
-                                            use_multipath=False)
+        super(NVMeOFConnectorTestCase, self).setUp()
+        self.connector = nvmeof.NVMeOFConnector(None,
+                                                execute=self.fake_execute,
+                                                use_multipath=False)
 
-    @mock.patch.object(nvme.NVMeConnector, '_execute')
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_execute')
     def test_get_sysuuid_without_newline(self, mock_execute):
         mock_execute.return_value = (
             "9126E942-396D-11E7-B0B7-A81E84C186D1\n", "")
@@ -49,7 +49,7 @@ class NVMeConnectorTestCase(test_connector.ConnectorTestCase):
         expected_uuid = "9126E942-396D-11E7-B0B7-A81E84C186D1"
         self.assertEqual(expected_uuid, uuid)
 
-    @mock.patch.object(nvme.NVMeConnector, '_execute')
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_execute')
     def test_get_connector_properties_without_sysuuid(
             self, mock_execute):
         mock_execute.side_effect = putils.ProcessExecutionError
@@ -57,7 +57,7 @@ class NVMeConnectorTestCase(test_connector.ConnectorTestCase):
         expected_props = {}
         self.assertEqual(expected_props, props)
 
-    @mock.patch.object(nvme.NVMeConnector, '_get_system_uuid')
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_system_uuid')
     def test_get_connector_properties_with_sysuuid(
             self, mock_sysuuid):
         mock_sysuuid.return_value = "9126E942-396D-11E7-B0B7-A81E84C186D1"
@@ -66,24 +66,24 @@ class NVMeConnectorTestCase(test_connector.ConnectorTestCase):
             "system uuid": "9126E942-396D-11E7-B0B7-A81E84C186D1"}
         self.assertEqual(expected_props, props)
 
-    def _nvme_list_cmd(self, *args, **kwargs):
+    def _nvmeof_list_cmd(self, *args, **kwargs):
         return FAKE_NVME_LIST_OUTPUT, None
 
     def test__get_nvme_devices(self):
         expected = ['/dev/nvme0n1', '/dev/nvme11n12']
-        self.connector._execute = self._nvme_list_cmd
+        self.connector._execute = self._nvmeof_list_cmd
         actual = self.connector._get_nvme_devices()
         self.assertEqual(expected, actual)
 
-    @mock.patch.object(nvme.NVMeConnector, '_execute')
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_execute')
     @mock.patch('time.sleep')
     def test_get_nvme_devices_raise(self, mock_sleep, mock_execute):
         mock_execute.side_effect = putils.ProcessExecutionError
         self.assertRaises(exception.CommandExecutionFailed,
                           self.connector._get_nvme_devices)
 
-    @mock.patch.object(nvme.NVMeConnector, '_get_nvme_devices')
-    @mock.patch.object(nvme.NVMeConnector, '_execute')
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_devices')
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_execute')
     @mock.patch('time.sleep')
     def test_connect_volume(self, mock_sleep, mock_execute, mock_devices):
         connection_properties = {'target_portal': 'portal',
@@ -111,8 +111,8 @@ class NVMeConnectorTestCase(test_connector.ConnectorTestCase):
             root_helper=None,
             run_as_root=True)
 
-    @mock.patch.object(nvme.NVMeConnector, '_get_nvme_devices')
-    @mock.patch.object(nvme.NVMeConnector, '_execute')
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_devices')
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_execute')
     @mock.patch('time.sleep')
     def test_connect_volume_hostnqn(
             self, mock_sleep, mock_execute, mock_devices):
@@ -143,7 +143,7 @@ class NVMeConnectorTestCase(test_connector.ConnectorTestCase):
             root_helper=None,
             run_as_root=True)
 
-    @mock.patch.object(nvme.NVMeConnector, '_execute')
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_execute')
     @mock.patch('time.sleep')
     def test_connect_volume_raise(self, mock_sleep, mock_execute):
         connection_properties = {'target_portal': 'portal',
@@ -156,8 +156,8 @@ class NVMeConnectorTestCase(test_connector.ConnectorTestCase):
                           self.connector.connect_volume,
                           connection_properties)
 
-    @mock.patch.object(nvme.NVMeConnector, '_get_nvme_devices')
-    @mock.patch.object(nvme.NVMeConnector, '_execute')
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_devices')
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_execute')
     @mock.patch('time.sleep')
     def test_connect_volume_max_retry(
             self, mock_sleep, mock_execute, mock_devices):
@@ -173,8 +173,8 @@ class NVMeConnectorTestCase(test_connector.ConnectorTestCase):
                           self.connector.connect_volume,
                           connection_properties)
 
-    @mock.patch.object(nvme.NVMeConnector, '_get_nvme_devices')
-    @mock.patch.object(nvme.NVMeConnector, '_execute')
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_devices')
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_execute')
     @mock.patch('time.sleep')
     def test_connect_volume_nvmelist_retry_success(
             self, mock_sleep, mock_execute, mock_devices):
@@ -192,10 +192,10 @@ class NVMeConnectorTestCase(test_connector.ConnectorTestCase):
         self.assertEqual('/dev/nvme0n2', device_info['path'])
         self.assertEqual('block', device_info['type'])
 
-    @mock.patch.object(nvme.NVMeConnector, '_get_nvme_devices')
-    @mock.patch.object(nvme.NVMeConnector, '_execute')
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_devices')
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_execute')
     @mock.patch('time.sleep')
-    def test_connect_nvme_retry_success(
+    def test_connect_nvmeof_retry_success(
             self, mock_sleep, mock_execute, mock_devices):
         connection_properties = {'target_portal': 'portal',
                                  'target_port': 1,
@@ -214,8 +214,8 @@ class NVMeConnectorTestCase(test_connector.ConnectorTestCase):
         self.assertEqual('/dev/nvme0n2', device_info['path'])
         self.assertEqual('block', device_info['type'])
 
-    @mock.patch.object(nvme.NVMeConnector, '_get_nvme_devices')
-    @mock.patch.object(nvme.NVMeConnector, '_execute')
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_devices')
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_execute')
     @mock.patch('time.sleep')
     def test_disconnect_volume_nova(
             self, mock_sleep, mock_execute, mock_devices):
@@ -233,8 +233,8 @@ class NVMeConnectorTestCase(test_connector.ConnectorTestCase):
             root_helper=None,
             run_as_root=True)
 
-    @mock.patch.object(nvme.NVMeConnector, '_get_nvme_devices')
-    @mock.patch.object(nvme.NVMeConnector, '_execute')
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_devices')
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_execute')
     @mock.patch('time.sleep')
     def test_disconnect_volume_cinder(
             self, mock_sleep, mock_execute, mock_devices):
@@ -254,8 +254,8 @@ class NVMeConnectorTestCase(test_connector.ConnectorTestCase):
             root_helper=None,
             run_as_root=True)
 
-    @mock.patch.object(nvme.NVMeConnector, '_get_nvme_devices')
-    @mock.patch.object(nvme.NVMeConnector, '_execute')
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_devices')
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_execute')
     @mock.patch('time.sleep')
     def test_disconnect_volume_raise(
             self, mock_sleep, mock_execute, mock_devices):
@@ -272,7 +272,7 @@ class NVMeConnectorTestCase(test_connector.ConnectorTestCase):
                           connection_properties,
                           None)
 
-    @mock.patch.object(nvme.NVMeConnector, 'get_volume_paths')
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'get_volume_paths')
     def test_extend_volume_no_path(self, mock_volume_paths):
         mock_volume_paths.return_value = []
         connection_properties = {'target_portal': 'portal',
@@ -287,7 +287,7 @@ class NVMeConnectorTestCase(test_connector.ConnectorTestCase):
 
     @mock.patch.object(linuxscsi.LinuxSCSI, 'find_multipath_device_path')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'extend_volume')
-    @mock.patch.object(nvme.NVMeConnector, 'get_volume_paths')
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'get_volume_paths')
     def test_extend_volume(self, mock_volume_paths, mock_scsi_extend,
                            mock_scsi_find_mpath):
         fake_new_size = 1024

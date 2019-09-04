@@ -24,7 +24,7 @@ from os_brick.initiator import connector
 from os_brick.initiator.connectors import base
 from os_brick.initiator.connectors import fake
 from os_brick.initiator.connectors import iscsi
-from os_brick.initiator.connectors import nvme
+from os_brick.initiator.connectors import nvmeof
 from os_brick.initiator import linuxfc
 from os_brick.privileged import rootwrap as priv_rootwrap
 from os_brick.tests import base as test_base
@@ -41,7 +41,7 @@ class ZeroIntervalLoopingCall(loopingcall.FixedIntervalLoopingCall):
 
 class ConnectorUtilsTestCase(test_base.TestCase):
 
-    @mock.patch.object(nvme.NVMeConnector, '_get_system_uuid',
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_system_uuid',
                        return_value=None)
     @mock.patch.object(iscsi.ISCSIConnector, 'get_initiator',
                        return_value='fakeinitiator')
