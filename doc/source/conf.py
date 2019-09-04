@@ -61,7 +61,7 @@ bug_tag = ''
 # (source start file, target name, title, author, documentclass
 # [howto/manual]).
 latex_documents = [
-    ('index', 'os-brick.tex', u'OS Brick Documentation',
+    ('index', 'doc-os-brick.tex', u'OS Brick Documentation',
      'Cinder Contributors', 'manual')
 ]
 
