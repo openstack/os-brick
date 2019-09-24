@@ -190,19 +190,20 @@ class NVMeOFConnector(base.BaseLinuxConnector):
             device_path = connection_properties['device_path'] or ''
         current_nvme_devices = self._get_nvme_devices()
         if device_path not in current_nvme_devices:
-            LOG.warning("Trying to disconnect device %(device_path)s that "
-                        "is not connected.", {'device_path': device_path})
+            LOG.warning("Trying to disconnect device %(device_path)s with "
+                        "subnqn %(conn_nqn)s that is not connected.",
+                        {'device_path': device_path, 'conn_nqn': conn_nqn})
             return
 
         LOG.debug(
-            "Trying to disconnect from NVMe nqn "
-            "%(conn_nqn)s with device_path %(device_path)s",
-            {'conn_nqn': conn_nqn, 'device_path': device_path})
+            "Trying to disconnect from device %(device_path)s with "
+            "subnqn %(conn_nqn)s",
+            {'device_path': device_path, 'conn_nqn': conn_nqn})
         cmd = [
             'nvme',
             'disconnect',
-            '-d',
-            device_path]
+            '-n',
+            conn_nqn]
         try:
             self._execute(
                 *cmd,
