@@ -19,18 +19,30 @@ import six
 from six.moves import urllib
 
 from oslo_concurrency import lockutils
-from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
 
 from os_brick import exception
 from os_brick.i18n import _
 from os_brick import initiator
 from os_brick.initiator.connectors import base
+from os_brick.privileged import scaleio as priv_scaleio
 from os_brick import utils
 
 LOG = logging.getLogger(__name__)
 DEVICE_SCAN_ATTEMPTS_DEFAULT = 3
 synchronized = lockutils.synchronized_with_prefix('os-brick-')
+
+
+def io(_type, nr):
+    """Implementation of _IO macro from <sys/ioctl.h>."""
+
+    return ioc(0x0, _type, nr, 0)
+
+
+def ioc(direction, _type, nr, size):
+    """Implementation of _IOC macro from <sys/ioctl.h>."""
+
+    return direction | (size & 0x1fff) << 16 | ord(_type) << 8 | nr
 
 
 class ScaleIOConnector(base.BaseLinuxConnector):
@@ -39,8 +51,8 @@ class ScaleIOConnector(base.BaseLinuxConnector):
     OK_STATUS_CODE = 200
     VOLUME_NOT_MAPPED_ERROR = 84
     VOLUME_ALREADY_MAPPED_ERROR = 81
-    GET_GUID_CMD = ['/opt/emc/scaleio/sdc/bin/drv_cfg', '--query_guid']
-    RESCAN_VOLS_CMD = ['/opt/emc/scaleio/sdc/bin/drv_cfg', '--rescan']
+    GET_GUID_OP_CODE = io('a', 14)
+    RESCAN_VOLS_OP_CODE = io('a', 10)
 
     def __init__(self, root_helper, driver=None,
                  device_scan_attempts=initiator.DEVICE_SCAN_ATTEMPTS_DEFAULT,
@@ -63,6 +75,26 @@ class ScaleIOConnector(base.BaseLinuxConnector):
         self.volume_path = None
         self.iops_limit = None
         self.bandwidth_limit = None
+
+    def _get_guid(self):
+        try:
+            guid = priv_scaleio.get_guid(self.GET_GUID_OP_CODE)
+            LOG.info("Current sdc guid: %s", guid)
+            return guid
+        except (IOError, OSError, ValueError) as e:
+            msg = _("Error querying sdc guid: %s") % e
+            LOG.error(msg)
+            raise exception.BrickException(message=msg)
+
+    def _rescan_vols(self):
+        LOG.info("ScaleIO rescan volumes")
+
+        try:
+            priv_scaleio.rescan_vols(self.RESCAN_VOLS_OP_CODE)
+        except (IOError, OSError) as e:
+            msg = _("Error querying volumes: %s") % e
+            LOG.error(msg)
+            raise exception.BrickException(message=msg)
 
     @staticmethod
     def get_connector_properties(root_helper, *args, **kwargs):
@@ -298,7 +330,7 @@ class ScaleIOConnector(base.BaseLinuxConnector):
                 "scaleIO Volume name: %(volume_name)s, SDC IP: %(sdc_ip)s, "
                 "REST Server IP: %(server_ip)s, "
                 "REST Server username: %(username)s, "
-                "iops limit:%(iops_limit)s, "
+                "iops limit: %(iops_limit)s, "
                 "bandwidth limit: %(bandwidth_limit)s."
             ), {
                 'volume_name': self.volume_name,
@@ -311,24 +343,7 @@ class ScaleIOConnector(base.BaseLinuxConnector):
             }
         )
 
-        LOG.info("ScaleIO sdc query guid command: %(cmd)s",
-                 {'cmd': self.GET_GUID_CMD})
-
-        try:
-            (out, err) = self._execute(*self.GET_GUID_CMD, run_as_root=True,
-                                       root_helper=self._root_helper)
-
-            LOG.info("Map volume %(cmd)s: stdout=%(out)s "
-                     "stderr=%(err)s",
-                     {'cmd': self.GET_GUID_CMD, 'out': out, 'err': err})
-
-        except putils.ProcessExecutionError as e:
-            msg = (_("Error querying sdc guid: %(err)s") % {'err': e.stderr})
-            LOG.error(msg)
-            raise exception.BrickException(message=msg)
-
-        guid = out
-        LOG.info("Current sdc guid: %(guid)s", {'guid': guid})
+        guid = self._get_guid()
         params = {'guid': guid, 'allowMultipleMappings': 'TRUE'}
         self.volume_id = self.volume_id or self._get_volume_id()
 
@@ -424,6 +439,10 @@ class ScaleIOConnector(base.BaseLinuxConnector):
         :type connection_properties: dict
         :param device_info: historical difference, but same as connection_props
         :type device_info: dict
+        :type force: bool
+        :param ignore_errors: When force is True, this will decide whether to
+                              ignore errors or raise an exception once finished
+                              the operation.  Default is False.
         """
         self.get_config(connection_properties)
         self.volume_id = self.volume_id or self._get_volume_id()
@@ -438,25 +457,7 @@ class ScaleIOConnector(base.BaseLinuxConnector):
              'server_ip': self.server_ip}
         )
 
-        LOG.info("ScaleIO sdc query guid command: %(cmd)s",
-                 {'cmd': self.GET_GUID_CMD})
-
-        try:
-            (out, err) = self._execute(*self.GET_GUID_CMD, run_as_root=True,
-                                       root_helper=self._root_helper)
-            LOG.info(
-                "Unmap volume %(cmd)s: stdout=%(out)s stderr=%(err)s",
-                {'cmd': self.GET_GUID_CMD, 'out': out, 'err': err}
-            )
-
-        except putils.ProcessExecutionError as e:
-            msg = _("Error querying sdc guid: %(err)s") % {'err': e.stderr}
-            LOG.error(msg)
-            raise exception.BrickException(message=msg)
-
-        guid = out
-        LOG.info("Current sdc guid: %(guid)s", {'guid': guid})
-
+        guid = self._get_guid()
         params = {'guid': guid}
         headers = {'content-type': 'application/json'}
         request = (
@@ -499,21 +500,7 @@ class ScaleIOConnector(base.BaseLinuxConnector):
         for a ScaleIO volume.
         """
 
-        LOG.info("ScaleIO rescan volumes: %(cmd)s",
-                 {'cmd': self.RESCAN_VOLS_CMD})
-
-        try:
-            (out, err) = self._execute(*self.RESCAN_VOLS_CMD, run_as_root=True,
-                                       root_helper=self._root_helper)
-
-            LOG.debug("Rescan volumes %(cmd)s: stdout=%(out)s",
-                      {'cmd': self.RESCAN_VOLS_CMD, 'out': out})
-
-        except putils.ProcessExecutionError as e:
-            msg = (_("Error querying volumes: %(err)s") % {'err': e.stderr})
-            LOG.error(msg)
-            raise exception.BrickException(message=msg)
-
+        self._rescan_vols()
         volume_paths = self.get_volume_paths(connection_properties)
         if volume_paths:
             return self.get_device_size(volume_paths[0])
