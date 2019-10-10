@@ -17,8 +17,6 @@ import os
 import requests
 import six
 
-from oslo_concurrency import processutils as putils
-
 from os_brick import exception
 from os_brick.initiator.connectors import scaleio
 from os_brick.tests.initiator import test_connector
@@ -35,7 +33,7 @@ class ScaleIOConnectorTestCase(test_connector.ConnectorTestCase):
     }
 
     # Fake SDC GUID
-    fake_guid = 'FAKE_GUID'
+    fake_guid = '013a5304-d053-4b30-a34f-ee3ad983236d'
 
     def setUp(self):
         super(ScaleIOConnectorTestCase, self).setUp()
@@ -84,6 +82,12 @@ class ScaleIOConnectorTestCase(test_connector.ConnectorTestCase):
         self.mock_object(os, 'listdir',
                          return_value=["emc-vol-{}".format(self.vol['id'])])
 
+        # Patch scaleio privileged calls
+        self.get_guid_mock = self.mock_object(scaleio.priv_scaleio, 'get_guid',
+                                              return_value=self.fake_guid)
+        self.rescan_vols_mock = self.mock_object(scaleio.priv_scaleio,
+                                                 'rescan_vols')
+
         # The actual ScaleIO connector
         self.connector = scaleio.ScaleIOConnector(
             'sudo', execute=self.fake_execute)
@@ -116,14 +120,6 @@ class ScaleIOConnectorTestCase(test_connector.ConnectorTestCase):
             self._content = self._content.encode('utf-8')
             return super(ScaleIOConnectorTestCase.MockHTTPSResponse,
                          self).text
-
-    def fake_execute(self, *cmd, **kwargs):
-        """Fakes the rootwrap call"""
-        return self.fake_guid, None
-
-    def fake_missing_execute(self, *cmd, **kwargs):
-        """Error when trying to call rootwrap drv_cfg"""
-        raise putils.ProcessExecutionError("Test missing drv_cfg.")
 
     def handle_scaleio_request(self, url, *args, **kwargs):
         """Fake REST server"""
@@ -170,6 +166,8 @@ class ScaleIOConnectorTestCase(test_connector.ConnectorTestCase):
     def test_connect_volume(self):
         """Successful connect to volume"""
         self.connector.connect_volume(self.fake_connection_properties)
+        self.get_guid_mock.assert_called_once_with(
+            self.connector.GET_GUID_OP_CODE)
 
     def test_connect_volume_without_volume_id(self):
         """Successful connect to volume without a Volume Id"""
@@ -177,6 +175,8 @@ class ScaleIOConnectorTestCase(test_connector.ConnectorTestCase):
         connection_properties.pop('scaleIO_volume_id')
 
         self.connector.connect_volume(connection_properties)
+        self.get_guid_mock.assert_called_once_with(
+            self.connector.GET_GUID_OP_CODE)
 
     def test_connect_with_bandwidth_limit(self):
         """Successful connect to volume with bandwidth limit"""
@@ -197,6 +197,8 @@ class ScaleIOConnectorTestCase(test_connector.ConnectorTestCase):
     def test_disconnect_volume(self):
         """Successful disconnect from volume"""
         self.connector.disconnect_volume(self.fake_connection_properties, None)
+        self.get_guid_mock.assert_called_once_with(
+            self.connector.GET_GUID_OP_CODE)
 
     def test_disconnect_volume_without_volume_id(self):
         """Successful disconnect from volume without a Volume Id"""
@@ -204,6 +206,8 @@ class ScaleIOConnectorTestCase(test_connector.ConnectorTestCase):
         connection_properties.pop('scaleIO_volume_id')
 
         self.connector.disconnect_volume(connection_properties, None)
+        self.get_guid_mock.assert_called_once_with(
+            self.connector.GET_GUID_OP_CODE)
 
     def test_error_id(self):
         """Fail to connect with bad volume name"""
@@ -230,11 +234,6 @@ class ScaleIOConnectorTestCase(test_connector.ConnectorTestCase):
         self.mock_calls[self.action_format.format(
             'addMappedSdc')] = self.MockHTTPSResponse(
             dict(errorCode=401, message='bad login'), 401)
-        self.assertRaises(exception.BrickException, self.test_connect_volume)
-
-    def test_error_bad_drv_cfg(self):
-        """Fail to connect with missing rootwrap executable"""
-        self.connector.set_execute(self.fake_missing_execute)
         self.assertRaises(exception.BrickException, self.test_connect_volume)
 
     def test_error_map_volume(self):
@@ -294,3 +293,5 @@ class ScaleIOConnectorTestCase(test_connector.ConnectorTestCase):
             self.fake_connection_properties)
         self.assertEqual(extended_size,
                          mock_device_size.return_value)
+        self.rescan_vols_mock.assert_called_once_with(
+            self.connector.RESCAN_VOLS_OP_CODE)
