@@ -1,0 +1,6 @@
+---
+fixes:
+  - |
+    Fix an issue where SCSI LUN scans for FC were unnecessarily too broad.
+    Now OS-Brick will not use wildcards unless it doesn't find any target ports
+    in sysfs and the Cinder driver doesn't disable them.
