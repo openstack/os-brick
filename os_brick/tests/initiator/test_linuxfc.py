@@ -80,7 +80,7 @@ class LinuxFCTestCase(base.TestCase):
             del connection_properties['initiator_target_lun_map']
         return hbas, connection_properties
 
-    def test__get_hba_channel_scsi_target_single_wwpn(self):
+    def test__get_hba_channel_scsi_target_lun_single_wwpn(self):
         execute_results = ('/sys/class/fc_transport/target6:0:1/port_name\n',
                            '')
         hbas, con_props = self.__get_rescan_info()
@@ -88,15 +88,15 @@ class LinuxFCTestCase(base.TestCase):
         con_props['targets'] = con_props['targets'][0:1]
         with mock.patch.object(self.lfc, '_execute',
                                return_value=execute_results) as execute_mock:
-            res = self.lfc._get_hba_channel_scsi_target(hbas[0], con_props)
+            res = self.lfc._get_hba_channel_scsi_target_lun(hbas[0], con_props)
             execute_mock.assert_called_once_with(
                 'grep -Gil "514f0c50023f6c00" '
                 '/sys/class/fc_transport/target6:*/port_name',
                 shell=True)
-        expected = [['0', '1', 1]]
-        self.assertListEqual(expected, res)
+        expected = ([['0', '1', 1]], set())
+        self.assertEqual(expected, res)
 
-    def test__get_hba_channel_scsi_target_with_initiator_target_map(self):
+    def test__get_hba_channel_scsi_target_lun_with_initiator_target_map(self):
         execute_results = ('/sys/class/fc_transport/target6:0:1/port_name\n',
                            '')
         hbas, con_props = self.__get_rescan_info(zone_manager=True)
@@ -105,15 +105,16 @@ class LinuxFCTestCase(base.TestCase):
         hbas[0]['port_name'] = '50014380186af83e'
         with mock.patch.object(self.lfc, '_execute',
                                return_value=execute_results) as execute_mock:
-            res = self.lfc._get_hba_channel_scsi_target(hbas[0], con_props)
+            res = self.lfc._get_hba_channel_scsi_target_lun(hbas[0], con_props)
             execute_mock.assert_called_once_with(
                 'grep -Gil "514f0c50023f6c01" '
                 '/sys/class/fc_transport/target6:*/port_name',
                 shell=True)
-        expected = [['0', '1', 1]]
-        self.assertListEqual(expected, res)
+        expected = ([['0', '1', 1]], set())
+        self.assertEqual(expected, res)
 
-    def test__get_hba_channel_scsi_target_with_initiator_target_map_none(self):
+    def test__get_hba_channel_scsi_target_lun_with_initiator_target_map_none(
+            self):
         execute_results = ('/sys/class/fc_transport/target6:0:1/port_name\n',
                            '')
         hbas, con_props = self.__get_rescan_info()
@@ -123,15 +124,15 @@ class LinuxFCTestCase(base.TestCase):
         hbas[0]['port_name'] = '50014380186af83e'
         with mock.patch.object(self.lfc, '_execute',
                                return_value=execute_results) as execute_mock:
-            res = self.lfc._get_hba_channel_scsi_target(hbas[0], con_props)
+            res = self.lfc._get_hba_channel_scsi_target_lun(hbas[0], con_props)
             execute_mock.assert_called_once_with(
                 'grep -Gil "514f0c50023f6c00" '
                 '/sys/class/fc_transport/target6:*/port_name',
                 shell=True)
-        expected = [['0', '1', 1]]
-        self.assertListEqual(expected, res)
+        expected = ([['0', '1', 1]], set())
+        self.assertEqual(expected, res)
 
-    def test__get_hba_channel_scsi_target_multiple_wwpn(self):
+    def test__get_hba_channel_scsi_target_lun_multiple_wwpn(self):
         execute_results = [
             ['/sys/class/fc_transport/target6:0:1/port_name\n', ''],
             ['/sys/class/fc_transport/target6:0:2/port_name\n', ''],
@@ -139,7 +140,7 @@ class LinuxFCTestCase(base.TestCase):
         hbas, con_props = self.__get_rescan_info()
         with mock.patch.object(self.lfc, '_execute',
                                side_effect=execute_results) as execute_mock:
-            res = self.lfc._get_hba_channel_scsi_target(hbas[0], con_props)
+            res = self.lfc._get_hba_channel_scsi_target_lun(hbas[0], con_props)
             expected_cmds = [
                 mock.call('grep -Gil "514f0c50023f6c00" '
                           '/sys/class/fc_transport/target6:*/port_name',
@@ -150,10 +151,10 @@ class LinuxFCTestCase(base.TestCase):
             ]
             execute_mock.assert_has_calls(expected_cmds)
 
-        expected = [['0', '1', 1], ['0', '2', 1]]
-        self.assertListEqual(expected, res)
+        expected = ([['0', '1', 1], ['0', '2', 1]], set())
+        self.assertEqual(expected, res)
 
-    def test__get_hba_channel_scsi_target_multiple_wwpn_and_luns(self):
+    def test__get_hba_channel_scsi_target_lun_multiple_wwpn_and_luns(self):
         execute_results = [
             ['/sys/class/fc_transport/target6:0:1/port_name\n', ''],
             ['/sys/class/fc_transport/target6:0:2/port_name\n', ''],
@@ -166,7 +167,7 @@ class LinuxFCTestCase(base.TestCase):
         ]
         with mock.patch.object(self.lfc, '_execute',
                                side_effect=execute_results) as execute_mock:
-            res = self.lfc._get_hba_channel_scsi_target(hbas[0], con_props)
+            res = self.lfc._get_hba_channel_scsi_target_lun(hbas[0], con_props)
             expected_cmds = [
                 mock.call('grep -Gil "514f0c50023f6c00" '
                           '/sys/class/fc_transport/target6:*/port_name',
@@ -177,48 +178,71 @@ class LinuxFCTestCase(base.TestCase):
             ]
             execute_mock.assert_has_calls(expected_cmds)
 
-        expected = [['0', '1', 1], ['0', '2', 7]]
-        self.assertListEqual(expected, res)
+        expected = ([['0', '1', 1], ['0', '2', 7]], set())
+        self.assertEqual(expected, res)
 
-    def test__get_hba_channel_scsi_target_zone_manager(self):
+    def test__get_hba_channel_scsi_target_lun_zone_manager(self):
         execute_results = ('/sys/class/fc_transport/target6:0:1/port_name\n',
                            '')
         hbas, con_props = self.__get_rescan_info(zone_manager=True)
         with mock.patch.object(self.lfc, '_execute',
                                return_value=execute_results) as execute_mock:
-            res = self.lfc._get_hba_channel_scsi_target(hbas[0], con_props)
+            res = self.lfc._get_hba_channel_scsi_target_lun(hbas[0], con_props)
             execute_mock.assert_called_once_with(
                 'grep -Gil "514f0c50023f6c00" '
                 '/sys/class/fc_transport/target6:*/port_name',
                 shell=True)
-        expected = [['0', '1', 1]]
-        self.assertListEqual(expected, res)
+        expected = ([['0', '1', 1]], set())
+        self.assertEqual(expected, res)
 
-    def test__get_hba_channel_scsi_target_not_found(self):
+    def test__get_hba_channel_scsi_target_lun_not_found(self):
         hbas, con_props = self.__get_rescan_info(zone_manager=True)
         with mock.patch.object(self.lfc, '_execute',
                                return_value=('', '')) as execute_mock:
-            res = self.lfc._get_hba_channel_scsi_target(hbas[0], con_props)
+            res = self.lfc._get_hba_channel_scsi_target_lun(hbas[0], con_props)
             execute_mock.assert_called_once_with(
                 'grep -Gil "514f0c50023f6c00" '
                 '/sys/class/fc_transport/target6:*/port_name',
                 shell=True)
-        self.assertListEqual([], res)
+        self.assertEqual(([], set()), res)
 
-    def test__get_hba_channel_scsi_target_exception(self):
+    def test__get_hba_channel_scsi_target_lun_exception(self):
         hbas, con_props = self.__get_rescan_info(zone_manager=True)
         with mock.patch.object(self.lfc, '_execute',
                                side_effect=Exception) as execute_mock:
-            res = self.lfc._get_hba_channel_scsi_target(hbas[0], con_props)
+            res = self.lfc._get_hba_channel_scsi_target_lun(hbas[0], con_props)
             execute_mock.assert_called_once_with(
                 'grep -Gil "514f0c50023f6c00" '
                 '/sys/class/fc_transport/target6:*/port_name',
                 shell=True)
-        self.assertEqual(res, [['-', '-', 1]])
+        self.assertEqual(([], {1}), res)
+
+    def test__get_hba_channel_scsi_target_lun_some_exception(self):
+        execute_effects = [
+            ('/sys/class/fc_transport/target6:0:1/port_name\n', ''),
+            Exception()
+        ]
+        expected_cmds = [
+            mock.call('grep -Gil "514f0c50023f6c00" '
+                      '/sys/class/fc_transport/target6:*/port_name',
+                      shell=True),
+            mock.call('grep -Gil "514f0c50023f6c01" '
+                      '/sys/class/fc_transport/target6:*/port_name',
+                      shell=True),
+        ]
+        hbas, con_props = self.__get_rescan_info()
+
+        with mock.patch.object(self.lfc, '_execute',
+                               side_effect=execute_effects) as execute_mock:
+            res = self.lfc._get_hba_channel_scsi_target_lun(hbas[0], con_props)
+            execute_mock.assert_has_calls(expected_cmds)
+        expected = ([['0', '1', 1]], {1})
+        self.assertEqual(expected, res)
 
     def test_rescan_hosts_initiator_map(self):
         """Test FC rescan with initiator map and not every HBA connected."""
-        get_chan_results = [[['2', '3', 1], ['4', '5', 1]], [['6', '7', 1]]]
+        get_chan_results = [([['2', '3', 1], ['4', '5', 1]], set()),
+                            ([['6', '7', 1]], set())]
 
         hbas, con_props = self.__get_rescan_info(zone_manager=True)
 
@@ -232,7 +256,7 @@ class LinuxFCTestCase(base.TestCase):
 
         with mock.patch.object(self.lfc, '_execute',
                                return_value=None) as execute_mock, \
-            mock.patch.object(self.lfc, '_get_hba_channel_scsi_target',
+            mock.patch.object(self.lfc, '_get_hba_channel_scsi_target_lun',
                               side_effect=get_chan_results) as mock_get_chan:
 
             self.lfc.rescan_hosts(hbas, con_props)
@@ -257,9 +281,9 @@ class LinuxFCTestCase(base.TestCase):
     def test_rescan_hosts_single_wwnn(self):
         """Test FC rescan with no initiator map and single WWNN for ports."""
         get_chan_results = [
-            [['2', '3', 1], ['4', '5', 1]],
-            [['6', '7', 1]],
-            [['-', '-', 1]],
+            [[['2', '3', 1], ['4', '5', 1]], set()],
+            [[['6', '7', 1]], set()],
+            [[], {1}],
         ]
 
         hbas, con_props = self.__get_rescan_info(zone_manager=False)
@@ -273,7 +297,7 @@ class LinuxFCTestCase(base.TestCase):
 
         with mock.patch.object(self.lfc, '_execute',
                                return_value=None) as execute_mock, \
-            mock.patch.object(self.lfc, '_get_hba_channel_scsi_target',
+            mock.patch.object(self.lfc, '_get_hba_channel_scsi_target_lun',
                               side_effect=get_chan_results) as mock_get_chan:
 
             self.lfc.rescan_hosts(hbas, con_props)
@@ -297,13 +321,14 @@ class LinuxFCTestCase(base.TestCase):
 
     def test_rescan_hosts_initiator_map_single_wwnn(self):
         """Test FC rescan with initiator map and single WWNN."""
-        get_chan_results = [[['2', '3', 1], ['4', '5', 1]], [['-', '-', 1]]]
+        get_chan_results = [([['2', '3', 1], ['4', '5', 1]], set()),
+                            ([], {1})]
 
         hbas, con_props = self.__get_rescan_info(zone_manager=True)
 
         with mock.patch.object(self.lfc, '_execute',
                                return_value=None) as execute_mock, \
-            mock.patch.object(self.lfc, '_get_hba_channel_scsi_target',
+            mock.patch.object(self.lfc, '_get_hba_channel_scsi_target_lun',
                               side_effect=get_chan_results) as mock_get_chan:
 
             self.lfc.rescan_hosts(hbas, con_props)
@@ -322,14 +347,14 @@ class LinuxFCTestCase(base.TestCase):
                               mock.call(hbas[1], con_props)]
             mock_get_chan.assert_has_calls(expected_calls)
 
-    def test_rescan_hosts_wildcard(self):
-        """Test when we don't have initiator map or target is single WWNN."""
-        get_chan_results = [[['-', '-', 1]], [['-', '-', 1]]]
+    def test_rescan_hosts_port_not_found(self):
+        """Test when we don't find the target ports."""
+        get_chan_results = [([], {1}), ([], {1})]
         hbas, con_props = self.__get_rescan_info(zone_manager=True)
         # Remove the initiator map
         con_props.pop('initiator_target_map')
         con_props.pop('initiator_target_lun_map')
-        with mock.patch.object(self.lfc, '_get_hba_channel_scsi_target',
+        with mock.patch.object(self.lfc, '_get_hba_channel_scsi_target_lun',
                                side_effect=get_chan_results), \
             mock.patch.object(self.lfc, '_execute',
                               side_effect=None) as execute_mock:
@@ -343,9 +368,21 @@ class LinuxFCTestCase(base.TestCase):
                 mock.call('tee', '-a', '/sys/class/scsi_host/host7/scan',
                           process_input='- - 1',
                           root_helper=None, run_as_root=True)]
-
             execute_mock.assert_has_calls(expected_commands)
             self.assertEqual(len(expected_commands), execute_mock.call_count)
+
+    def test_rescan_hosts_port_not_found_driver_disables_wildcards(self):
+        """Test when we don't find the target ports but driver forces scan."""
+        get_chan_results = [([], {1}), ([], {1})]
+        hbas, con_props = self.__get_rescan_info(zone_manager=True)
+        con_props['enable_wildcard_scan'] = False
+        with mock.patch.object(self.lfc, '_get_hba_channel_scsi_target_lun',
+                               side_effect=get_chan_results), \
+            mock.patch.object(self.lfc, '_execute',
+                              side_effect=None) as execute_mock:
+
+            self.lfc.rescan_hosts(hbas, con_props)
+            execute_mock.assert_not_called()
 
     def test_get_fc_hbas_fail(self):
         def fake_exec1(a, b, c, d, run_as_root=True, root_helper='sudo'):
@@ -407,6 +444,7 @@ class LinuxFCTestCase(base.TestCase):
         wwnns = self.lfc.get_fc_wwpns()
         expected_wwnns = ['50014380242b9750', '50014380242b9752']
         self.assertEqual(expected_wwnns, wwnns)
+
 
 SYSTOOL_FC = """
 Class = "fc_host"
@@ -516,6 +554,7 @@ class LinuxFCS390XTestCase(LinuxFCTestCase):
         expected_commands = [('tee -a /sys/bus/ccw/drivers/zfcp/'
                               '0.0.2319/0x50014380242b9751/unit_remove')]
         self.assertEqual(expected_commands, self.cmds)
+
 
 SYSTOOL_FC_S390X = """
 Class = "fc_host"
