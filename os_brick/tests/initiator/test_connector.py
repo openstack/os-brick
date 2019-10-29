@@ -79,7 +79,7 @@ class ConnectorUtilsTestCase(test_base.TestCase):
 
         mock_list = []
         # Make sure every connector is called
-        for item in connector.connector_list:
+        for item in connector._get_connector_list():
             patched = mock.MagicMock()
             patched.platform = platform.machine()
             patched.os_type = sys.platform

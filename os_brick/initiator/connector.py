@@ -39,7 +39,14 @@ synchronized = lockutils.synchronized_with_prefix('os-brick-')
 
 # List of connectors to call when getting
 # the connector properties for a host
-connector_list = [
+windows_connector_list = [
+    'os_brick.initiator.windows.base.BaseWindowsConnector',
+    'os_brick.initiator.windows.iscsi.WindowsISCSIConnector',
+    'os_brick.initiator.windows.fibre_channel.WindowsFCConnector',
+    'os_brick.initiator.windows.smbfs.WindowsSMBFSConnector'
+]
+
+unix_connector_list = [
     'os_brick.initiator.connectors.base.BaseLinuxConnector',
     'os_brick.initiator.connectors.iscsi.ISCSIConnector',
     'os_brick.initiator.connectors.fibre_channel.FibreChannelConnector',
@@ -58,14 +65,18 @@ connector_list = [
     'os_brick.initiator.connectors.scaleio.ScaleIOConnector',
     'os_brick.initiator.connectors.disco.DISCOConnector',
     'os_brick.initiator.connectors.vmware.VmdkConnector',
-    'os_brick.initiator.windows.base.BaseWindowsConnector',
-    'os_brick.initiator.windows.iscsi.WindowsISCSIConnector',
-    'os_brick.initiator.windows.fibre_channel.WindowsFCConnector',
-    'os_brick.initiator.windows.smbfs.WindowsSMBFSConnector',
     'os_brick.initiator.connectors.vrtshyperscale.HyperScaleConnector',
     'os_brick.initiator.connectors.storpool.StorPoolConnector',
     'os_brick.initiator.connectors.nvme.NVMeConnector',
 ]
+
+
+def _get_connector_list():
+    if sys.platform != 'win32':
+        return unix_connector_list
+    else:
+        return windows_connector_list
+
 
 # Mappings used to determine who to construct in the factory
 _connector_mapping_linux = {
@@ -180,9 +191,24 @@ _connector_mapping_windows = {
 # Create aliases to the old names until 2.0.0
 # TODO(smcginnis) Remove this lookup once unit test code is updated to
 # point to the correct location
-for item in connector_list:
-    _name = item.split('.')[-1]
-    globals()[_name] = importutils.import_class(item)
+def _set_aliases():
+    conn_list = _get_connector_list()
+    # TODO(lpetrut): Cinder is explicitly trying to use those two
+    # connectors. We should drop this once we fix Cinder and
+    # get passed the backwards compatibility period.
+    if sys.platform == 'win32':
+        conn_list += [
+            'os_brick.initiator.connectors.iscsi.ISCSIConnector',
+            ('os_brick.initiator.connectors.fibre_channel.'
+             'FibreChannelConnector'),
+        ]
+
+    for item in conn_list:
+        _name = item.split('.')[-1]
+        globals()[_name] = importutils.import_class(item)
+
+
+_set_aliases()
 
 
 @utils.trace
@@ -218,7 +244,7 @@ def get_connector_properties(root_helper, my_ip, multipath, enforce_multipath,
     props['ip'] = my_ip
     props['host'] = host if host else socket.gethostname()
 
-    for item in connector_list:
+    for item in _get_connector_list():
         connector = importutils.import_class(item)
 
         if (utils.platform_matches(props['platform'], connector.platform) and
