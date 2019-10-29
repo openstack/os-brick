@@ -55,7 +55,7 @@ def _ensure_loaded(connector_list):
 
 def get_connectors():
     """Get a list of all connectors."""
-    classes = _ensure_loaded(connector.connector_list)
+    classes = _ensure_loaded(connector._get_connector_list())
     return [DriverInfo(x) for x in classes]
 
 
