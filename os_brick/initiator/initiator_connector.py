@@ -86,13 +86,12 @@ class InitiatorConnector(executor.Executor):
              'access_mode': 'rw',
         }}
 
-        An example for fibre_channel:
+        An example for fibre_channel with single lun:
 
         {'driver_volume_type': 'fibre_channel',
          'data': {
-            'initiator_target_map': {'100010604b010459': ['21230002AC00383D'],
-                                     '100010604b01045d': ['21230002AC00383D']
-                                    },
+            'initiator_target_map': {'100010604b010459': ['20210002AC00383D'],
+                                     '100010604b01045d': ['20220002AC00383D']},
             'target_discovered': True,
             'encrypted': False,
             'qos_specs': None,
@@ -104,6 +103,31 @@ class InitiatorConnector(executor.Executor):
                 ],
          }}
 
+        An example for fibre_channel target_wwns and with different LUNs and
+        all host ports mapped to target ports:
+
+        {'driver_volume_type': 'fibre_channel',
+         'data': {
+            'initiator_target_map': {
+                '100010604b010459': ['20210002AC00383D', '20220002AC00383D'],
+                '100010604b01045d': ['20210002AC00383D', '20220002AC00383D']
+                },
+            'target_discovered': True,
+            'encrypted': False,
+            'qos_specs': None,
+            'target_luns': [1, 2],
+            'access_mode': 'rw',
+            'target_wwns': ['20210002AC00383D', '20220002AC00383D'],
+         }}
+
+         For FC the dictionary could also present the enable_wildcard_scan key
+         with a boolean value (defaults to True) in case a driver doesn't want
+         OS-Brick to use a SCSI scan with wildcards when the FC initiator on
+         the host doesn't find any target port.
+
+         This is useful for drivers that know that sysfs gets populated
+         whenever there's a connection between the host's HBA and the storage
+         array's target ports.
 
         :param connection_properties: The dictionary that describes all
                                       of the target volume attributes.
