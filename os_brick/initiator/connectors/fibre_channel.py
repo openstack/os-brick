@@ -72,6 +72,8 @@ class FibreChannelConnector(base.BaseLinuxConnector):
         return '/dev/disk/by-path'
 
     def _add_targets_to_connection_properties(self, connection_properties):
+        LOG.debug('Adding targets to connection properties receives: %s',
+                  connection_properties)
         target_wwn = connection_properties.get('target_wwn')
         target_wwns = connection_properties.get('target_wwns')
         if target_wwns:
@@ -105,9 +107,7 @@ class FibreChannelConnector(base.BaseLinuxConnector):
             targets = list(zip(wwns, luns))
         elif len(luns) == 1 and len(wwns) > 1:
             # For the case of multiple wwns, but a single lun (old path)
-            targets = []
-            for wwn in wwns:
-                targets.append((wwn, luns[0]))
+            targets = [(wwn, luns[0]) for wwn in wwns]
         else:
             # Something is wrong, this shouldn't happen.
             msg = _("Unable to find potential volume paths for FC device "
@@ -117,12 +117,10 @@ class FibreChannelConnector(base.BaseLinuxConnector):
             raise exception.VolumePathsNotFound(msg)
 
         connection_properties['targets'] = targets
+        wwpn_lun_map = {wwpn: lun for wwpn, lun in targets}
 
-        wwpn_lun_map = dict()
-        for wwpn, lun in targets:
-            wwpn_lun_map[wwpn] = lun
-
-        # If there is an initiator_target_map we can update it too
+        # If there is an initiator_target_map we can update it too and generate
+        # the initiator_target_lun_map from it
         if connection_properties.get('initiator_target_map') is not None:
             # Convert it to lower case
             itmap = connection_properties['initiator_target_map']
@@ -130,17 +128,24 @@ class FibreChannelConnector(base.BaseLinuxConnector):
                      for k, v in itmap.items()}
             connection_properties['initiator_target_map'] = itmap
 
-            new_itmap = dict()
-            for init_wwpn in itmap:
-                target_wwpns = itmap[init_wwpn]
-                init_targets = []
-                for target_wwpn in target_wwpns:
-                    if target_wwpn in wwpn_lun_map:
-                        init_targets.append((target_wwpn,
-                                             wwpn_lun_map[target_wwpn]))
-                new_itmap[init_wwpn] = init_targets
-            connection_properties['initiator_target_lun_map'] = new_itmap
+            itmaplun = dict()
+            for init_wwpn, target_wwpns in itmap.items():
+                itmaplun[init_wwpn] = [(target_wwpn, wwpn_lun_map[target_wwpn])
+                                       for target_wwpn in target_wwpns
+                                       if target_wwpn in wwpn_lun_map]
 
+                # We added the if in the previous list comprehension in case
+                # drivers return targets in the map that are not reported in
+                # target_wwn or target_wwns, but we warn about it.
+                if len(itmaplun[init_wwpn]) != len(itmap[init_wwpn]):
+                    unknown = set(itmap[init_wwpn])
+                    unknown.difference_update(itmaplun[init_wwpn])
+                    LOG.warning('Driver returned an unknown targets in the '
+                                'initiator mapping %s', ', '.join(unknown))
+            connection_properties['initiator_target_lun_map'] = itmaplun
+
+        LOG.debug('Adding targets to connection properties returns: %s',
+                  connection_properties)
         return connection_properties
 
     def _get_possible_volume_paths(self, connection_properties, hbas):
