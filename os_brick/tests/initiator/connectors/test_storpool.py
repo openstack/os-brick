@@ -85,7 +85,7 @@ class StorPoolConnectorTestCase(test_connector.ConnectorTestCase):
             self.assertEqual(cmd[1], '--getsize64')
             self.assertEqual(cmd[2], '/dev/storpool/' +
                              self.volumeName(self.fakeProp['volume']))
-            return (str(self.fakeSize), None)
+            return (str(self.fakeSize) + '\n', None)
         raise Exception("Unrecognized command passed to " +
                         type(self).__name__ + ".execute(): " +
                         str.join(", ", map(lambda s: "'" + s + "'", cmd)))
