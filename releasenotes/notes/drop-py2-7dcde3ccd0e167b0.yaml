@@ -1,0 +1,6 @@
+---
+upgrade:
+  - |
+    Python 2.7 support has been dropped. Beginning with os-brick
+    release 3.0.0, the minimum version of Python supported by
+    os-brick is Python 3.6.
