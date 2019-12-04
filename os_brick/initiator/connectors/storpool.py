@@ -16,6 +16,8 @@
 from __future__ import absolute_import
 
 import os
+import time
+
 import six
 
 from oslo_log import log as logging
@@ -212,11 +214,27 @@ class StorPoolConnector(base.BaseLinuxConnector):
         # should have picked up the change already, so it is enough to query
         # the actual disk device to see if its size is correct.
         #
-        # TODO(pp): query the API to see if this is really the case
         volume_id = connection_properties.get('volume', None)
         if volume_id is None:
             raise exception.BrickException(
                 'Invalid StorPool connection data, no volume ID specified.')
+
+        # Get the expected (new) size from the StorPool API
         volume = self._attach.volumeName(volume_id)
+        LOG.debug('Querying the StorPool API for the size of %(vol)s',
+                  {'vol': volume})
+        vdata = self._attach.api().volumeList(volume)[0]
+        LOG.debug('Got size %(size)d', {'size': vdata.size})
+
+        # Wait for the StorPool client to update the size of the local device
         path = '/dev/storpool/' + volume
-        return self._get_device_size(path)
+        for _ in range(10):
+            size = self._get_device_size(path)
+            LOG.debug('Got local size %(size)d', {'size': size})
+            if size == vdata.size:
+                return size
+            time.sleep(0.1)
+        else:
+            size = self._get_device_size(path)
+            LOG.debug('Last attempt: local size %(size)d', {'size': size})
+            return size
