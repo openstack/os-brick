@@ -10,28 +10,33 @@
       - release-notes-jobs-python3
     check:
       jobs:
-        - legacy-tempest-dsvm-full-ceph-plugin-src-os-brick:
+        - os-brick-src-devstack-plugin-ceph:
             voting: false
-            irrelevant-files:
-              - ^(test-|)requirements.txt$
-              - ^setup.cfg$
-        - legacy-tempest-dsvm-full-lio-src-os-brick:
-            irrelevant-files:
-              - ^(test-|)requirements.txt$
-              - ^setup.cfg$
-        - os-brick-cinder-tempest-dsvm-lvm-lio-barbican
+        - os-brick-src-tempest-lvm-lio-barbican
     gate:
       jobs:
-        - legacy-tempest-dsvm-full-lio-src-os-brick:
-            irrelevant-files:
-              - ^(test-|)requirements.txt$
-              - ^setup.cfg$
-        - os-brick-cinder-tempest-dsvm-lvm-lio-barbican
+        - os-brick-src-tempest-lvm-lio-barbican
     experimental:
       jobs:
         - openstack-tox-pylint
+
 - job:
-    name: os-brick-cinder-tempest-dsvm-lvm-lio-barbican
-    parent: cinder-tempest-dsvm-lvm-lio-barbican
+    name: os-brick-src-devstack-plugin-ceph
+    description: |
+      Tempest job which tests os-brick from source.
+      Former names for this job were:
+        * legacy-tempest-dsvm-full-ceph-plugin-src-os-brick
+    parent: cinder-plugin-ceph-tempest
     required-projects:
-      - openstack/cinder
+      - opendev.org/openstack/os-brick
+
+- job:
+    name: os-brick-src-tempest-lvm-lio-barbican
+    parent: cinder-tempest-plugin-lvm-lio-barbican
+    description: |
+      Specialized cinder-tempest-lvm-lio-barbican
+      which runs against os-brick from sources.
+      Former names for this job were:
+        * legacy-tempest-dsvm-full-lio-src-os-brick
+    required-projects:
+      - opendev.org/openstack/os-brick
