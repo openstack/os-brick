@@ -81,16 +81,19 @@ class RemoteFsClient(executor.Executor):
                             self._get_hash_str(device_name))
 
     def _read_mounts(self):
-        (out, _err) = self._execute('mount', check_exit_code=0)
-        lines = out.split('\n')
-        mounts = {}
-        for line in lines:
-            tokens = line.split()
-            if 2 < len(tokens):
-                device = tokens[0]
-                mnt_point = tokens[2]
-                mounts[mnt_point] = device
-        return mounts
+        """Returns a dict of mounts and their mountpoint
+
+        Format reference:
+        http://man7.org/linux/man-pages/man5/fstab.5.html
+        """
+        with open("/proc/mounts", "r") as mounts:
+            # Remove empty lines and split lines by whitespace
+            lines = [l.split() for l in mounts.read().splitlines()
+                     if l.strip()]
+
+            # Return {mountpoint: mountdevice}.  Fields 2nd and 1st as per
+            # http://man7.org/linux/man-pages/man5/fstab.5.html
+            return {line[1]: line[0] for line in lines if line[0] != '#'}
 
     def mount(self, share, flags=None):
         """Mount given share."""
