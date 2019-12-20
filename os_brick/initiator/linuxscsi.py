@@ -531,7 +531,7 @@ class LinuxSCSI(executor.Executor):
                                     root_helper=self._root_helper)
         return out
 
-    def extend_volume(self, volume_paths):
+    def extend_volume(self, volume_paths, use_multipath=False):
         """Signal the SCSI subsystem to test for volume resize.
 
         This function tries to signal the local system's kernel
@@ -561,24 +561,26 @@ class LinuxSCSI(executor.Executor):
             LOG.debug("volume size after scsi device rescan %s", new_size)
 
         scsi_wwn = self.get_scsi_wwn(volume_paths[0])
-        mpath_device = self.find_multipath_device_path(scsi_wwn)
-        if mpath_device:
-            # Force a reconfigure so that resize works
-            self.multipath_reconfigure()
+        if use_multipath:
+            mpath_device = self.find_multipath_device_path(scsi_wwn)
+            if mpath_device:
+                # Force a reconfigure so that resize works
+                self.multipath_reconfigure()
 
-            size = self.get_device_size(mpath_device)
-            LOG.info("mpath(%(device)s) current size %(size)s",
-                     {'device': mpath_device, 'size': size})
-            result = self.multipath_resize_map(scsi_wwn)
-            if 'fail' in result:
-                LOG.error("Multipathd failed to update the size mapping of "
-                          "multipath device %(scsi_wwn)s volume %(volume)s",
-                          {'scsi_wwn': scsi_wwn, 'volume': volume_paths})
-                return None
+                size = self.get_device_size(mpath_device)
+                LOG.info("mpath(%(device)s) current size %(size)s",
+                         {'device': mpath_device, 'size': size})
+                result = self.multipath_resize_map(scsi_wwn)
+                if 'fail' in result:
+                    LOG.error("Multipathd failed to update the size mapping "
+                              "of multipath device %(scsi_wwn)s volume "
+                              "%(volume)s",
+                              {'scsi_wwn': scsi_wwn, 'volume': volume_paths})
+                    return None
 
-            new_size = self.get_device_size(mpath_device)
-            LOG.info("mpath(%(device)s) new size %(size)s",
-                     {'device': mpath_device, 'size': new_size})
+                new_size = self.get_device_size(mpath_device)
+                LOG.info("mpath(%(device)s) new size %(size)s",
+                         {'device': mpath_device, 'size': new_size})
 
         return new_size
 

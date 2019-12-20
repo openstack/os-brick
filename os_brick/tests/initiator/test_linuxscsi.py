@@ -761,7 +761,8 @@ loop0                                     0"""
         mock_find_mpath_path.return_value = ('/dev/mapper/dm-uuid-mpath-%s' %
                                              wwn)
 
-        ret_size = self.linuxscsi.extend_volume(['/dev/fake1', '/dev/fake2'])
+        ret_size = self.linuxscsi.extend_volume(['/dev/fake1', '/dev/fake2'],
+                                                use_multipath=True)
         self.assertEqual(2048, ret_size)
 
         # because we don't mock out the echo_scsi_command
@@ -795,7 +796,8 @@ loop0                                     0"""
 
         mock_mpath_resize_map.return_value = 'fail'
 
-        ret_size = self.linuxscsi.extend_volume(['/dev/fake1', '/dev/fake2'])
+        ret_size = self.linuxscsi.extend_volume(['/dev/fake1', '/dev/fake2'],
+                                                use_multipath=True)
         self.assertIsNone(ret_size)
 
         # because we don't mock out the echo_scsi_command
