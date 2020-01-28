@@ -119,6 +119,7 @@ class LuksEncryptor(cryptsetup.CryptsetupEncryptor):
         # Enter new passphrase for key slot:
         # Verify passphrase:
         self._execute('cryptsetup', 'luksAddKey', self.dev_path,
+                      '--force-password',
                       process_input=''.join([mangled_passphrase, '\n',
                                              passphrase, '\n', passphrase]),
                       run_as_root=True, check_exit_code=True,
