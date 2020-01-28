@@ -226,6 +226,7 @@ class LuksEncryptorTestCase(test_cryptsetup.CryptsetupEncryptorTestCase):
                       root_helper=self.root_helper, run_as_root=True,
                       check_exit_code=[0, 4], attempts=3),
             mock.call('cryptsetup', 'luksAddKey', self.dev_path,
+                      '--force-password',
                       process_input=''.join([fake_key_mangled,
                                              '\n', fake_key,
                                              '\n', fake_key]),
