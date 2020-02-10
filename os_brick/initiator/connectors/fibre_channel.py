@@ -270,12 +270,13 @@ class FibreChannelConnector(base.BaseLinuxConnector):
     def _get_host_devices(self, possible_devs):
         """Compute the device paths on the system with an id, wwn, and lun
 
-        :param possible_devs: list of (pci_id, wwn, lun) tuples
+        :param possible_devs: list of (platform, pci_id, wwn, lun) tuples
         :return: list of device paths on the system based on the possible_devs
         """
         host_devices = []
-        for pci_num, target_wwn, lun in possible_devs:
-            host_device = "/dev/disk/by-path/pci-%s-fc-%s-lun-%s" % (
+        for platform, pci_num, target_wwn, lun in possible_devs:
+            host_device = "/dev/disk/by-path/%spci-%s-fc-%s-lun-%s" % (
+                platform + '-' if platform else '',
                 pci_num,
                 target_wwn,
                 self._linuxscsi.process_lun_id(lun))
@@ -288,7 +289,7 @@ class FibreChannelConnector(base.BaseLinuxConnector):
         :param hbas: available hba devices.
         :param targets: tuple of possible wwn addresses and lun combinations.
 
-        :returns: list of (pci_id, wwn, lun) tuples
+        :returns: list of (platform, pci_id, wwn, lun) tuples
 
         Given one or more wwn (mac addresses for fibre channel) ports
         do the matrix math to figure out a set of pci device, wwn
@@ -298,11 +299,11 @@ class FibreChannelConnector(base.BaseLinuxConnector):
         """
         raw_devices = []
         for hba in hbas:
-            pci_num = self._get_pci_num(hba)
+            platform, pci_num = self._get_pci_num(hba)
             if pci_num is not None:
                 for wwn, lun in targets:
                     target_wwn = "0x%s" % wwn.lower()
-                    raw_devices.append((pci_num, target_wwn, lun))
+                    raw_devices.append((platform, pci_num, target_wwn, lun))
         return raw_devices
 
     @utils.trace
@@ -365,10 +366,18 @@ class FibreChannelConnector(base.BaseLinuxConnector):
         # /sys/devices/pci0000:20/0000:20:03.0/0000:21:00.2/net/ens2f2/ctlr_2
         # /host3/fc_host/host3
         # we always want the value prior to the host or net value
+        # on non x86_64 device, pci devices may be appended on platform device,
+        # /sys/devices/platform/smb/smb:motherboard/80040000000.peu0-c0/pci0000:00/0000:00:03.0/0000:05:00.3/host2/fc_host/host2  # noqa
+        # so also return a platform id if it exists
+        platform = None
         if hba is not None:
             if "device_path" in hba:
                 device_path = hba['device_path'].split('/')
+                has_platform = (len(device_path) > 3
+                                and device_path[3] == 'platform')
                 for index, value in enumerate(device_path):
+                    if has_platform and value.startswith('pci'):
+                        platform = "platform-%s" % device_path[index - 1]
                     if value.startswith('net') or value.startswith('host'):
-                        return device_path[index - 1]
-        return None
+                        return platform, device_path[index - 1]
+        return None, None
