@@ -91,7 +91,7 @@ class FibreChannelConnectorS390X(fibre_channel.FibreChannelConnector):
         hbas = self._linuxfc.get_fc_hbas_info()
         targets = connection_properties['targets']
         possible_devs = self._get_possible_devices(hbas, targets)
-        for pci_num, target_wwn, lun in possible_devs:
+        for platform, pci_num, target_wwn, lun in possible_devs:
             target_lun = self._get_lun_string(lun)
             self._linuxfc.deconfigure_scsi_device(pci_num,
                                                   target_wwn,

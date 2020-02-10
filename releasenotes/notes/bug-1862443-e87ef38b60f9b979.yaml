@@ -1,0 +1,5 @@
+---
+fixes:
+  - |
+    [`bug 1862433 <https://bugs.launchpad.net/os-brick/+bug/1862443>`_]
+    Fix an issue where platform id is needed to determine  name of scsi disk.
