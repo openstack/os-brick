@@ -18,6 +18,7 @@ import tempfile
 
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
+from oslo_serialization import jsonutils
 from oslo_utils import fileutils
 from oslo_utils import netutils
 
@@ -203,6 +204,26 @@ class RBDConnector(base.BaseLinuxConnector):
         rbd_handle = self._get_rbd_handle(connection_properties)
         return {'path': rbd_handle}
 
+    def _find_root_device(self, connection_properties):
+        """Find the underlying /dev/rbd* device for a mapping.
+
+        Use the showmapped command to list all acive mappings and find the
+        underlying /dev/rbd* device that corresponds to our pool and volume.
+
+        :param connection_properties: The dictionary that describes all
+                                      of the target volume attributes.
+        :type connection_properties: dict
+        :returns: '/dev/rbd*' or None if no active mapping is found.
+        """
+        __, volume = connection_properties['name'].split('/')
+        cmd = ['rbd', 'showmapped', '--format=json']
+        (out, err) = self._execute(*cmd, root_helper=self._root_helper,
+                                   run_as_root=True)
+        for index, mapping in jsonutils.loads(out).items():
+            if mapping['name'] == volume:
+                return mapping['device']
+        return None
+
     @utils.trace
     def disconnect_volume(self, connection_properties, device_info,
                           force=False, ignore_errors=False):
@@ -217,12 +238,12 @@ class RBDConnector(base.BaseLinuxConnector):
         do_local_attach = connection_properties.get('do_local_attach',
                                                     self.do_local_attach)
         if do_local_attach:
-            pool, volume = connection_properties['name'].split('/')
-            dev_name = RBDConnector.get_rbd_device_name(pool, volume)
-            cmd = ['rbd', 'unmap', dev_name]
-            cmd += self._get_rbd_args(connection_properties)
-            self._execute(*cmd, root_helper=self._root_helper,
-                          run_as_root=True)
+            root_device = self._find_root_device(connection_properties)
+            if root_device:
+                cmd = ['rbd', 'unmap', root_device]
+                cmd += self._get_rbd_args(connection_properties)
+                self._execute(*cmd, root_helper=self._root_helper,
+                              run_as_root=True)
         else:
             if device_info:
                 rbd_handle = device_info.get('path', None)
