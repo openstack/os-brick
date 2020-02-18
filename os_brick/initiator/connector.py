@@ -115,8 +115,6 @@ _connector_mapping_linux = {
         'os_brick.initiator.connectors.scaleio.ScaleIOConnector',
     initiator.DISCO:
         'os_brick.initiator.connectors.disco.DISCOConnector',
-    initiator.SHEEPDOG:
-        'os_brick.initiator.connectors.sheepdog.SheepdogConnector',
     initiator.VMDK:
         'os_brick.initiator.connectors.vmware.VmdkConnector',
     initiator.GPFS:
@@ -175,8 +173,6 @@ _connector_mapping_linux_ppc64 = {
         'os_brick.initiator.connectors.vrtshyperscale.HyperScaleConnector',
     initiator.ISER:
         'os_brick.initiator.connectors.iscsi.ISCSIConnector',
-    initiator.SHEEPDOG:
-        'os_brick.initiator.connectors.sheepdog.SheepdogConnector',
 }
 
 # Mapping for the windows connectors

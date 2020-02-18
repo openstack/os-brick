@@ -1,0 +1,6 @@
+---
+upgrade:
+  - |
+    The Sheepdog project is no longer active and its driver has been removed
+    from Cinder. The connector and Sheepdog related handling has now been
+    removed from os-brick as well.
