@@ -34,7 +34,7 @@ class NVMeConnector(base.BaseLinuxConnector):
 
     """Connector class to attach/detach NVMe over fabric volumes."""
 
-    def __init__(self, root_helper, driver=None,
+    def __init__(self, root_helper, driver=None, use_multipath=False,
                  device_scan_attempts=initiator.DEVICE_SCAN_ATTEMPTS_DEFAULT,
                  *args, **kwargs):
         super(NVMeConnector, self).__init__(
@@ -42,6 +42,7 @@ class NVMeConnector(base.BaseLinuxConnector):
             driver=driver,
             device_scan_attempts=device_scan_attempts,
             *args, **kwargs)
+        self.use_multipath = use_multipath
 
     @staticmethod
     def get_connector_properties(root_helper, *args, **kwargs):
@@ -182,7 +183,8 @@ class NVMeConnector(base.BaseLinuxConnector):
         """
         volume_paths = self.get_volume_paths(connection_properties)
         if volume_paths:
-            return self._linuxscsi.extend_volume(volume_paths)
+            return self._linuxscsi.extend_volume(
+                volume_paths, use_multipath=self.use_multipath)
         else:
             LOG.warning("Couldn't find any volume paths on the host to "
                         "extend volume for %(props)s",
