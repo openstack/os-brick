@@ -514,6 +514,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
             with excutils.save_and_reraise_exception():
                 self._cleanup_connection(connection_properties, force=True)
 
+    @utils.retry(exceptions=(exception.VolumeDeviceNotFound))
     def _get_device_link(self, wwn, device, mpath):
         # These are the default symlinks that should always be there
         if mpath:

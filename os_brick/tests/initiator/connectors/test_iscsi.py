@@ -1490,17 +1490,67 @@ Setting up iSCSI targets: unused
             mock.call('/dev/disk/by-id/dm-...'),
             mock.call('/dev/disk/by-id/scsi-wwn')])
 
+    @mock.patch('time.sleep')
     @mock.patch('os.path.realpath', return_value='/dev/sdz')
     @mock.patch('os.listdir', return_value=['dm-...', 'scsi-...'])
-    def test__get_device_link_not_found(self, listdir_mock, realpath_mock):
+    def test__get_device_link_not_found(self, listdir_mock, realpath_mock,
+                                        mock_time):
         self.assertRaises(exception.VolumeDeviceNotFound,
                           self.connector._get_device_link,
                           'wwn', '/dev/sda', None)
-        listdir_mock.assert_called_once_with('/dev/disk/by-id/')
-        realpath_mock.assert_has_calls([
-            mock.call('/dev/disk/by-id/scsi-wwn'),
-            mock.call('/dev/disk/by-id/dm-...'),
-            mock.call('/dev/disk/by-id/scsi-...')])
+        listdir_mock.assert_has_calls(3 * [mock.call('/dev/disk/by-id/')])
+        self.assertEqual(3, listdir_mock.call_count)
+        realpath_mock.assert_has_calls(
+            3 * [mock.call('/dev/disk/by-id/scsi-wwn'),
+                 mock.call('/dev/disk/by-id/dm-...'),
+                 mock.call('/dev/disk/by-id/scsi-...')])
+        self.assertEqual(9, realpath_mock.call_count)
+
+    @mock.patch('time.sleep')
+    @mock.patch('os.path.realpath')
+    @mock.patch('os.listdir', return_value=['dm-...', 'scsi-...'])
+    def test__get_device_link_symlink_found_after_retry(self, mock_listdir,
+                                                        mock_realpath,
+                                                        mock_time):
+        # Return the expected realpath on the third retry
+        mock_realpath.side_effect = [
+            None, None, None, None, None, None, '/dev/sda']
+
+        # Assert that VolumeDeviceNotFound isn't raised
+        self.connector._get_device_link('wwn', '/dev/sda', None)
+
+        # Assert that listdir and realpath have been called correctly
+        mock_listdir.assert_has_calls(2 * [mock.call('/dev/disk/by-id/')])
+        self.assertEqual(2, mock_listdir.call_count)
+        mock_realpath.assert_has_calls(
+            2 * [mock.call('/dev/disk/by-id/scsi-wwn'),
+                 mock.call('/dev/disk/by-id/dm-...'),
+                 mock.call('/dev/disk/by-id/scsi-...')]
+            + [mock.call('/dev/disk/by-id/scsi-wwn')])
+        self.assertEqual(7, mock_realpath.call_count)
+
+    @mock.patch('time.sleep')
+    @mock.patch('os.path.realpath')
+    @mock.patch('os.listdir', return_value=['dm-...', 'scsi-...'])
+    def test__get_device_link_symlink_found_after_retry_by_listdir(
+            self, mock_listdir, mock_realpath, mock_time):
+
+        # Return the expected realpath on the second retry while looping over
+        # the devices returned by listdir
+        mock_realpath.side_effect = [
+            None, None, None, None, None, '/dev/sda']
+
+        # Assert that VolumeDeviceNotFound isn't raised
+        self.connector._get_device_link('wwn', '/dev/sda', None)
+
+        # Assert that listdir and realpath have been called correctly
+        mock_listdir.assert_has_calls(2 * [mock.call('/dev/disk/by-id/')])
+        self.assertEqual(2, mock_listdir.call_count)
+        mock_realpath.assert_has_calls(
+            2 * [mock.call('/dev/disk/by-id/scsi-wwn'),
+                 mock.call('/dev/disk/by-id/dm-...'),
+                 mock.call('/dev/disk/by-id/scsi-...')])
+        self.assertEqual(6, mock_realpath.call_count)
 
     @mock.patch.object(iscsi.ISCSIConnector, '_run_iscsiadm_bare')
     def test_get_node_startup_values(self, run_iscsiadm_bare_mock):
