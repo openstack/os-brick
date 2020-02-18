@@ -191,7 +191,7 @@ class StorPoolConnector(base.BaseLinuxConnector):
         (out, _err) = self._execute('blockdev', '--getsize64',
                                     device, run_as_root=True,
                                     root_helper=self._root_helper)
-        var = six.text_type(out)
+        var = six.text_type(out).strip()
         if var.isnumeric():
             return int(var)
         else:
