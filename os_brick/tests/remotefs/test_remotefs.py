@@ -59,15 +59,17 @@ class RemoteFsClientTestCase(base.TestCase):
         self.mock_execute.assert_has_calls(calls)
 
     def test_read_mounts(self):
-        mounts = """device1 on mnt_point1
-                    device2 on mnt_point2 type ext4 opts"""
-        with mock.patch.object(priv_rootwrap, 'execute',
-                               return_value=[mounts, '']):
+        mounts = """device1 mnt_point1 ext4 rw,seclabel,relatime 0 0
+                    device2 mnt_point2 ext4 rw,seclabel,relatime 0 0"""
+        mockopen = mock.mock_open(read_data=mounts)
+        mockopen.return_value.__iter__ = lambda self: iter(self.readline, '')
+        with mock.patch.object(six.moves.builtins, "open", mockopen,
+                               create=True):
             client = remotefs.RemoteFsClient("cifs", root_helper='true',
                                              smbfs_mount_point_base='/mnt')
             ret = client._read_mounts()
-            self.assertEqual(ret, {'mnt_point1': 'device1',
-                                   'mnt_point2': 'device2'})
+        self.assertEqual(ret, {'mnt_point1': 'device1',
+                               'mnt_point2': 'device2'})
 
     @mock.patch.object(priv_rootwrap, 'execute')
     @mock.patch.object(remotefs.RemoteFsClient, '_do_mount')
