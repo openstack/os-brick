@@ -11,6 +11,8 @@
         - os-brick-src-devstack-plugin-ceph:
             voting: false
         - os-brick-src-tempest-lvm-lio-barbican
+        - os-brick-src-tempest-nfs:
+            voting: false
     gate:
       jobs:
         - os-brick-src-tempest-lvm-lio-barbican
@@ -36,5 +38,11 @@
       which runs against os-brick from sources.
       Former names for this job were:
         * legacy-tempest-dsvm-full-lio-src-os-brick
+    required-projects:
+      - opendev.org/openstack/os-brick
+
+- job:
+    name: os-brick-src-tempest-nfs
+    parent: devstack-plugin-nfs-tempest-full
     required-projects:
       - opendev.org/openstack/os-brick
