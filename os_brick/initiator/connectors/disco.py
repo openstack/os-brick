@@ -157,19 +157,19 @@ class DISCOConnector(base.BaseLinuxConnector):
                                       client_port,
                                       socket.AF_UNSPEC,
                                       socket.SOCK_STREAM):
-                aff, socktype, proto, canonname, saa = res
-                try:
-                    sock = socket.socket(aff, socktype, proto)
-                except socket.error:
-                    sock = None
-                    continue
-                try:
-                    sock.connect(saa)
-                except socket.error:
-                    sock.close()
-                    sock = None
-                    continue
-                break
+            aff, socktype, proto, canonname, saa = res
+            try:
+                sock = socket.socket(aff, socktype, proto)
+            except socket.error:
+                sock = None
+                continue
+            try:
+                sock.connect(saa)
+            except socket.error:
+                sock.close()
+                sock = None
+                continue
+            break
 
         if sock is None:
             LOG.error("Cannot connect TCP socket")
