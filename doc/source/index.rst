@@ -28,3 +28,11 @@ Reference
    :maxdepth: 2
 
    reference/index
+
+Contributing
+------------
+
+.. toctree::
+   :maxdepth: 2
+
+   contributor/contributing
