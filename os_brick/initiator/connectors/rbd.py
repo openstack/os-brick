@@ -21,12 +21,12 @@ from oslo_log import log as logging
 from oslo_serialization import jsonutils
 from oslo_utils import excutils
 from oslo_utils import fileutils
-from oslo_utils import netutils
 
 from os_brick import exception
 from os_brick.i18n import _
 from os_brick import initiator
 from os_brick.initiator.connectors import base
+from os_brick.initiator.connectors import base_rbd
 from os_brick.initiator import linuxrbd
 from os_brick.privileged import rbd as rbd_privsep
 from os_brick import utils
@@ -34,7 +34,7 @@ from os_brick import utils
 LOG = logging.getLogger(__name__)
 
 
-class RBDConnector(base.BaseLinuxConnector):
+class RBDConnector(base_rbd.RBDConnectorMixin, base.BaseLinuxConnector):
     """"Connector class to attach/detach RBD volumes."""
 
     def __init__(self, root_helper, driver=None, use_multipath=False,
@@ -64,14 +64,6 @@ class RBDConnector(base.BaseLinuxConnector):
     def get_all_available_volumes(self, connection_properties=None):
         # TODO(e0ne): Implement this for local volume.
         return []
-
-    @staticmethod
-    def _sanitize_mon_hosts(hosts):
-        def _sanitize_host(host):
-            if netutils.is_valid_ipv6(host):
-                host = '[%s]' % host
-            return host
-        return list(map(_sanitize_host, hosts))
 
     @staticmethod
     def _check_or_get_keyring_contents(keyring, cluster_name, user):
@@ -142,30 +134,6 @@ class RBDConnector(base.BaseLinuxConnector):
             raise
 
         return rbd_handle
-
-    @classmethod
-    def _get_rbd_args(cls, connection_properties, conf=None):
-        try:
-            user = connection_properties['auth_username']
-            monitor_ips = connection_properties.get('hosts')
-            monitor_ports = connection_properties.get('ports')
-        except KeyError:
-            msg = _("Connect volume failed, malformed connection properties")
-            raise exception.BrickException(msg=msg)
-
-        args = ['--id', user]
-        if monitor_ips and monitor_ports:
-            monitors = ["%s:%s" % (ip, port) for ip, port in
-                        zip(
-                            cls._sanitize_mon_hosts(monitor_ips),
-                            monitor_ports)]
-            for monitor in monitors:
-                args += ['--mon_host', monitor]
-
-        if conf:
-            args += ['--conf', conf]
-
-        return args
 
     @staticmethod
     def get_rbd_device_name(pool, volume):

@@ -14,6 +14,7 @@
 #    under the License.
 
 from os_win import utilsfactory
+from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
 
 from os_brick import exception
@@ -32,6 +33,7 @@ class BaseWindowsConnector(initiator_connector.InitiatorConnector):
     DEFAULT_DEVICE_SCAN_INTERVAL = 2
 
     def __init__(self, root_helper=None, *args, **kwargs):
+        kwargs['executor'] = kwargs.get('executor') or putils.execute
         super(BaseWindowsConnector, self).__init__(root_helper,
                                                    *args, **kwargs)
         self.device_scan_interval = kwargs.pop(

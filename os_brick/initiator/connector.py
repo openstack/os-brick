@@ -43,6 +43,7 @@ windows_connector_list = [
     'os_brick.initiator.windows.base.BaseWindowsConnector',
     'os_brick.initiator.windows.iscsi.WindowsISCSIConnector',
     'os_brick.initiator.windows.fibre_channel.WindowsFCConnector',
+    'os_brick.initiator.windows.rbd.WindowsRBDConnector',
     'os_brick.initiator.windows.smbfs.WindowsSMBFSConnector'
 ]
 
@@ -159,6 +160,8 @@ _connector_mapping_windows = {
         'os_brick.initiator.windows.iscsi.WindowsISCSIConnector',
     initiator.FIBRE_CHANNEL:
         'os_brick.initiator.windows.fibre_channel.WindowsFCConnector',
+    initiator.RBD:
+        'os_brick.initiator.windows.rbd.WindowsRBDConnector',
     initiator.SMBFS:
         'os_brick.initiator.windows.smbfs.WindowsSMBFSConnector',
 }
