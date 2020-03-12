@@ -10,6 +10,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import json
 import re
 import time
 
@@ -126,6 +127,99 @@ class NVMeOFConnector(base.BaseLinuxConnector):
         self._execute(*cmd, root_helper=self._root_helper,
                       run_as_root=True)
 
+    def _get_nvme_subsys(self):
+        # Example output:
+        # {
+        #   'Subsystems' : [
+        #     {
+        #       'Name' : 'nvme-subsys0',
+        #       'NQN' : 'nqn.2016-06.io.spdk:cnode1'
+        #     },
+        #     {
+        #       'Paths' : [
+        #         {
+        #           'Name' : 'nvme0',
+        #           'Transport' : 'rdma',
+        #           'Address' : 'traddr=10.0.2.15 trsvcid=4420'
+        #         }
+        #       ]
+        #     }
+        #   ]
+        # }
+        #
+
+        cmd = ['nvme', 'list-subsys', '-o', 'json']
+        ret_val = self._execute(*cmd, root_helper=self._root_helper,
+                                run_as_root=True)
+
+        return ret_val
+
+    @utils.retry(exceptions=exception.NotFound, retries=5)
+    def _is_nvme_available(self, nvme_name):
+        nvme_name_pattern = "/dev/%sn[0-9]+" % nvme_name
+        for nvme_dev_name in self._get_nvme_devices():
+            if re.match(nvme_name_pattern, nvme_dev_name):
+                return True
+        else:
+            LOG.error("Failed to find nvme device")
+            raise exception.NotFound()
+
+    def _wait_for_blk(self, nvme_transport_type, conn_nqn,
+                      target_portal, port):
+        # Find nvme name in subsystem list and wait max 15 seconds
+        # until new volume will be available in kernel
+        nvme_name = ""
+        nvme_address = "traddr=%s trsvcid=%s" % (target_portal, port)
+
+        # Get nvme subsystems in order to find
+        # nvme name for connected nvme
+        try:
+            (out, err) = self._get_nvme_subsys()
+        except putils.ProcessExecutionError:
+            LOG.error("Failed to get nvme subsystems")
+            raise
+
+        # Get subsystem list. Throw exception if out is currupt or empty
+        try:
+            subsystems = json.loads(out)['Subsystems']
+        except Exception:
+            return False
+
+        # Find nvme name among subsystems
+        for i in range(0, int(len(subsystems) / 2)):
+            subsystem = subsystems[i * 2]
+            if 'NQN' in subsystem and subsystem['NQN'] == conn_nqn:
+                for path in subsystems[i * 2 + 1]['Paths']:
+                    if (path['Transport'] == nvme_transport_type
+                            and path['Address'] == nvme_address):
+                        nvme_name = path['Name']
+                        break
+
+        if not nvme_name:
+            return False
+
+        # Wait until nvme will be available in kernel
+        return self._is_nvme_available(nvme_name)
+
+    def _try_disconnect_volume(self, conn_nqn, ignore_errors=False):
+        cmd = [
+            'nvme',
+            'disconnect',
+            '-n',
+            conn_nqn]
+        try:
+            self._execute(
+                *cmd,
+                root_helper=self._root_helper,
+                run_as_root=True)
+
+        except putils.ProcessExecutionError:
+            LOG.error(
+                "Failed to disconnect from NVMe nqn "
+                "%(conn_nqn)s", {'conn_nqn': conn_nqn})
+            if not ignore_errors:
+                raise
+
     @utils.trace
     @synchronized('connect_volume')
     def connect_volume(self, connection_properties):
@@ -159,7 +253,14 @@ class NVMeOFConnector(base.BaseLinuxConnector):
             cmd.extend(['-q', host_nqn])
 
         self._try_connect_nvme(cmd)
-
+        try:
+            self._wait_for_blk(nvme_transport_type, conn_nqn,
+                               target_portal, port)
+        except exception.NotFound:
+            LOG.error("Waiting for nvme failed")
+            self._try_disconnect_volume(conn_nqn, True)
+            raise exception.NotFound(message="nvme connect: NVMe device "
+                                             "not found")
         path = self._get_device_path(current_nvme_devices)
         device_info['path'] = path[0]
         LOG.debug("NVMe device to be connected to is %(path)s",
