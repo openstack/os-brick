@@ -1,0 +1,8 @@
+---
+other:
+  - |
+    This release contains some minor driver fixes.
+
+  - |
+    Please keep in mind that the minum version of Python supported
+    by this release is Python 3.6.
