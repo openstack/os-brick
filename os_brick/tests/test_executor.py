@@ -14,8 +14,8 @@
 #    under the License.
 
 import threading
+from unittest import mock
 
-import mock
 from oslo_concurrency import processutils as putils
 from oslo_context import context as context_utils
 import six

@@ -10,7 +10,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import mock
+from unittest import mock
 
 from os_brick.initiator.connectors import iscsi
 from os_brick.tests.initiator import test_connector

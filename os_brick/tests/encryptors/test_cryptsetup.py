@@ -16,7 +16,8 @@
 
 import binascii
 import copy
-import mock
+from unittest import mock
+
 import six
 
 from castellan.common.objects import symmetric_key as key

@@ -14,7 +14,7 @@
 #    under the License.
 
 from castellan.tests.unit.key_manager import fake
-import mock
+from unittest import mock
 
 from os_brick import encryptors
 from os_brick.tests import base

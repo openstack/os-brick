@@ -14,9 +14,9 @@
 #    under the License.
 
 import os
+from unittest import mock
 
 import ddt
-import mock
 
 from os_brick.initiator.windows import smbfs
 from os_brick.remotefs import windows_remotefs

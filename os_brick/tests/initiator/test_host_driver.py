@@ -13,8 +13,8 @@
 #    under the License.
 
 import errno
+from unittest import mock
 
-import mock
 
 from os_brick.initiator import host_driver
 from os_brick.tests import base

@@ -14,8 +14,8 @@
 
 import functools
 import time
+from unittest import mock
 
-import mock
 
 from os_brick import exception
 from os_brick.tests import base
