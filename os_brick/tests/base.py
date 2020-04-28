@@ -16,9 +16,9 @@
 import logging
 import os
 import testtools
+from unittest import mock
 
 import fixtures
-import mock
 from oslo_utils import strutils
 
 

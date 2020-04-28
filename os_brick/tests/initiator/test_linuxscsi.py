@@ -16,9 +16,9 @@ import os
 import os.path
 import textwrap
 import time
+from unittest import mock
 
 import ddt
-import mock
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
 

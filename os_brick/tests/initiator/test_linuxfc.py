@@ -13,8 +13,8 @@
 #    under the License.
 
 import os.path
+from unittest import mock
 
-import mock
 
 from os_brick.initiator import linuxfc
 from os_brick.tests import base

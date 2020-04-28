@@ -14,8 +14,8 @@
 
 import platform
 import sys
+from unittest import mock
 
-import mock
 from oslo_concurrency import processutils as putils
 from oslo_service import loopingcall
 

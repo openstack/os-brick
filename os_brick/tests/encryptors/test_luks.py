@@ -14,7 +14,7 @@
 #    under the License.
 
 import binascii
-import mock
+from unittest import mock
 
 from castellan.common.objects import symmetric_key as key
 from os_brick.encryptors import luks
