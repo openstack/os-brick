@@ -15,13 +15,13 @@
 import functools
 import inspect
 import logging as py_logging
-import retrying
-import six
 import time
 
 from oslo_log import log as logging
 from oslo_utils import encodeutils
 from oslo_utils import strutils
+import retrying
+import six
 
 from os_brick.i18n import _
 
