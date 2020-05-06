@@ -59,6 +59,11 @@ class TestCase(testtools.TestCase):
             self.useFixture(fixtures.LoggerFixture(nuke_handlers=False,
                                                    format=log_format,
                                                    level=level))
+        # Protect against any case where someone doesn't remember to patch a
+        # retry decorated call
+        patcher = mock.patch('os_brick.utils._time_sleep')
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def _common_cleanup(self):
         """Runs after each test method to tear down test environment."""

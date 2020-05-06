@@ -86,7 +86,7 @@ class PrivRootwrapTestCase(base.TestCase):
         proc = on_execute.call_args[0][0]
         on_completion.assert_called_once_with(proc)
 
-    @mock.patch('time.sleep')
+    @mock.patch('os_brick.utils._time_sleep')
     def test_custom_execute_timeout_raises_with_retries(self, sleep_mock):
         on_execute = mock.Mock()
         on_completion = mock.Mock()

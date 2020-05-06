@@ -20,32 +20,34 @@ import time
 from oslo_log import log as logging
 from oslo_utils import encodeutils
 from oslo_utils import strutils
-import retrying
 import six
 
 from os_brick.i18n import _
+
+_time_sleep = time.sleep
+
+
+def _sleep(duration):
+    """Helper class to make it easier to work around tenacity's sleep calls.
+
+    Apparently we are all idiots for wanting to test our code here [0], so this
+    is a hack to be able to get retries to not actually sleep.
+
+    [0] https://github.com/jd/tenacity/issues/25
+    """
+    _time_sleep(duration)
+
+
+time.sleep = _sleep
+
+
+import tenacity  # noqa
 
 
 LOG = logging.getLogger(__name__)
 
 
 def retry(exceptions, interval=1, retries=3, backoff_rate=2):
-
-    def _retry_on_exception(e):
-        return isinstance(e, exceptions)
-
-    def _backoff_sleep(previous_attempt_number, delay_since_first_attempt_ms):
-        exp = backoff_rate ** previous_attempt_number
-        wait_for = max(0, interval * exp)
-        LOG.debug("Sleeping for %s seconds", wait_for)
-        return wait_for * 1000.0
-
-    def _print_stop(previous_attempt_number, delay_since_first_attempt_ms):
-        delay_since_first_attempt = delay_since_first_attempt_ms / 1000.0
-        LOG.debug("Failed attempt %s", previous_attempt_number)
-        LOG.debug("Have been at this for %s seconds",
-                  delay_since_first_attempt)
-        return previous_attempt_number == retries
 
     if retries < 1:
         raise ValueError(_('Retries must be greater than or '
@@ -55,9 +57,14 @@ def retry(exceptions, interval=1, retries=3, backoff_rate=2):
 
         @six.wraps(f)
         def _wrapper(*args, **kwargs):
-            r = retrying.Retrying(retry_on_exception=_retry_on_exception,
-                                  wait_func=_backoff_sleep,
-                                  stop_func=_print_stop)
+            r = tenacity.Retrying(
+                before_sleep=tenacity.before_sleep_log(LOG, logging.DEBUG),
+                after=tenacity.after_log(LOG, logging.DEBUG),
+                stop=tenacity.stop_after_attempt(retries),
+                reraise=True,
+                retry=tenacity.retry_if_exception_type(exceptions),
+                wait=tenacity.wait_exponential(
+                    multiplier=interval, min=0, exp_base=backoff_rate))
             return r.call(f, *args, **kwargs)
 
         return _wrapper

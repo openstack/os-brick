@@ -80,6 +80,7 @@ sphinxcontrib-websupport==1.0.1
 stestr==1.0.0
 stevedore==1.20.0
 suds-jurko==0.6
+tenacity==6.0.0
 testscenarios==0.4
 testtools==2.2.0
 traceback2==1.4.0

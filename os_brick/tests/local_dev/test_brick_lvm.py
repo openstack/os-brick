@@ -380,7 +380,7 @@ class BrickLvmTestCase(base.TestCase):
             self.vg.create_volume('test', '1G')
             self.vg.deactivate_lv('test')
 
-    @mock.patch('time.sleep')
+    @mock.patch('os_brick.utils._time_sleep')
     def test_lv_deactivate_timeout(self, mock_sleep):
         with mock.patch.object(self.vg, '_execute'):
             is_active_mock = mock.Mock()
