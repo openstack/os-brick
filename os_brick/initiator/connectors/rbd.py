@@ -217,6 +217,7 @@ class RBDConnector(base.BaseLinuxConnector):
         """
         __, volume = connection_properties['name'].split('/')
         cmd = ['rbd', 'showmapped', '--format=json']
+        cmd += self._get_rbd_args(connection_properties)
         (out, err) = self._execute(*cmd, root_helper=self._root_helper,
                                    run_as_root=True)
         for index, mapping in jsonutils.loads(out).items():
