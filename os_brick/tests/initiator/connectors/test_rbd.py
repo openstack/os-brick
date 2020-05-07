@@ -255,8 +255,8 @@ class RBDConnectorTestCase(test_connector.ConnectorTestCase):
                 'hosts': ['192.168.10.2'],
                 'ports': ['6789']}
         mock_execute.side_effect = [("""
-{"0":{"pool":"pool","device":"/dev/rbd0","name":"pool-image"},
- "1":{"pool":"pool","device":"/dev/rdb1","name":"pool-image_2"}}""", None),
+{"0":{"pool":"pool","device":"/dev/rbd0","name":"image"},
+ "1":{"pool":"pool","device":"/dev/rdb1","name":"image_2"}}""", None),
                                     (None, None)]
         show_cmd = ['rbd', 'showmapped', '--format=json', '--id', 'fake_user',
                     '--mon_host', '192.168.10.2:6789']
@@ -266,7 +266,7 @@ class RBDConnectorTestCase(test_connector.ConnectorTestCase):
         rbd_connector.disconnect_volume(conn, None)
 
         # Assert that showmapped is used before we unmap the root device
-        mock_execute.has_calls([
+        mock_execute.assert_has_calls([
             mock.call(*show_cmd, root_helper=None, run_as_root=True),
             mock.call(*unmap_cmd, root_helper=None, run_as_root=True)])
 
