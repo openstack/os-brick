@@ -15,7 +15,6 @@
 import os
 import os.path
 import textwrap
-import time
 from unittest import mock
 
 import ddt
@@ -103,7 +102,7 @@ class LinuxSCSITestCase(base.TestCase):
         expected_commands = [('tee -a /sys/block/sdc/device/delete')]
         self.assertEqual(expected_commands, self.cmds)
 
-    @mock.patch('time.sleep')
+    @mock.patch('os_brick.utils._time_sleep')
     @mock.patch('os.path.exists', return_value=True)
     def test_wait_for_volumes_removal_failure(self, exists_mock, sleep_mock):
         retries = 61
@@ -114,7 +113,7 @@ class LinuxSCSITestCase(base.TestCase):
                                       for name in names] * retries)
         self.assertEqual(retries - 1, sleep_mock.call_count)
 
-    @mock.patch('time.sleep')
+    @mock.patch('os_brick.utils._time_sleep')
     @mock.patch('os.path.exists', side_effect=(True, True, False, False))
     def test_wait_for_volumes_removal_retry(self, exists_mock, sleep_mock):
         names = ('sda', 'sdb')
@@ -195,7 +194,7 @@ class LinuxSCSITestCase(base.TestCase):
         expected_path = '/dev/disk/by-id/dm-uuid-mpath-%s' % fake_wwn
         self.assertEqual(expected_path, found_path)
 
-    @mock.patch('time.sleep')
+    @mock.patch('os_brick.utils._time_sleep')
     @mock.patch.object(os.path, 'exists')
     def test_find_multipath_device_path_mapper(self, exists_mock, sleep_mock):
         # the wait loop tries 3 times before it gives up
@@ -211,14 +210,14 @@ class LinuxSCSITestCase(base.TestCase):
         self.assertTrue(sleep_mock.called)
 
     @mock.patch.object(os.path, 'exists', return_value=False)
-    @mock.patch.object(time, 'sleep')
+    @mock.patch('os_brick.utils._time_sleep')
     def test_find_multipath_device_path_fail(self, exists_mock, sleep_mock):
         fake_wwn = '1234567890'
         found_path = self.linuxscsi.find_multipath_device_path(fake_wwn)
         self.assertIsNone(found_path)
 
     @mock.patch.object(os.path, 'exists', return_value=False)
-    @mock.patch.object(time, 'sleep')
+    @mock.patch('os_brick.utils._time_sleep')
     def test_wait_for_path_not_found(self, exists_mock, sleep_mock):
         path = "/dev/disk/by-id/dm-uuid-mpath-%s" % '1234567890'
         self.assertRaisesRegex(exception.VolumeDeviceNotFound,
@@ -490,7 +489,7 @@ class LinuxSCSITestCase(base.TestCase):
         self.assertEqual("1", info['devices'][1]['id'])
         self.assertEqual("9", info['devices'][1]['lun'])
 
-    @mock.patch.object(time, 'sleep')
+    @mock.patch('os_brick.utils._time_sleep')
     def test_wait_for_rw(self, mock_sleep):
         lsblk_output = """3624a93709a738ed78583fd1200143029 (dm-2)  0
 sdb                                       0
@@ -532,7 +531,7 @@ loop0                                     0"""
         self.linuxscsi.wait_for_rw(wwn, path)
         self.assertFalse(mock_sleep.called)
 
-    @mock.patch.object(time, 'sleep')
+    @mock.patch('os_brick.utils._time_sleep')
     def test_wait_for_rw_needs_retry(self, mock_sleep):
         lsblk_ro_output = """3624a93709a738ed78583fd1200143029 (dm-2)  0
 sdb                                       0
@@ -602,7 +601,7 @@ loop0                                     0"""
         self.linuxscsi.wait_for_rw(wwn, path)
         self.assertEqual(1, mock_sleep.call_count)
 
-    @mock.patch.object(time, 'sleep')
+    @mock.patch('os_brick.utils._time_sleep')
     def test_wait_for_rw_always_readonly(self, mock_sleep):
         lsblk_output = """3624a93709a738ed78583fd1200143029 (dm-2)  0
 sdb                                       0

@@ -1089,7 +1089,7 @@ Setting up iSCSI targets: unused
                        side_effect=(None, 'tgt2'))
     @mock.patch.object(iscsi.ISCSIConnector, '_connect_vol')
     @mock.patch.object(iscsi.ISCSIConnector, '_cleanup_connection')
-    @mock.patch('time.sleep')
+    @mock.patch('os_brick.utils._time_sleep')
     def test_connect_single_volume(self, sleep_mock, cleanup_mock,
                                    connect_mock, get_wwn_mock):
         def my_connect(rescans, props, data):
@@ -1114,7 +1114,7 @@ Setting up iSCSI targets: unused
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_sysfs_wwn', return_value='')
     @mock.patch.object(iscsi.ISCSIConnector, '_connect_vol')
     @mock.patch.object(iscsi.ISCSIConnector, '_cleanup_connection')
-    @mock.patch('time.sleep')
+    @mock.patch('os_brick.utils._time_sleep')
     def test_connect_single_volume_no_wwn(self, sleep_mock, cleanup_mock,
                                           connect_mock, get_wwn_mock):
         def my_connect(rescans, props, data):
@@ -1142,7 +1142,7 @@ Setting up iSCSI targets: unused
                        side_effect=(None, 'tgt2'))
     @mock.patch.object(iscsi.ISCSIConnector, '_connect_vol')
     @mock.patch.object(iscsi.ISCSIConnector, '_cleanup_connection')
-    @mock.patch('time.sleep')
+    @mock.patch('os_brick.utils._time_sleep')
     def test_connect_single_volume_not_found(self, sleep_mock, cleanup_mock,
                                              connect_mock, get_wwn_mock):
 
@@ -1181,7 +1181,7 @@ Setting up iSCSI targets: unused
     @mock.patch.object(linuxscsi.LinuxSCSI, 'multipath_add_path')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'multipath_add_wwid')
     @mock.patch.object(iscsi.ISCSIConnector, '_connect_vol')
-    @mock.patch('time.sleep')
+    @mock.patch('os_brick.utils._time_sleep')
     def test_connect_multipath_volume_all_succeed(self, sleep_mock,
                                                   connect_mock, add_wwid_mock,
                                                   add_path_mock, get_wwn_mock,
@@ -1218,7 +1218,7 @@ Setting up iSCSI targets: unused
     @mock.patch.object(linuxscsi.LinuxSCSI, 'multipath_add_path')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'multipath_add_wwid')
     @mock.patch.object(iscsi.ISCSIConnector, '_connect_vol')
-    @mock.patch('time.sleep')
+    @mock.patch('os_brick.utils._time_sleep')
     def test_connect_multipath_volume_all_fail(self, sleep_mock, connect_mock,
                                                add_wwid_mock, add_path_mock,
                                                get_wwn_mock, find_dm_mock):
@@ -1245,7 +1245,7 @@ Setting up iSCSI targets: unused
     @mock.patch.object(linuxscsi.LinuxSCSI, 'multipath_add_path')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'multipath_add_wwid')
     @mock.patch.object(iscsi.ISCSIConnector, '_connect_vol')
-    @mock.patch('time.sleep')
+    @mock.patch('os_brick.utils._time_sleep')
     def test_connect_multipath_volume_some_fail_mp_found(self, sleep_mock,
                                                          connect_mock,
                                                          add_wwid_mock,
@@ -1287,7 +1287,7 @@ Setting up iSCSI targets: unused
     @mock.patch.object(linuxscsi.LinuxSCSI, 'multipath_add_wwid')
     @mock.patch.object(iscsi.time, 'time', side_effect=(0, 0, 11, 0))
     @mock.patch.object(iscsi.ISCSIConnector, '_connect_vol')
-    @mock.patch('time.sleep')
+    @mock.patch('os_brick.utils._time_sleep')
     def test_connect_multipath_volume_some_fail_mp_not_found(self, sleep_mock,
                                                              connect_mock,
                                                              time_mock,
@@ -1331,7 +1331,7 @@ Setting up iSCSI targets: unused
     @mock.patch.object(linuxscsi.LinuxSCSI, 'multipath_add_wwid')
     @mock.patch.object(iscsi.time, 'time', side_effect=(0, 0, 11, 0))
     @mock.patch.object(iscsi.ISCSIConnector, '_connect_vol')
-    @mock.patch('time.sleep', mock.Mock())
+    @mock.patch('os_brick.utils._time_sleep', mock.Mock())
     def test_connect_multipath_volume_all_loging_not_found(self,
                                                            connect_mock,
                                                            time_mock,
@@ -1355,7 +1355,7 @@ Setting up iSCSI targets: unused
         find_dm_mock.assert_not_called()
         self.assertEqual(12, connect_mock.call_count)
 
-    @mock.patch('time.sleep')
+    @mock.patch('os_brick.utils._time_sleep')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'scan_iscsi')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'device_name_by_hctl',
                        return_value='sda')
@@ -1388,7 +1388,7 @@ Setting up iSCSI targets: unused
         dev_name_mock.assert_called_once_with(mock.sentinel.session, hctl)
         sleep_mock.assert_called_once_with(1)
 
-    @mock.patch('time.sleep')
+    @mock.patch('os_brick.utils._time_sleep')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'scan_iscsi')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'device_name_by_hctl',
                        side_effect=(None, None, None, None, 'sda'))
@@ -1419,7 +1419,7 @@ Setting up iSCSI targets: unused
         self.assertEqual(5, dev_name_mock.call_count)
         self.assertEqual(4, sleep_mock.call_count)
 
-    @mock.patch('time.sleep')
+    @mock.patch('os_brick.utils._time_sleep')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'scan_iscsi')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'device_name_by_hctl',
                        side_effect=(None, None, None, None, 'sda'))
@@ -1462,7 +1462,7 @@ Setting up iSCSI targets: unused
         expected.update(failed_logins=1, stopped_threads=1)
         self.assertDictEqual(expected, data)
 
-    @mock.patch('time.sleep', mock.Mock())
+    @mock.patch('os_brick.utils._time_sleep', mock.Mock())
     @mock.patch.object(linuxscsi.LinuxSCSI, 'scan_iscsi')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'device_name_by_hctl',
                        return_value=None)
@@ -1493,7 +1493,7 @@ Setting up iSCSI targets: unused
             [mock.call(mock.sentinel.session, hctl),
              mock.call(mock.sentinel.session, hctl)])
 
-    @mock.patch('time.sleep', mock.Mock())
+    @mock.patch('os_brick.utils._time_sleep', mock.Mock())
     @mock.patch.object(linuxscsi.LinuxSCSI, 'scan_iscsi')
     @mock.patch.object(iscsi.ISCSIConnector, '_connect_to_iscsi_portal')
     def test_connect_vol_stop_connecting(self, connect_mock, scan_mock):
@@ -1583,7 +1583,7 @@ Setting up iSCSI targets: unused
             mock.call('/dev/disk/by-id/dm-...'),
             mock.call('/dev/disk/by-id/scsi-wwn')])
 
-    @mock.patch('time.sleep')
+    @mock.patch('os_brick.utils._time_sleep')
     @mock.patch('os.path.realpath', return_value='/dev/sdz')
     @mock.patch('os.listdir', return_value=['dm-...', 'scsi-...'])
     def test__get_device_link_not_found(self, listdir_mock, realpath_mock,
@@ -1599,7 +1599,7 @@ Setting up iSCSI targets: unused
                  mock.call('/dev/disk/by-id/scsi-...')])
         self.assertEqual(9, realpath_mock.call_count)
 
-    @mock.patch('time.sleep')
+    @mock.patch('os_brick.utils._time_sleep')
     @mock.patch('os.path.realpath')
     @mock.patch('os.listdir', return_value=['dm-...', 'scsi-...'])
     def test__get_device_link_symlink_found_after_retry(self, mock_listdir,
@@ -1622,7 +1622,7 @@ Setting up iSCSI targets: unused
             + [mock.call('/dev/disk/by-id/scsi-wwn')])
         self.assertEqual(7, mock_realpath.call_count)
 
-    @mock.patch('time.sleep')
+    @mock.patch('os_brick.utils._time_sleep')
     @mock.patch('os.path.realpath')
     @mock.patch('os.listdir', return_value=['dm-...', 'scsi-...'])
     def test__get_device_link_symlink_found_after_retry_by_listdir(

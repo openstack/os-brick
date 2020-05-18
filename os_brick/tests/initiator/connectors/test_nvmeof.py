@@ -135,7 +135,7 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
                        autospec=True)
     @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_subsys',
                        autospec=True)
-    @mock.patch('time.sleep', autospec=True)
+    @mock.patch('os_brick.utils._time_sleep')
     def test__wait_for_blk(self, mock_sleep, mock_nvme_subsys,
                            mock_nvme_dev, expected, nvme,
                            list_subsys, nvme_list):
@@ -152,7 +152,7 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
                        autospec=True)
     @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_subsys',
                        autospec=True)
-    @mock.patch('time.sleep', autospec=True)
+    @mock.patch('os_brick.utils._time_sleep')
     def test__wait_for_blk_raise(self, mock_sleep, mock_nvme_subsys,
                                  mock_nvme_dev, expected, nvme,
                                  list_subsys, nvme_list):
@@ -170,7 +170,7 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
                        autospec=True)
     @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_subsys',
                        autospec=True)
-    @mock.patch('time.sleep', autospec=True)
+    @mock.patch('os_brick.utils._time_sleep')
     def test__wait_for_blk_retry_success(self, mock_sleep, mock_nvme_subsys,
                                          mock_nvme_dev, expected, nvme,
                                          list_subsys, nvme_list):
@@ -180,7 +180,7 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         self.assertEqual(expected, actual)
 
     @mock.patch.object(nvmeof.NVMeOFConnector, '_execute', autospec=True)
-    @mock.patch('time.sleep', autospec=True)
+    @mock.patch('os_brick.utils._time_sleep')
     def test_get_nvme_devices_raise(self, mock_sleep, mock_execute):
         mock_execute.side_effect = putils.ProcessExecutionError
         self.assertRaises(exception.CommandExecutionFailed,
@@ -191,7 +191,7 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_devices',
                        autospec=True)
     @mock.patch.object(nvmeof.NVMeOFConnector, '_execute', autospec=True)
-    @mock.patch('time.sleep', autospec=True)
+    @mock.patch('os_brick.utils._time_sleep')
     def test_connect_volume(self, mock_sleep, mock_execute, mock_devices,
                             mock_blk):
         connection_properties = {'target_portal': 'portal',
@@ -226,7 +226,7 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_devices',
                        autospec=True)
     @mock.patch.object(nvmeof.NVMeOFConnector, '_execute', autospec=True)
-    @mock.patch('time.sleep', autospec=True)
+    @mock.patch('os_brick.utils._time_sleep')
     def test_connect_volume_hostnqn(
             self, mock_sleep, mock_execute, mock_devices,
             mock_blk):
@@ -260,7 +260,7 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
             run_as_root=True)
 
     @mock.patch.object(nvmeof.NVMeOFConnector, '_execute', autospec=True)
-    @mock.patch('time.sleep', autospec=True)
+    @mock.patch('os_brick.utils._time_sleep')
     def test_connect_volume_raise(self, mock_sleep, mock_execute):
         connection_properties = {'target_portal': 'portal',
                                  'target_port': 1,
@@ -279,7 +279,7 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
                        autospec=True)
     @mock.patch.object(nvmeof.NVMeOFConnector, '_wait_for_blk',
                        autospec=True)
-    @mock.patch('time.sleep', autospec=True)
+    @mock.patch('os_brick.utils._time_sleep')
     def test_connect_volume_wait_for_blk_raise(self, mock_sleep, mock_blk,
                                                mock_subsys, mock_devices,
                                                mock_execute):
@@ -298,7 +298,7 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_devices',
                        autospec=True)
     @mock.patch.object(nvmeof.NVMeOFConnector, '_execute', autospec=True)
-    @mock.patch('time.sleep', autospec=True)
+    @mock.patch('os_brick.utils._time_sleep')
     def test_connect_volume_max_retry(
             self, mock_sleep, mock_execute, mock_devices,
             mock_blk):
@@ -320,7 +320,7 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_devices',
                        autospec=True)
     @mock.patch.object(nvmeof.NVMeOFConnector, '_execute', autospec=True)
-    @mock.patch('time.sleep', autospec=True)
+    @mock.patch('os_brick.utils._time_sleep')
     def test_connect_volume_nvmelist_retry_success(
             self, mock_sleep, mock_execute, mock_devices,
             mock_blk):
@@ -344,7 +344,7 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_devices',
                        autospec=True)
     @mock.patch.object(nvmeof.NVMeOFConnector, '_execute', autospec=True)
-    @mock.patch('time.sleep', autospec=True)
+    @mock.patch('os_brick.utils._time_sleep')
     def test_connect_nvme_retry_success(
             self, mock_sleep, mock_execute, mock_devices,
             mock_blk):
@@ -369,7 +369,7 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_devices',
                        autospec=True)
     @mock.patch.object(nvmeof.NVMeOFConnector, '_execute', autospec=True)
-    @mock.patch('time.sleep', autospec=True)
+    @mock.patch('os_brick.utils._time_sleep')
     def test_disconnect_volume_nova(
             self, mock_sleep, mock_execute, mock_devices):
         connection_properties = {'target_portal': 'portal',
@@ -388,7 +388,7 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_devices',
                        autospec=True)
     @mock.patch.object(nvmeof.NVMeOFConnector, '_execute', autospec=True)
-    @mock.patch('time.sleep', autospec=True)
+    @mock.patch('os_brick.utils._time_sleep')
     def test_disconnect_volume_cinder(
             self, mock_sleep, mock_execute, mock_devices):
         connection_properties = {'target_portal': 'portal',
@@ -410,7 +410,7 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_devices',
                        autospec=True)
     @mock.patch.object(nvmeof.NVMeOFConnector, '_execute', autospec=True)
-    @mock.patch('time.sleep', autospec=True)
+    @mock.patch('os_brick.utils._time_sleep')
     def test_disconnect_volume_raise(
             self, mock_sleep, mock_execute, mock_devices):
         mock_execute.side_effect = putils.ProcessExecutionError

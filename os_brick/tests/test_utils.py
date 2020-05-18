@@ -16,7 +16,6 @@ import functools
 import time
 from unittest import mock
 
-
 from os_brick import exception
 from os_brick.tests import base
 from os_brick import utils
@@ -31,7 +30,7 @@ class TestRetryDecorator(base.TestCase):
     def test_no_retry_required(self):
         self.counter = 0
 
-        with mock.patch.object(time, 'sleep') as mock_sleep:
+        with mock.patch.object(utils, '_time_sleep') as mock_sleep:
             @utils.retry(exceptions=exception.VolumeDeviceNotFound,
                          interval=2,
                          retries=3,
@@ -42,8 +41,8 @@ class TestRetryDecorator(base.TestCase):
 
             ret = succeeds()
             self.assertFalse(mock_sleep.called)
-            self.assertEqual(ret, 'success')
-            self.assertEqual(self.counter, 1)
+            self.assertEqual('success', ret)
+            self.assertEqual(1, self.counter)
 
     def test_retries_once(self):
         self.counter = 0
@@ -51,7 +50,7 @@ class TestRetryDecorator(base.TestCase):
         backoff_rate = 2
         retries = 3
 
-        with mock.patch.object(time, 'sleep') as mock_sleep:
+        with mock.patch.object(utils, '_time_sleep') as mock_sleep:
             @utils.retry(exception.VolumeDeviceNotFound,
                          interval,
                          retries,
@@ -64,10 +63,10 @@ class TestRetryDecorator(base.TestCase):
                     return 'success'
 
             ret = fails_once()
-            self.assertEqual(ret, 'success')
-            self.assertEqual(self.counter, 2)
-            self.assertEqual(mock_sleep.call_count, 1)
-            mock_sleep.assert_called_with(interval * backoff_rate)
+            self.assertEqual('success', ret)
+            self.assertEqual(2, self.counter)
+            self.assertEqual(1, mock_sleep.call_count)
+            mock_sleep.assert_called_with(interval)
 
     def test_limit_is_reached(self):
         self.counter = 0
@@ -75,7 +74,7 @@ class TestRetryDecorator(base.TestCase):
         interval = 2
         backoff_rate = 4
 
-        with mock.patch.object(time, 'sleep') as mock_sleep:
+        with mock.patch.object(utils, '_time_sleep') as mock_sleep:
             @utils.retry(exception.VolumeDeviceNotFound,
                          interval,
                          retries,
@@ -92,7 +91,7 @@ class TestRetryDecorator(base.TestCase):
 
             for i in range(retries):
                 if i > 0:
-                    interval *= backoff_rate
+                    interval *= (backoff_rate ** (i - 1))
                     expected_sleep_arg.append(float(interval))
 
             mock_sleep.assert_has_calls(
@@ -100,7 +99,7 @@ class TestRetryDecorator(base.TestCase):
 
     def test_wrong_exception_no_retry(self):
 
-        with mock.patch.object(time, 'sleep') as mock_sleep:
+        with mock.patch.object(utils, '_time_sleep') as mock_sleep:
             @utils.retry(exceptions=exception.VolumeDeviceNotFound)
             def raise_unexpected_error():
                 raise WrongException("wrong exception")

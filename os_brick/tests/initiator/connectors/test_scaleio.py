@@ -246,7 +246,7 @@ class ScaleIOConnectorTestCase(test_connector.ConnectorTestCase):
 
         self.assertRaises(exception.BrickException, self.test_connect_volume)
 
-    @mock.patch('time.sleep')
+    @mock.patch('os_brick.utils._time_sleep')
     def test_error_path_not_found(self, sleep_mock):
         """Timeout waiting for volume to map to local file system"""
         self.mock_object(os, 'listdir', return_value=["emc-vol-no-volume"])
