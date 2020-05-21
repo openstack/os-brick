@@ -35,7 +35,7 @@ add_function_parentheses = True
 add_module_names = True
 
 # The name of the Pygments (syntax highlighting) style to use.
-pygments_style = 'sphinx'
+pygments_style = 'native'
 
 # -- Options for HTML output --------------------------------------------------
 
@@ -45,9 +45,10 @@ html_theme = 'openstackdocs'
 
 # -- Options for openstackdocstheme -------------------------------------------
 
-repository_name = 'openstack/os-brick'
-bug_project = 'os-brick'
-bug_tag = ''
+openstackdocs_repo_name = 'openstack/os-brick'
+openstackdocs_pdf_link = True
+openstackdocs_bug_project = 'os-brick'
+openstackdocs_bug_tag = ''
 
 # -- Options for LaTeX output -------------------------------------------------
 

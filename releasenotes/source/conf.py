@@ -48,6 +48,6 @@ html_theme = 'openstackdocs'
 
 # -- Options for openstackdocstheme -------------------------------------------
 
-repository_name = 'openstack/os-brick'
-bug_project = 'os-brick'
-bug_tag = ''
+openstackdocs_repo_name = 'openstack/os-brick'
+openstackdocs_bug_project = 'os-brick'
+openstackdocs_bug_tag = ''
