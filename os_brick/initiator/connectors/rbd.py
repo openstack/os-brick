@@ -22,6 +22,7 @@ from oslo_serialization import jsonutils
 from oslo_utils import excutils
 from oslo_utils import fileutils
 from oslo_utils import netutils
+from oslo_utils import versionutils
 
 from os_brick import exception
 from os_brick.i18n import _
@@ -32,6 +33,10 @@ from os_brick.privileged import rbd as rbd_privsep
 from os_brick import utils
 
 LOG = logging.getLogger(__name__)
+
+# BUG: #1865754 - Set version base for ceph Octopus which requires additional
+# handling of the config file.
+OCTOPUS_BASE_VERSION = "15.2.0"
 
 
 class RBDConnector(base.BaseLinuxConnector):
@@ -89,24 +94,50 @@ class RBDConnector(base.BaseLinuxConnector):
             msg = (_("Keyring path %s is not readable.") % (keyring_path))
             raise exception.BrickException(msg=msg)
 
-    @classmethod
-    def _create_ceph_conf(cls, monitor_ips, monitor_ports,
+    def _create_ceph_conf(self, monitor_ips, monitor_ports,
                           cluster_name, user, keyring):
         monitors = ["%s:%s" % (ip, port) for ip, port in
-                    zip(cls._sanitize_mon_hosts(monitor_ips), monitor_ports)]
+                    zip(self._sanitize_mon_hosts(monitor_ips), monitor_ports)]
         mon_hosts = "mon_host = %s" % (','.join(monitors))
 
-        keyring = cls._check_or_get_keyring_contents(keyring, cluster_name,
-                                                     user)
+        keyring = self._check_or_get_keyring_contents(keyring, cluster_name,
+                                                      user)
 
+        ceph_version = self._determine_ceph_client_version()
         try:
             fd, ceph_conf_path = tempfile.mkstemp(prefix="brickrbd_")
             with os.fdopen(fd, 'w') as conf_file:
-                conf_file.writelines([mon_hosts, "\n", keyring, "\n"])
+                # BUG#1865754 - ceph octopus requires "[global]" as part of
+                # the ini conf file that is generated.  The 'same_major=False'
+                # is based on the assumption that this is also the behaviour of
+                # ceph in future versions of ceph following octopus.
+                if versionutils.is_compatible(OCTOPUS_BASE_VERSION,
+                                              ceph_version,
+                                              same_major=False):
+                    config = ["[global]", "\n",
+                              mon_hosts, "\n", keyring, "\n"]
+                else:
+                    config = [mon_hosts, "\n", keyring, "\n"]
+
+                conf_file.writelines(config)
             return ceph_conf_path
         except IOError:
             msg = (_("Failed to write data to %s.") % (ceph_conf_path))
             raise exception.BrickException(msg=msg)
+
+    # output of 'ceph --version' on different versions of ceph
+    # ceph version 0.80.11 (8424145d49264624a3b0a204aedb127835161070)
+    # ceph version 10.2.11 (e4b061b47f07f583c92a050d9e84b1813a35671e)
+    # ceph version 12.2.13 (584a...) luminous (stable)
+    # ceph version 14.2.9 (581f...) nautilus (stable)
+    # ceph version 15.2.3 (d289...) octopus (stable)
+    # ceph version 14.2.11-99-gaf0268dc91 (af0268dc910f84b) nautilus (stable)
+    def _determine_ceph_client_version(self):
+        cmd = ['ceph', '--version']
+        (out, _) = self._execute(*cmd)
+        if '-' in out:
+            out = out[:out.index('-')]
+        return out.split(" ")[2]
 
     def _get_rbd_handle(self, connection_properties):
         try:
