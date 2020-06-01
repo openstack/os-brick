@@ -17,6 +17,9 @@ import os
 import struct
 import uuid
 
+from six.moves import configparser
+
+from os_brick import exception
 from os_brick import privileged
 
 SCINI_DEVICE_PATH = '/dev/scini'
@@ -70,3 +73,27 @@ def rescan_vols(op_code):
 
     with open_scini_device() as fd:
         ioctl(fd, op_code, struct.pack('Q', 0))
+
+
+@privileged.default.entrypoint
+def get_connector_password(filename, config_group):
+    """Read ScaleIO connector configuration file and get appropriate password.
+
+    :param filename: path to connector configuration file
+    :type filename: str
+    :param config_group: name of section in configuration file
+    :type config_group: str
+    :return: connector password
+    :rtype: str
+    """
+
+    if not os.path.isfile(filename):
+        msg = (
+            "ScaleIO connector configuration file "
+            "is not found in path %s." % filename
+        )
+        raise exception.BrickException(message=msg)
+
+    conf = configparser.ConfigParser()
+    conf.read(filename)
+    return conf[config_group]["san_password"]
