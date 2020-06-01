@@ -16,6 +16,7 @@ import json
 import os
 import requests
 import six
+from six.moves import configparser
 from six.moves import urllib
 
 from oslo_concurrency import lockutils
@@ -30,6 +31,7 @@ from os_brick import utils
 
 LOG = logging.getLogger(__name__)
 DEVICE_SCAN_ATTEMPTS_DEFAULT = 3
+CONNECTOR_CONF_PATH = '/opt/emc/scaleio/openstack/connector.conf'
 synchronized = lockutils.synchronized_with_prefix('os-brick-')
 
 
@@ -40,6 +42,7 @@ class ScaleIOConnector(base.BaseLinuxConnector):
     VOLUME_NOT_MAPPED_ERROR = 84
     VOLUME_ALREADY_MAPPED_ERROR = 81
     GET_GUID_CMD = ['/opt/emc/scaleio/sdc/bin/drv_cfg', '--query_guid']
+    GET_PASSWORD_CMD = ['cat', CONNECTOR_CONF_PATH]
     RESCAN_VOLS_CMD = ['/opt/emc/scaleio/sdc/bin/drv_cfg', '--rescan']
 
     def __init__(self, root_helper, driver=None,
@@ -223,6 +226,32 @@ class ScaleIOConnector(base.BaseLinuxConnector):
                  {'volume_id': volume_id})
         return volume_id
 
+    def _get_connector_password(self, config_group):
+        LOG.info("Get ScaleIO connector password from configuration file")
+
+        if not os.path.isfile(CONNECTOR_CONF_PATH):
+            msg = ("ScaleIO connector configuration file "
+                   "is not found in path %s." % CONNECTOR_CONF_PATH)
+            raise exception.BrickException(message=msg)
+
+        try:
+            (out, err) = self._execute(*self.GET_PASSWORD_CMD,
+                                       run_as_root=True,
+                                       root_helper=self._root_helper)
+            conf = configparser.ConfigParser()
+            conf.readfp(six.StringIO(out))
+            return conf[config_group]["san_password"]
+        except putils.ProcessExecutionError as e:
+            msg = _("Error reading ScaleIO connector "
+                    "configuration file: %s") % e.stderr
+            LOG.error(msg)
+            raise exception.BrickException(message=msg)
+        except Exception as e:
+            msg = _("Error getting ScaleIO connector password from "
+                    "configuration file: %s") % e
+            LOG.error(msg)
+            raise exception.BrickException(message=msg)
+
     def _check_response(self, response, request, is_get_request=True,
                         params=None):
         if response.status_code == 401 or response.status_code == 403:
@@ -271,8 +300,9 @@ class ScaleIOConnector(base.BaseLinuxConnector):
         self.server_ip = connection_properties['serverIP']
         self.server_port = connection_properties['serverPort']
         self.server_username = connection_properties['serverUsername']
-        self.server_password = connection_properties['serverPassword']
-        self.server_token = connection_properties['serverToken']
+        self.server_password = self._get_connector_password(
+            connection_properties['config_group'],
+        )
         self.iops_limit = connection_properties['iopsLimit']
         self.bandwidth_limit = connection_properties['bandwidthLimit']
         device_info = {'type': 'block',
