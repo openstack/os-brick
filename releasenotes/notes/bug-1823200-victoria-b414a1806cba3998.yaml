@@ -1,0 +1,29 @@
+---
+security:
+  - |
+    Dell EMC VxFlex OS driver: This release contains a fix for
+    `Bug #1823200 <https://bugs.launchpad.net/cinder/+bug/1823200>`_.
+    See `OSSN-0086 <https://wiki.openstack.org/wiki/OSSN/OSSN-0086>`_
+    for details.
+upgrade:
+  - |
+    The fix for `Bug #1823200
+    <https://bugs.launchpad.net/cinder/+bug/1823200>`_ requires that a
+    configuration file be deployed on compute nodes, cinder nodes, and
+    anywhere you would perform a volume attachment in your deployment,
+    when using Cinder with a Dell EMC VxFlex OS backend.  See the
+    `Dell EMC VxFlex OS (ScaleIO) Storage driver
+    <https://docs.openstack.org/cinder/latest/configuration/block-storage/drivers/dell-emc-vxflex-driver.html>`_
+    documentation for details about this configuration file.
+fixes:
+  - |
+    `Bug #1823200 <https://bugs.launchpad.net/cinder/+bug/1823200>`_:
+    This release contains an updated connector for use with the Dell EMC
+    VxFlex OS backend.  It requires that a configuration file be deployed
+    on compute nodes, cinder nodes, and anywhere you would perform a
+    volume attachment in your deployment.  See the
+    `Dell EMC VxFlex OS (ScaleIO) Storage driver
+    <https://docs.openstack.org/cinder/latest/configuration/block-storage/drivers/dell-emc-vxflex-driver.html>`_
+    documentation for details about the configuration file, and see
+    `OSSN-0086 <https://wiki.openstack.org/wiki/OSSN/OSSN-0086>`_ for
+    more information about the security vulnerability.
