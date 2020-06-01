@@ -737,7 +737,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                     data['failed_logins'])):
             # We have devices but we don't know the wwn yet
             if not wwn and found:
-                wwn = self._linuxscsi.get_sysfs_wwn(found)
+                wwn = self._linuxscsi.get_sysfs_wwn(found, mpath)
             if not mpath and found:
                 mpath = self._linuxscsi.find_sysfs_multipath_dm(found)
                 # We have the wwn but not a multipath
@@ -778,6 +778,8 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         if not mpath:
             LOG.warning('No dm was created, connection to volume is probably '
                         'bad and will perform poorly.')
+        elif not wwn:
+            wwn = self._linuxscsi.get_sysfs_wwn(found, mpath)
         return self._get_connect_result(connection_properties, wwn, found,
                                         mpath)
 
