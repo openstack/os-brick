@@ -1,0 +1,6 @@
+---
+fixes:
+  - |
+    Improve iSCSI multipath detection to work even if we cannot find the
+    volume's WWN in sysfs.
+    (bug 1881619).
