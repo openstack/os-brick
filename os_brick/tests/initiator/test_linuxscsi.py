@@ -859,25 +859,53 @@ loop0                                     0"""
         glob_mock.assert_called_once_with('/dev/disk/by-id/scsi-*')
         get_wwid_mock.assert_called_once_with(mock.sentinel.device_names)
 
+    @mock.patch('os.listdir', return_value=['sda', 'sdd'])
     @mock.patch('os.path.realpath', side_effect=('/other/path',
+                                                 '/dev/dm-5',
                                                  '/dev/sda', '/dev/sdb'))
-    @mock.patch('os.path.islink', side_effect=(False, True, True, True, True))
-    @mock.patch('os.stat', side_effect=(False, True, True, True))
+    @mock.patch('os.path.islink', side_effect=(False,) + (True,) * 5)
+    @mock.patch('os.stat', side_effect=(False,) + (True,) * 4)
     @mock.patch('glob.glob')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_sysfs_wwid')
     def test_get_sysfs_wwn_multiple_designators(self, get_wwid_mock, glob_mock,
                                                 stat_mock, islink_mock,
-                                                realpath_mock):
+                                                realpath_mock, listdir_mock):
         glob_mock.return_value = ['/dev/disk/by-id/scsi-fail-link',
                                   '/dev/disk/by-id/scsi-fail-stat',
                                   '/dev/disk/by-id/scsi-non-dev',
+                                  '/dev/disk/by-id/scsi-another-dm',
                                   '/dev/disk/by-id/scsi-wwid1',
                                   '/dev/disk/by-id/scsi-wwid2']
+
         get_wwid_mock.return_value = 'pre-wwid'
         devices = ['sdb', 'sdc']
         res = self.linuxscsi.get_sysfs_wwn(devices)
         self.assertEqual('wwid2', res)
         glob_mock.assert_called_once_with('/dev/disk/by-id/scsi-*')
+        listdir_mock.assert_called_once_with('/sys/class/block/dm-5/slaves')
+        get_wwid_mock.assert_called_once_with(devices)
+
+    @mock.patch('os.listdir', side_effect=[['sda', 'sdb'], ['sdc', 'sdd']])
+    @mock.patch('os.path.realpath', side_effect=('/dev/sde',
+                                                 '/dev/dm-5',
+                                                 '/dev/dm-6'))
+    @mock.patch('os.path.islink', mock.Mock())
+    @mock.patch('os.stat', mock.Mock())
+    @mock.patch('glob.glob')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_sysfs_wwid', return_value='')
+    def test_get_sysfs_wwn_dm_link(self, get_wwid_mock, glob_mock,
+                                   realpath_mock, listdir_mock):
+        glob_mock.return_value = ['/dev/disk/by-id/scsi-wwid1',
+                                  '/dev/disk/by-id/scsi-another-dm',
+                                  '/dev/disk/by-id/scsi-our-dm']
+
+        devices = ['sdc', 'sdd']
+        res = self.linuxscsi.get_sysfs_wwn(devices)
+        self.assertEqual('our-dm', res)
+        glob_mock.assert_called_once_with('/dev/disk/by-id/scsi-*')
+        listdir_mock.assert_has_calls(
+            [mock.call('/sys/class/block/dm-5/slaves'),
+             mock.call('/sys/class/block/dm-6/slaves')])
         get_wwid_mock.assert_called_once_with(devices)
 
     @mock.patch('os.path.realpath', side_effect=('/dev/sda', '/dev/sdb'))
@@ -890,6 +918,16 @@ loop0                                     0"""
         glob_mock.return_value = ['/dev/disk/by-id/scsi-wwid1',
                                   '/dev/disk/by-id/scsi-wwid2']
         get_wwid_mock.return_value = 'pre-wwid'
+        devices = ['sdc']
+        res = self.linuxscsi.get_sysfs_wwn(devices)
+        self.assertEqual('', res)
+        glob_mock.assert_called_once_with('/dev/disk/by-id/scsi-*')
+        get_wwid_mock.assert_called_once_with(devices)
+
+    @mock.patch('glob.glob', return_value=[])
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_sysfs_wwid')
+    def test_get_sysfs_wwn_no_links(self, get_wwid_mock, glob_mock):
+        get_wwid_mock.return_value = ''
         devices = ['sdc']
         res = self.linuxscsi.get_sysfs_wwn(devices)
         self.assertEqual('', res)
