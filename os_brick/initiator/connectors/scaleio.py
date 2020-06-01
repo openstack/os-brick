@@ -30,6 +30,7 @@ from os_brick import utils
 
 LOG = logging.getLogger(__name__)
 DEVICE_SCAN_ATTEMPTS_DEFAULT = 3
+CONNECTOR_CONF_PATH = '/opt/emc/scaleio/openstack/connector.conf'
 synchronized = lockutils.synchronized_with_prefix('os-brick-')
 
 
@@ -83,6 +84,19 @@ class ScaleIOConnector(base.BaseLinuxConnector):
             return guid
         except (IOError, OSError, ValueError) as e:
             msg = _("Error querying sdc guid: %s") % e
+            LOG.error(msg)
+            raise exception.BrickException(message=msg)
+
+    @staticmethod
+    def _get_connector_password(config_group, failed_over):
+        LOG.info("Get ScaleIO connector password from configuration file")
+        try:
+            return priv_scaleio.get_connector_password(CONNECTOR_CONF_PATH,
+                                                       config_group,
+                                                       failed_over)
+        except Exception as e:
+            msg = _("Error getting ScaleIO connector password from "
+                    "configuration file: %s") % e
             LOG.error(msg)
             raise exception.BrickException(message=msg)
 
@@ -306,8 +320,10 @@ class ScaleIOConnector(base.BaseLinuxConnector):
         self.server_ip = connection_properties['serverIP']
         self.server_port = connection_properties['serverPort']
         self.server_username = connection_properties['serverUsername']
-        self.server_password = connection_properties['serverPassword']
-        self.server_token = connection_properties['serverToken']
+        self.server_password = self._get_connector_password(
+            connection_properties['config_group'],
+            connection_properties['failed_over'],
+        )
         self.iops_limit = connection_properties['iopsLimit']
         self.bandwidth_limit = connection_properties['bandwidthLimit']
         device_info = {'type': 'block',
