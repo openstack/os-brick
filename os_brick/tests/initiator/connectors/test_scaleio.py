@@ -47,8 +47,7 @@ class ScaleIOConnectorTestCase(test_connector.ConnectorTestCase):
             'scaleIO_volume_id': self.vol['provider_id'],
             'serverPort': 443,
             'serverUsername': 'test',
-            'serverPassword': 'fake',
-            'serverToken': 'fake_token',
+            'config_group': 'test',
             'iopsLimit': None,
             'bandwidthLimit': None
         }
@@ -83,6 +82,10 @@ class ScaleIOConnectorTestCase(test_connector.ConnectorTestCase):
         self.mock_object(os.path, 'isdir', return_value=True)
         self.mock_object(os, 'listdir',
                          return_value=["emc-vol-{}".format(self.vol['id'])])
+
+        self.get_password_mock = self.mock_object(scaleio.ScaleIOConnector,
+                                                  '_get_connector_password',
+                                                  return_value='fake_password')
 
         # The actual ScaleIO connector
         self.connector = scaleio.ScaleIOConnector(
@@ -170,6 +173,7 @@ class ScaleIOConnectorTestCase(test_connector.ConnectorTestCase):
     def test_connect_volume(self):
         """Successful connect to volume"""
         self.connector.connect_volume(self.fake_connection_properties)
+        self.get_password_mock.assert_called_once()
 
     def test_connect_with_bandwidth_limit(self):
         """Successful connect to volume with bandwidth limit"""
