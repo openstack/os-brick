@@ -15,6 +15,9 @@ libssl-dev [platform:dpkg]
 openssl-devel [platform:rpm !platform:suse]
 libopenssl-devel [platform:suse !platform:rpm]
 
+iscsi-initiator-utils [platform:rpm !platform:suse]
+open-iscsi [platform:suse platform:dpkg]
+
 # Binary dependencies for PDF doc generation
 fonts-liberation [doc platform:dpkg]
 texlive-latex-base [doc platform:dpkg]
