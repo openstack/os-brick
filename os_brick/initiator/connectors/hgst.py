@@ -77,8 +77,8 @@ class HGSTConnector(base.BaseLinuxConnector):
         for host in domain:
             try:
                 ip = socket.gethostbyname(host)
-                for l in nets:
-                    x = l.strip()
+                for line in nets:
+                    x = line.strip()
                     if x.startswith("inet %s/" % ip):
                         return host
             except socket.error:

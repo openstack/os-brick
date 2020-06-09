@@ -88,8 +88,8 @@ class RemoteFsClient(executor.Executor):
         """
         with open("/proc/mounts", "r") as mounts:
             # Remove empty lines and split lines by whitespace
-            lines = [l.split() for l in mounts.read().splitlines()
-                     if l.strip()]
+            lines = [line.split() for line in mounts.read().splitlines()
+                     if line.strip()]
 
             # Return {mountpoint: mountdevice}.  Fields 2nd and 1st as per
             # http://man7.org/linux/man-pages/man5/fstab.5.html

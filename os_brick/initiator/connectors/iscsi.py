@@ -970,9 +970,9 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
             lines, _err = self._execute('cat', file_path, run_as_root=True,
                                         root_helper=self._root_helper)
 
-            for l in lines.split('\n'):
-                if l.startswith('InitiatorName='):
-                    return l[l.index('=') + 1:].strip()
+            for line in lines.split('\n'):
+                if line.startswith('InitiatorName='):
+                    return line[line.index('=') + 1:].strip()
         except putils.ProcessExecutionError:
             LOG.warning("Could not find the iSCSI Initiator File %s",
                         file_path)
