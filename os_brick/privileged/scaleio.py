@@ -96,4 +96,4 @@ def get_connector_password(filename, config_group):
 
     conf = configparser.ConfigParser()
     conf.read(filename)
-    return conf[config_group]["san_password"]
+    return conf.get(config_group, "san_password")
