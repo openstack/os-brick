@@ -240,7 +240,7 @@ class ScaleIOConnector(base.BaseLinuxConnector):
                                        root_helper=self._root_helper)
             conf = configparser.ConfigParser()
             conf.readfp(six.StringIO(out))
-            return conf[config_group]["san_password"]
+            return conf.get(config_group, "san_password")
         except putils.ProcessExecutionError as e:
             msg = _("Error reading ScaleIO connector "
                     "configuration file: %s") % e.stderr

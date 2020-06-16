@@ -1,0 +1,28 @@
+---
+security:
+  - |
+    Dell EMC VxFlex OS driver: This release corrects an issue where the
+    fix for `Bug #1823200 <https://bugs.launchpad.net/cinder/+bug/1823200>`_
+    did not run correctly when using Python 2.7.  If you are interested
+    in this release because of `OSSN-0086
+    <https://wiki.openstack.org/wiki/OSSN/OSSN-0086>`_, be aware that
+    you must also deploy a configuration file on compute nodes, cinder
+    nodes, and anywhere you would perform a volume attachment in your
+    deployment.  Please see the release notes for the previous release
+    for details.
+upgrade:
+  - |
+    This release corrects a problem with the fix for `Bug #1823200
+    <https://bugs.launchpad.net/cinder/+bug/1823200>`_ in the previous
+    release.  If you are running OpenStack on Python 3, you should not
+    be impacted by this bug.  If you are not using Dell EMC VxFlex OS
+    (ScaleIO) Storage as a backend for Cinder, you do not need to upgrade
+    to this release.
+fixes:
+  - |
+    `Bug #1883654 <https://bugs.launchpad.net/os-brick/+bug/1883654>`_:
+    The fix for `Bug #1823200
+    <https://bugs.launchpad.net/cinder/+bug/1823200>`_ in the previous
+    release used a Python 3-specific language feature and thus did not
+    run correctly when used with Python 2.7.  The problem has been corrected
+    in this release.
