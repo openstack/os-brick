@@ -419,11 +419,71 @@ class RBDConnectorTestCase(test_connector.ConnectorTestCase):
         mock_execute.called_once_with(*show_cmd, root_helper=None,
                                       run_as_root=True)
 
-    def test_extend_volume(self):
-        rbd_connector = rbd.RBDConnector(None)
-        self.assertRaises(NotImplementedError,
-                          rbd_connector.extend_volume,
+    @mock.patch('oslo_utils.fileutils.delete_if_exists')
+    @mock.patch.object(rbd.RBDConnector, '_get_rbd_handle')
+    def test_extend_volume_handle(self, mock_handle, mock_delete):
+        connector = rbd.RBDConnector(None)
+        res = connector.extend_volume(self.connection_properties)
+
+        mock_handle.assert_called_once_with(self.connection_properties)
+        mock_handle.return_value.seek.assert_called_once_with(0, 2)
+        mock_handle.return_value.tell.assert_called_once_with()
+        self.assertIs(mock_handle().tell(), res)
+        mock_delete.assert_called_once_with(mock_handle().rbd_conf)
+        mock_handle.return_value.close.assert_called_once_with()
+
+    @mock.patch('oslo_utils.fileutils.delete_if_exists')
+    @mock.patch.object(rbd.RBDConnector, '_get_rbd_handle')
+    def test_extend_volume_handle_fail(self, mock_handle, mock_delete):
+        mock_handle.return_value.seek.side_effect = ValueError
+        connector = rbd.RBDConnector(None)
+
+        self.assertRaises(ValueError, connector.extend_volume,
                           self.connection_properties)
+
+        mock_handle.assert_called_once_with(self.connection_properties)
+        mock_handle.return_value.seek.assert_called_once_with(0, 2)
+        mock_handle().tell.assert_not_called()
+        mock_delete.assert_called_once_with(mock_handle.return_value.rbd_conf)
+        mock_handle.return_value.close.assert_called_once_with()
+
+    @mock.patch.object(rbd, 'open')
+    @mock.patch('os_brick.privileged.rbd.delete_if_exists')
+    @mock.patch.object(rbd.RBDConnector, '_find_root_device')
+    @mock.patch.object(rbd.RBDConnector, 'create_non_openstack_config')
+    def test_extend_volume_block(self, mock_config, mock_find, mock_delete,
+                                 mock_open):
+        mock_find.return_value = '/dev/rbd1'
+        file_handle = mock_open.return_value.__enter__.return_value
+        file_handle.read.return_value = '123456789'
+        connector = rbd.RBDConnector(None, do_local_attach=True)
+
+        res = connector.extend_volume(self.connection_properties)
+
+        mock_config.assert_called_once_with(self.connection_properties)
+        mock_find.assert_called_once_with(self.connection_properties,
+                                          mock_config.return_value)
+        mock_delete.assert_called_once_with(mock_config.return_value)
+        mock_open.assert_called_once_with('/sys/devices/rbd/1/size')
+        file_handle.read.assert_called_once_with()
+        self.assertEqual(123456789, res)
+
+    @mock.patch.object(rbd, 'open')
+    @mock.patch('os_brick.privileged.rbd.delete_if_exists')
+    @mock.patch.object(rbd.RBDConnector, '_find_root_device')
+    @mock.patch.object(rbd.RBDConnector, 'create_non_openstack_config')
+    def test_extend_volume_no_device_local(self, mock_config, mock_find,
+                                           mock_delete, mock_open):
+        mock_find.return_value = None
+        connector = rbd.RBDConnector(None, do_local_attach=True)
+        self.assertRaises(exception.BrickException, connector.extend_volume,
+                          self.connection_properties)
+
+        mock_config.assert_called_once_with(self.connection_properties)
+        mock_find.assert_called_once_with(self.connection_properties,
+                                          mock_config.return_value)
+        mock_delete.assert_called_once_with(mock_config.return_value)
+        mock_open.assert_not_called()
 
     def test__get_rbd_args(self):
         res = rbd.RBDConnector._get_rbd_args(self.connection_properties, None)
