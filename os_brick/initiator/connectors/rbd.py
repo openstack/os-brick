@@ -220,7 +220,43 @@ class RBDConnector(base.BaseLinuxConnector):
         cmd += self._get_rbd_args(connection_properties)
         (out, err) = self._execute(*cmd, root_helper=self._root_helper,
                                    run_as_root=True)
-        for index, mapping in jsonutils.loads(out).items():
+
+        # ceph v13.2.0 (Mimic) changed the output format of 'rbd showmapped'
+        # from a dict of mappings keyed by ID to a simple list of mappings
+        # https://docs.ceph.com/docs/master/releases/mimic/
+        #
+        # before:
+        #
+        #   {
+        #     "0": {
+        #       "pool":"volumes",
+        #       "namespace":"",
+        #       "name":"volume-6d54cb90-a5d1-40d8-9cb2-c6adf43a02af",
+        #       "snap":"-",
+        #       "device":"/dev/rbd0"
+        #     }
+        #   }
+        #
+        # after:
+        #
+        #   [
+        #     {
+        #       "id":"0",
+        #       "pool":"volumes",
+        #       "namespace":"",
+        #       "name":"volume-6d54cb90-a5d1-40d8-9cb2-c6adf43a02af",
+        #       "snap":"-",
+        #       "device":"/dev/rbd0"
+        #     }
+        #   ]
+        #
+        # TODO(stephenfin): Drop when we drop support for ceph 13.2.0
+        mappings = jsonutils.loads(out)
+        if isinstance(mappings, dict):
+            # yes, we're losing the ID field but we don't need it here
+            mappings = mappings.values()
+
+        for mapping in mappings:
             if mapping['name'] == volume:
                 return mapping['device']
         return None

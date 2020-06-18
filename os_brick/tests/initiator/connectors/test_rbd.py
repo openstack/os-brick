@@ -250,17 +250,25 @@ class RBDConnectorTestCase(test_connector.ConnectorTestCase):
 
         self.assertEqual(1, volume_close.call_count)
 
+    @ddt.data(
+        """
+        [{"id":"0","pool":"pool","device":"/dev/rbd0","name":"image"},
+         {"id":"1","pool":"pool","device":"/dev/rdb1","name":"image_2"}]
+        """,  # new-style output (ceph 13.2.0+)
+        """
+        {"0":{"pool":"pool","device":"/dev/rbd0","name":"image"},
+         "1":{"pool":"pool","device":"/dev/rdb1","name":"image_2"}}
+        """,  # old-style output
+    )
     @mock.patch.object(priv_rootwrap, 'execute', return_value=None)
-    def test_disconnect_local_volume(self, mock_execute):
+    def test_disconnect_local_volume(self, rbd_map_out, mock_execute):
+        """Test the disconnect volume case with local attach."""
         rbd_connector = rbd.RBDConnector(None, do_local_attach=True)
         conn = {'name': 'pool/image',
                 'auth_username': 'fake_user',
                 'hosts': ['192.168.10.2'],
                 'ports': ['6789']}
-        mock_execute.side_effect = [("""
-{"0":{"pool":"pool","device":"/dev/rbd0","name":"image"},
- "1":{"pool":"pool","device":"/dev/rdb1","name":"image_2"}}""", None),
-                                    (None, None)]
+        mock_execute.side_effect = [(rbd_map_out, None), (None, None)]
         show_cmd = ['rbd', 'showmapped', '--format=json', '--id', 'fake_user',
                     '--mon_host', '192.168.10.2:6789']
         unmap_cmd = ['rbd', 'unmap', '/dev/rbd0', '--id', 'fake_user',
