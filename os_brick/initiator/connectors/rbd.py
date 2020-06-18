@@ -191,6 +191,9 @@ class RBDConnector(base.BaseLinuxConnector):
                 not os.path.islink(rbd_dev_path) or
                 not os.path.exists(os.path.realpath(rbd_dev_path))
             ):
+                # TODO(stephenfin): Update to the unified 'rbd device map'
+                # command introduced in ceph 13.0 (commit 6a57358add1157629a6d)
+                # when we drop support earlier versions
                 cmd = ['rbd', 'map', volume, '--pool', pool]
                 cmd += self._get_rbd_args(connection_properties)
                 self._execute(*cmd, root_helper=self._root_helper,
@@ -230,6 +233,9 @@ class RBDConnector(base.BaseLinuxConnector):
         :returns: '/dev/rbd*' or None if no active mapping is found.
         """
         __, volume = connection_properties['name'].split('/')
+        # TODO(stephenfin): Update to the unified 'rbd device list'
+        # command introduced in ceph 13.0 (commit 6a57358add1157629a6d)
+        # when we drop support earlier versions
         cmd = ['rbd', 'showmapped', '--format=json']
         cmd += self._get_rbd_args(connection_properties)
         (out, err) = self._execute(*cmd, root_helper=self._root_helper,
@@ -291,6 +297,9 @@ class RBDConnector(base.BaseLinuxConnector):
         if do_local_attach:
             root_device = self._find_root_device(connection_properties)
             if root_device:
+                # TODO(stephenfin): Update to the unified 'rbd device unmap'
+                # command introduced in ceph 13.0 (commit 6a57358add1157629a6d)
+                # when we drop support earlier versions
                 cmd = ['rbd', 'unmap', root_device]
                 cmd += self._get_rbd_args(connection_properties)
                 self._execute(*cmd, root_helper=self._root_helper,
