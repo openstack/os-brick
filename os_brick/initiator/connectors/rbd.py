@@ -352,13 +352,8 @@ class RBDConnector(base.BaseLinuxConnector):
                     fileutils.delete_if_exists(rbd_handle.rbd_conf)
                     rbd_handle.close()
 
-    def check_valid_device(self, path, run_as_root=True):
-        """Verify an existing RBD handle is connected and valid."""
-        rbd_handle = path
-
-        if rbd_handle is None:
-            return False
-
+    @staticmethod
+    def _check_valid_device(rbd_handle):
         original_offset = rbd_handle.tell()
 
         try:
@@ -371,6 +366,22 @@ class RBDConnector(base.BaseLinuxConnector):
             rbd_handle.seek(original_offset, 0)
 
         return True
+
+    def check_valid_device(self, path, run_as_root=True):
+        """Verify an existing RBD handle is connected and valid."""
+        if not path:
+            return False
+
+        # We can receive a file handle or a path to a device
+        if isinstance(path, str):
+            if run_as_root:
+                return rbd_privsep.check_valid_path(path)
+            else:
+                with open(path, 'rb') as rbd_handle:
+                    return self._check_valid_device(rbd_handle)
+
+        # For backward compatibility ignore run_as_root param with handles
+        return self._check_valid_device(path)
 
     def extend_volume(self, connection_properties):
         # TODO(walter-boring): is this possible?

@@ -1,0 +1,5 @@
+---
+fixes:
+  - |
+    Fix check_valid_path method in the RBD connector for locally attached
+    volumes.  (Bug #1884552)

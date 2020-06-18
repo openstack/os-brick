@@ -50,3 +50,10 @@ def root_create_ceph_conf(monitor_ips, monitor_ports, cluster_name, user,
     get_rbd_class()
     return RBDConnector._create_ceph_conf(monitor_ips, monitor_ports,
                                           cluster_name, user, keyring)
+
+
+@os_brick.privileged.default.entrypoint
+def check_valid_path(path):
+    get_rbd_class()
+    with open(path, 'rb') as rbd_handle:
+        return RBDConnector._check_valid_device(rbd_handle)
