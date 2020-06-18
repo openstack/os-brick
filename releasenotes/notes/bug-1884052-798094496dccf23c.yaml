@@ -1,0 +1,5 @@
+---
+fixes:
+  - |
+    Fix an incompatibility with ceph 13.2.0 (Mimic) or later, caused by a
+    change in the output of ``rbd map``.
