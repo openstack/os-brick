@@ -1,0 +1,5 @@
+---
+features:
+  - |
+    Add support for RBD non OpenStack (cinderlib) attach/detach.
+
