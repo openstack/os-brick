@@ -60,7 +60,7 @@ class WindowsFCConnectorTestCase(test_base.WindowsConnectorTestBase):
         else:
             expected_props = {}
 
-        self.assertItemsEqual(expected_props, props)
+        self.assertCountEqual(expected_props, props)
 
     @mock.patch.object(fc.WindowsFCConnector, '_get_scsi_wwn')
     @mock.patch.object(fc.WindowsFCConnector, 'get_volume_paths')

@@ -144,7 +144,7 @@ class DISCOConnectorTestCase(test_connector.ConnectorTestCase):
         """Test to get all the available DISCO volumes."""
         expected = ['/dev/dms1234567']
         actual = self.connector.get_all_available_volumes(None)
-        self.assertItemsEqual(expected, actual)
+        self.assertCountEqual(expected, actual)
 
     def test_extend_volume(self):
         self.assertRaises(NotImplementedError,
