@@ -919,7 +919,7 @@ Setting up iSCSI targets: unused
         mock_isdir.return_value = False
         expected = []
         actual = self.connector.get_all_available_volumes()
-        self.assertItemsEqual(expected, actual)
+        self.assertCountEqual(expected, actual)
 
     @mock.patch.object(iscsi.ISCSIConnector, '_get_device_path')
     def test_get_potential_paths_mpath(self, get_path_mock):
