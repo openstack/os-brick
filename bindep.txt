@@ -17,6 +17,7 @@ libopenssl-devel [platform:suse !platform:rpm]
 
 iscsi-initiator-utils [platform:rpm !platform:suse]
 open-iscsi [platform:suse platform:dpkg]
+lsscsi
 
 # Binary dependencies for PDF doc generation
 fonts-liberation [doc platform:dpkg]

@@ -101,22 +101,30 @@ class LinuxSCSI(executor.Executor):
         raise exception.VolumePathNotRemoved(volume_path=exist)
 
     def get_device_info(self, device):
-        (out, _err) = self._execute('sg_scan', device, run_as_root=True,
-                                    root_helper=self._root_helper)
         dev_info = {'device': device, 'host': None,
                     'channel': None, 'id': None, 'lun': None}
+        # The input argument 'device' can be of 2 types:
+        # (a) /dev/disk/by-path/XXX which is a symlink to /dev/sdX device
+        # (b) /dev/sdX
+        # If it's a symlink, get the /dev/sdX name first
+        if os.path.islink(device):
+            device = '/dev/' + os.readlink(device).split('/')[-1]
+        # Else it's already a /dev/sdX device.
+        # Then get it from lsscsi output
+        (out, _err) = self._execute('lsscsi')
         if out:
-            line = out.strip()
-            line = line.replace(device + ": ", "")
-            info = line.split(" ")
+            for line in out.strip().split('\n'):
+                # The last column of lsscsi is device name
+                if line.split()[-1] == device:
+                    # The first column of lsscsi is [H:C:T:L]
+                    hctl_info = line.split()[0].strip('[]').split(':')
+                    dev_info['host'] = hctl_info[0]
+                    dev_info['channel'] = hctl_info[1]
+                    dev_info['id'] = hctl_info[2]
+                    dev_info['lun'] = hctl_info[3]
+                    break
 
-            for item in info:
-                if '=' in item:
-                    pair = item.split('=')
-                    dev_info[pair[0]] = pair[1]
-                elif 'scsi' in item:
-                    dev_info['host'] = item.replace('scsi', '')
-
+        LOG.debug('dev_info=%s', str(dev_info))
         return dev_info
 
     def get_sysfs_wwn(self, device_names):

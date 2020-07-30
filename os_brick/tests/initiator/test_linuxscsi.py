@@ -848,14 +848,12 @@ loop0                                     0"""
             'multipathd', 'show', 'status', run_as_root=True, root_helper=None)
 
     def test_get_device_info(self):
-        ret = "/dev/sg0 scsi1 channel=1 id=0 lun=0 [em]\n"
+        ret = "[1:1:0:0] disk Vendor Array 0100 /dev/adevice\n"
         with mock.patch.object(self.linuxscsi, '_execute') as exec_mock:
             exec_mock.return_value = (ret, "")
             info = self.linuxscsi.get_device_info('/dev/adevice')
 
-            exec_mock.assert_called_once_with('sg_scan', '/dev/adevice',
-                                              root_helper=None,
-                                              run_as_root=True)
+            exec_mock.assert_called_once_with('lsscsi')
             self.assertEqual(info, {'channel': '1',
                                     'device': '/dev/adevice',
                                     'host': '1',
