@@ -61,8 +61,42 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
                  'vport_create': '<store method only>',
                  'vport_delete': '<store method only>'}]
 
+    def fake_get_fc_hbas_with_platform(self):
+        return [{'ClassDevice': 'host1',
+                 'ClassDevicePath': '/sys/devices/platform/smb'
+                                    '/smb:motherboard/80040000000.peu0-c0'
+                                    '/pci0000:00/0000:00:03.0'
+                                    '/0000:05:00.2/host1/fc_host/host1',
+                 'dev_loss_tmo': '30',
+                 'fabric_name': '0x1000000533f55566',
+                 'issue_lip': '<store method only>',
+                 'max_npiv_vports': '255',
+                 'maxframe_size': '2048 bytes',
+                 'node_name': '0x200010604b019419',
+                 'npiv_vports_inuse': '0',
+                 'port_id': '0x680409',
+                 'port_name': '0x100010604b019419',
+                 'port_state': 'Online',
+                 'port_type': 'NPort (fabric via point-to-point)',
+                 'speed': '10 Gbit',
+                 'supported_classes': 'Class 3',
+                 'supported_speeds': '10 Gbit',
+                 'symbolic_name': 'Emulex 554M FV4.0.493.0 DV8.3.27',
+                 'tgtid_bind_type': 'wwpn (World Wide Port Name)',
+                 'uevent': None,
+                 'vport_create': '<store method only>',
+                 'vport_delete': '<store method only>'}]
+
     def fake_get_fc_hbas_info(self):
         hbas = self.fake_get_fc_hbas()
+        info = [{'port_name': hbas[0]['port_name'].replace('0x', ''),
+                 'node_name': hbas[0]['node_name'].replace('0x', ''),
+                 'host_device': hbas[0]['ClassDevice'],
+                 'device_path': hbas[0]['ClassDevicePath']}]
+        return info
+
+    def fake_get_fc_hbas_info_with_platform(self):
+        hbas = self.fake_get_fc_hbas_with_platform()
         info = [{'port_name': hbas[0]['port_name'].replace('0x', ''),
                  'node_name': hbas[0]['node_name'].replace('0x', ''),
                  'host_device': hbas[0]['ClassDevice'],
@@ -100,19 +134,45 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
     def test_get_pci_num(self):
         hba = {'device_path': "/sys/devices/pci0000:00/0000:00:03.0"
                               "/0000:05:00.3/host2/fc_host/host2"}
-        pci_num = self.connector._get_pci_num(hba)
+        platform, pci_num = self.connector._get_pci_num(hba)
         self.assertEqual("0000:05:00.3", pci_num)
+        self.assertIsNone(platform)
 
         hba = {'device_path': "/sys/devices/pci0000:00/0000:00:03.0"
                               "/0000:05:00.3/0000:06:00.6/host2/fc_host/host2"}
-        pci_num = self.connector._get_pci_num(hba)
+        platform, pci_num = self.connector._get_pci_num(hba)
         self.assertEqual("0000:06:00.6", pci_num)
+        self.assertIsNone(platform)
 
         hba = {'device_path': "/sys/devices/pci0000:20/0000:20:03.0"
                               "/0000:21:00.2/net/ens2f2/ctlr_2/host3"
                               "/fc_host/host3"}
-        pci_num = self.connector._get_pci_num(hba)
+        platform, pci_num = self.connector._get_pci_num(hba)
         self.assertEqual("0000:21:00.2", pci_num)
+        self.assertIsNone(platform)
+
+    def test_get_pci_num_with_platform(self):
+        hba = {'device_path': "/sys/devices/platform/smb/smb:motherboard/"
+                              "80040000000.peu0-c0/pci0000:00/0000:00:03.0"
+                              "/0000:05:00.3/host2/fc_host/host2"}
+        platform, pci_num = self.connector._get_pci_num(hba)
+        self.assertEqual("0000:05:00.3", pci_num)
+        self.assertEqual("platform-80040000000.peu0-c0", platform)
+
+        hba = {'device_path': "/sys/devices/platform/smb/smb:motherboard"
+                              "/80040000000.peu0-c0/pci0000:00/0000:00:03.0"
+                              "/0000:05:00.3/0000:06:00.6/host2/fc_host/host2"}
+        platform, pci_num = self.connector._get_pci_num(hba)
+        self.assertEqual("0000:06:00.6", pci_num)
+        self.assertEqual("platform-80040000000.peu0-c0", platform)
+
+        hba = {'device_path': "/sys/devices/platform/smb"
+                              "/smb:motherboard/80040000000.peu0-c0/pci0000:20"
+                              "/0000:20:03.0/0000:21:00.2"
+                              "/net/ens2f2/ctlr_2/host3/fc_host/host3"}
+        platform, pci_num = self.connector._get_pci_num(hba)
+        self.assertEqual("0000:21:00.2", pci_num)
+        self.assertEqual("platform-80040000000.peu0-c0", platform)
 
     @mock.patch.object(os.path, 'exists', return_value=True)
     @mock.patch.object(linuxfc.LinuxFibreChannel, 'get_fc_hbas')
@@ -133,6 +193,30 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
         volume_paths = self.connector.get_volume_paths(conn_data)
 
         expected = ['/dev/disk/by-path/pci-0000:05:00.2'
+                    '-fc-0x1234567890123456-lun-1']
+        self.assertEqual(expected, volume_paths)
+
+    @mock.patch.object(os.path, 'exists', return_value=True)
+    @mock.patch.object(linuxfc.LinuxFibreChannel, 'get_fc_hbas')
+    @mock.patch.object(linuxfc.LinuxFibreChannel, 'get_fc_hbas_info')
+    def test_get_volume_paths_with_platform(self, fake_fc_hbas_info,
+                                            fake_fc_hbas, fake_exists):
+        fake_fc_hbas.side_effect = self.fake_get_fc_hbas_with_platform
+        fake_fc_hbas_info.side_effect \
+            = self.fake_get_fc_hbas_info_with_platform
+
+        name = 'volume-00000001'
+        vol = {'id': 1, 'name': name}
+        location = '10.0.2.15:3260'
+        wwn = '1234567890123456'
+        connection_info = self.fibrechan_connection(vol, location, wwn)
+        conn_data = self.connector._add_targets_to_connection_properties(
+            connection_info['data']
+        )
+        volume_paths = self.connector.get_volume_paths(conn_data)
+
+        expected = ['/dev/disk/by-path'
+                    '/platform-80040000000.peu0-c0-pci-0000:05:00.2'
                     '-fc-0x1234567890123456-lun-1']
         self.assertEqual(expected, volume_paths)
 

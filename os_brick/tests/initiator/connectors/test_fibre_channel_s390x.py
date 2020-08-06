@@ -59,7 +59,7 @@ class FibreChannelConnectorS390XTestCase(test_connector.ConnectorTestCase):
         self.assertEqual(lunstring, "0x4020400a00000000")
 
     @mock.patch.object(fibre_channel_s390x.FibreChannelConnectorS390X,
-                       '_get_possible_devices', return_value=[(3, 5, 2), ])
+                       '_get_possible_devices', return_value=[('', 3, 5, 2), ])
     @mock.patch.object(linuxfc.LinuxFibreChannelS390X, 'get_fc_hbas_info',
                        return_value=[])
     @mock.patch.object(linuxfc.LinuxFibreChannelS390X,
