@@ -65,7 +65,6 @@ unix_connector_list = [
     'os_brick.initiator.connectors.scaleio.ScaleIOConnector',
     'os_brick.initiator.connectors.disco.DISCOConnector',
     'os_brick.initiator.connectors.vmware.VmdkConnector',
-    'os_brick.initiator.connectors.vrtshyperscale.HyperScaleConnector',
     'os_brick.initiator.connectors.storpool.StorPoolConnector',
     'os_brick.initiator.connectors.nvmeof.NVMeOFConnector',
 ]
@@ -119,8 +118,6 @@ _connector_mapping_linux = {
         'os_brick.initiator.connectors.vmware.VmdkConnector',
     initiator.GPFS:
         'os_brick.initiator.connectors.gpfs.GPFSConnector',
-    initiator.VERITAS_HYPERSCALE:
-        'os_brick.initiator.connectors.vrtshyperscale.HyperScaleConnector',
     initiator.STORPOOL:
         'os_brick.initiator.connectors.storpool.StorPoolConnector',
     # Leave this in for backwards compatibility
@@ -169,8 +166,6 @@ _connector_mapping_linux_ppc64 = {
         'os_brick.initiator.connectors.gpfs.GPFSConnector',
     initiator.VZSTORAGE:
         'os_brick.initiator.connectors.remotefs.RemoteFsConnector',
-    initiator.VERITAS_HYPERSCALE:
-        'os_brick.initiator.connectors.vrtshyperscale.HyperScaleConnector',
     initiator.ISER:
         'os_brick.initiator.connectors.iscsi.ISCSIConnector',
 }

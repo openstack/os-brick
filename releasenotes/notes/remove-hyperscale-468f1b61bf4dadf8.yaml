@@ -1,0 +1,6 @@
+---
+upgrade:
+  - |
+    The Veritas Hyperscale driver was removed from Cinder in the Train release.
+    The connector logic in os-brick is no longer needed and has now been
+    removed.
