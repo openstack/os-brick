@@ -18,11 +18,6 @@
       .. automethod:: connect_volume
       .. automethod:: disconnect_volume
 
-   .. autoclass:: os_brick.initiator.connector.AoEConnector
-
-      .. automethod:: connect_volume
-      .. automethod:: disconnect_volume
-
    .. autoclass:: os_brick.initiator.connector.LocalConnector
 
       .. automethod:: connect_volume

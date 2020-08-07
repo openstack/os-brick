@@ -54,7 +54,6 @@ unix_connector_list = [
      'FibreChannelConnectorS390X'),
     ('os_brick.initiator.connectors.fibre_channel_ppc64.'
      'FibreChannelConnectorPPC64'),
-    'os_brick.initiator.connectors.aoe.AoEConnector',
     'os_brick.initiator.connectors.remotefs.RemoteFsConnector',
     'os_brick.initiator.connectors.rbd.RBDConnector',
     'os_brick.initiator.connectors.local.LocalConnector',
@@ -77,8 +76,6 @@ def _get_connector_list():
 
 # Mappings used to determine who to construct in the factory
 _connector_mapping_linux = {
-    initiator.AOE:
-        'os_brick.initiator.connectors.aoe.AoEConnector',
     initiator.GLUSTERFS:
         'os_brick.initiator.connectors.remotefs.RemoteFsConnector',
     initiator.NFS:
