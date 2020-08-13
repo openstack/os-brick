@@ -67,6 +67,17 @@ class ScaleIOConnector(base.BaseLinuxConnector):
         self.iops_limit = None
         self.bandwidth_limit = None
 
+    def _get_password_token(self, connection_properties):
+        # In old connection format we had the password and token in properties
+        if 'serverPassword' in connection_properties:
+            return (connection_properties['serverPassword'],
+                    connection_properties['serverToken'])
+
+        # The new format reads password from file and doesn't have the token
+        password = self._get_connector_password(
+            connection_properties['config_group'])
+        return password, None
+
     @staticmethod
     def get_connector_properties(root_helper, *args, **kwargs):
         """The ScaleIO connector properties."""
@@ -300,9 +311,8 @@ class ScaleIOConnector(base.BaseLinuxConnector):
         self.server_ip = connection_properties['serverIP']
         self.server_port = connection_properties['serverPort']
         self.server_username = connection_properties['serverUsername']
-        self.server_password = self._get_connector_password(
-            connection_properties['config_group'],
-        )
+        self.server_password, self.server_token = self._get_password_token(
+            connection_properties)
         self.iops_limit = connection_properties['iopsLimit']
         self.bandwidth_limit = connection_properties['bandwidthLimit']
         device_info = {'type': 'block',
