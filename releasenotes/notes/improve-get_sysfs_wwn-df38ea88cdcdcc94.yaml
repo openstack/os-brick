@@ -1,0 +1,5 @@
+---
+fixes:
+  - |
+    Improve WWN detection for arrays with multiple designators.
+    (bug 1881608).

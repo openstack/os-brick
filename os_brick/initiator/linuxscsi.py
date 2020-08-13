@@ -136,16 +136,34 @@ class LinuxSCSI(executor.Executor):
         if wwid and glob_str + wwid in wwn_paths:
             return wwid
 
-        # If we have multiple designators follow the symlinks
+        # If we have multiple designators use symlinks to find out the wwn
+        device_names = set(device_names)
         for wwn_path in wwn_paths:
             try:
                 if os.path.islink(wwn_path) and os.stat(wwn_path):
                     path = os.path.realpath(wwn_path)
-                    if path.startswith('/dev/') and path[5:] in device_names:
-                        return wwn_path[len(glob_str):]
+                    if path.startswith('/dev/'):
+                        name = path[5:]
+                        # Symlink may point to the multipath dm if the attach
+                        # was too fast or we took long to check it. Check
+                        # devices belonging to the multipath DM.
+                        if name.startswith('dm-'):
+                            # Get the devices that belong to the DM
+                            slaves_path = '/sys/class/block/%s/slaves' % name
+                            dm_devs = os.listdir(slaves_path)
+                            # This is the right wwn_path if the devices we have
+                            # attached belong to the dm we followed
+                            if device_names.intersection(dm_devs):
+                                break
+
+                        # This is the right wwn_path if  devices we have
+                        elif name in device_names:
+                            break
             except OSError:
                 continue
-        return ''
+        else:
+            return ''
+        return wwn_path[len(glob_str):]
 
     def get_sysfs_wwid(self, device_names):
         """Return the wwid from sysfs in any of devices in udev format."""
