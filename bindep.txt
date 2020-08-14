@@ -2,6 +2,12 @@
 # install and tests
 # see https://docs.openstack.org/infra/bindep/ for additional information.
 
+# WARNING: please make sure any additional os-brick-specific dependency
+# not already covered by other packages is also installed through devstack.
+# os-brick installed through pip does not include this file, so
+# the dependencies must be installed explicitly by changing
+# the list of packages under files/*/os-brick in the devstack repository.
+
 curl
 device-mapper-multipath [platform:rpm]
 multipath-tools [platform:dpkg]
