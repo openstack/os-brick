@@ -127,8 +127,20 @@ class LinuxSCSI(executor.Executor):
         LOG.debug('dev_info=%s', str(dev_info))
         return dev_info
 
-    def get_sysfs_wwn(self, device_names):
+    def get_sysfs_wwn(self, device_names, mpath=None):
         """Return the wwid from sysfs in any of devices in udev format."""
+        # If we have a multipath DM we know that it has found the WWN
+        if mpath:
+            # We have the WWN in /uuid even with friendly names, unline /name
+            try:
+                with open('/sys/block/%s/dm/uuid' % mpath) as f:
+                    # Contents are matph-WWN, so get the part we want
+                    wwid = f.read().strip()[6:]
+                    if wwid:  # Check should not be needed, but just in case
+                        return wwid
+            except Exception as exc:
+                LOG.warning('Failed to read the DM uuid: %s', exc)
+
         wwid = self.get_sysfs_wwid(device_names)
         glob_str = '/dev/disk/by-id/scsi-'
         wwn_paths = glob.glob(glob_str + '*')
