@@ -1,0 +1,10 @@
+---
+fixes:
+  - |
+    `Bug #1823200 <https://bugs.launchpad.net/cinder/+bug/1823200>`_:
+    Prior fixes for this bug changed the connection properties but did
+    not take into account an upgrade scenario in which currently attached
+    volumes had the old format connection properties and could fail on
+    detatch with "KeyError: 'config_group'".  This release updates the
+    'scaleio' connector to handle this situation.  It is only applicable
+    to deployments using a Dell EMC PowerFlex/VxFlex OS/ScaleIO backend.
