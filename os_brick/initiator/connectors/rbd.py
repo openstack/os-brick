@@ -110,6 +110,8 @@ class RBDConnector(base.BaseLinuxConnector):
             cluster_name = connection_properties['cluster_name']
             monitor_ips = connection_properties['hosts']
             monitor_ports = connection_properties['ports']
+            # NOTE: cinder no longer passes keyring data in the connection
+            # properties as of the victoria release.  See OSSN-0085.
             keyring = connection_properties.get('keyring')
         except (KeyError, ValueError):
             msg = _("Connect volume failed, malformed connection properties.")
