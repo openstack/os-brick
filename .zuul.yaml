@@ -8,6 +8,8 @@
       - release-notes-jobs-python3
     check:
       jobs:
+        - os-brick-code-coverage:
+            voting: false
         - os-brick-src-devstack-plugin-ceph:
             voting: false
         - os-brick-src-tempest-lvm-lio-barbican
@@ -19,6 +21,20 @@
     experimental:
       jobs:
         - openstack-tox-pylint
+
+- job:
+    name: os-brick-code-coverage
+    parent: openstack-tox-cover
+    timeout: 2400
+    irrelevant-files:
+      - ^(test-|)requirements.txt$
+      - ^lower-constraints.txt$
+      - ^.*\.rst$
+      - ^doc/.*$
+      - ^releasenotes/.*$
+      - ^setup.cfg$
+      - ^tools/.*$
+      - ^tox.ini$
 
 - job:
     name: os-brick-src-devstack-plugin-ceph
