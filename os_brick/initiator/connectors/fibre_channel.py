@@ -102,7 +102,7 @@ class FibreChannelConnector(base.BaseLinuxConnector):
             luns = []
 
         if len(luns) == len(wwns):
-            # Handles single wwwn + lun or multiple, potentially
+            # Handles single wwn + lun or multiple, potentially
             # different wwns or luns
             targets = list(zip(wwns, luns))
         elif len(luns) == 1 and len(wwns) > 1:
