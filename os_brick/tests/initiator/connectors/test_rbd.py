@@ -458,3 +458,58 @@ class RBDConnectorTestCase(test_connector.ConnectorTestCase):
             'rbd', 'showmapped', '--format=json', mock.sentinel.rbd_args,
             root_helper=connector._root_helper, run_as_root=True)
         self.assertEqual('/dev/rbd1', res)
+
+    @mock.patch.object(rbd.RBDConnector, '_check_valid_device')
+    @mock.patch('os_brick.privileged.rbd.check_valid_path')
+    @mock.patch.object(rbd, 'open')
+    def test_check_valid_device_handle_no_path(self, mock_open, check_path,
+                                               check_device):
+        connector = rbd.RBDConnector(None)
+        res = connector.check_valid_device(None)
+
+        self.assertFalse(res)
+        mock_open.assert_not_called()
+        check_path.assert_not_called()
+        check_device.assert_not_called()
+
+    @ddt.data(True, False)
+    @mock.patch.object(rbd.RBDConnector, '_check_valid_device')
+    @mock.patch('os_brick.privileged.rbd.check_valid_path')
+    @mock.patch.object(rbd, 'open')
+    def test_check_valid_device_handle(self, run_as_root, mock_open,
+                                       check_path, check_device):
+        connector = rbd.RBDConnector(None)
+        res = connector.check_valid_device(mock.sentinel.handle,
+                                           run_as_root=run_as_root)
+        check_device.assert_called_once_with(mock.sentinel.handle)
+        self.assertIs(check_device.return_value, res)
+        mock_open.assert_not_called()
+        check_path.assert_not_called()
+
+    @mock.patch.object(rbd.RBDConnector, '_check_valid_device')
+    @mock.patch('os_brick.privileged.rbd.check_valid_path')
+    @mock.patch.object(rbd, 'open')
+    def test_check_valid_device_block_root(self, mock_open, check_path,
+                                           check_device):
+        connector = rbd.RBDConnector(None)
+        path = '/dev/rbd0'
+        res = connector.check_valid_device(path, run_as_root=True)
+
+        check_path.assert_called_once_with(path)
+        self.assertEqual(check_path.return_value, res)
+        mock_open.assert_not_called()
+        check_device.assert_not_called()
+
+    @mock.patch.object(rbd.RBDConnector, '_check_valid_device')
+    @mock.patch('os_brick.privileged.rbd.check_valid_path')
+    @mock.patch.object(rbd, 'open')
+    def test_check_valid_device_block_non_root(self, mock_open, check_path,
+                                               check_device):
+        connector = rbd.RBDConnector(None)
+        path = '/dev/rbd0'
+        res = connector.check_valid_device(path, run_as_root=False)
+
+        mock_open.assert_called_once_with(path, 'rb')
+        check_device.assert_called_once_with(mock_open().__enter__())
+        self.assertIs(check_device.return_value, res)
+        check_path.assert_not_called()
