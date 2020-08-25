@@ -173,6 +173,24 @@ class RBDConnectorTestCase(test_connector.ConnectorTestCase):
         self.assertEqual(conf_path, tmpfile)
         mock_mkstemp.assert_called_once_with(prefix='brickrbd_')
 
+    @mock.patch('os_brick.privileged.rbd.root_create_ceph_conf')
+    def test_create_non_openstack_config(self, mock_priv_create):
+        res = rbd.RBDConnector.create_non_openstack_config(
+            self.connection_properties)
+        mock_priv_create.assert_called_once_with(self.hosts, self.ports,
+                                                 self.clustername, self.user,
+                                                 self.keyring)
+        self.assertIs(mock_priv_create.return_value, res)
+
+    @mock.patch('os_brick.privileged.rbd.root_create_ceph_conf')
+    def test_create_non_openstack_config_in_openstack(self, mock_priv_create):
+        connection_properties = self.connection_properties.copy()
+        del connection_properties['keyring']
+        res = rbd.RBDConnector.create_non_openstack_config(
+            connection_properties)
+        mock_priv_create.assert_not_called()
+        self.assertIsNone(res)
+
     @mock.patch.object(priv_rootwrap, 'execute', return_value=None)
     def test_connect_local_volume(self, mock_execute):
         rbd_connector = rbd.RBDConnector(None, do_local_attach=True)
@@ -239,6 +257,67 @@ class RBDConnectorTestCase(test_connector.ConnectorTestCase):
                           rbd_connector.connect_volume,
                           conn)
 
+    @mock.patch('os_brick.initiator.connectors.rbd.'
+                'RBDConnector._local_attach_volume')
+    def test_connect_volume_local(self, mock_local_attach):
+        connector = rbd.RBDConnector(None, do_local_attach=True)
+        res = connector.connect_volume(self.connection_properties)
+        mock_local_attach.assert_called_once_with(self.connection_properties)
+        self.assertIs(mock_local_attach.return_value, res)
+
+    @mock.patch.object(rbd.RBDConnector, '_get_rbd_args')
+    @mock.patch.object(rbd.RBDConnector, 'create_non_openstack_config')
+    @mock.patch.object(rbd.RBDConnector, '_execute')
+    def test__local_attach_volume_non_openstack(self, mock_execute,
+                                                mock_rbd_cfg, mock_args):
+        mock_args.return_value = [mock.sentinel.rbd_args]
+
+        connector = rbd.RBDConnector(None, do_local_attach=True)
+        res = connector._local_attach_volume(self.connection_properties)
+
+        mock_rbd_cfg.assert_called_once_with(self.connection_properties)
+        mock_args.assert_called_once_with(self.connection_properties,
+                                          mock_rbd_cfg.return_value)
+        self.assertEqual(2, mock_execute.call_count)
+        mock_execute.assert_has_calls([
+            mock.call('which', 'rbd'),
+            mock.call('rbd', 'map', 'fake_volume', '--pool', 'fake_pool',
+                      mock.sentinel.rbd_args,
+                      root_helper=connector._root_helper, run_as_root=True)
+        ])
+
+        expected = {'path': '/dev/rbd/fake_pool/fake_volume',
+                    'type': 'block',
+                    'conf': mock_rbd_cfg.return_value}
+        self.assertEqual(expected, res)
+
+    @mock.patch('os_brick.privileged.rbd.delete_if_exists')
+    @mock.patch.object(rbd.RBDConnector, '_get_rbd_args')
+    @mock.patch.object(rbd.RBDConnector, 'create_non_openstack_config')
+    @mock.patch.object(rbd.RBDConnector, '_execute')
+    def test__local_attach_volume_fail_non_openstack(self, mock_execute,
+                                                     mock_rbd_cfg, mock_args,
+                                                     mock_delete):
+        mock_args.return_value = [mock.sentinel.rbd_args]
+        mock_execute.side_effect = [None, ValueError]
+
+        connector = rbd.RBDConnector(None, do_local_attach=True)
+        self.assertRaises(ValueError, connector._local_attach_volume,
+                          self.connection_properties)
+
+        mock_rbd_cfg.assert_called_once_with(self.connection_properties)
+        mock_args.assert_called_once_with(self.connection_properties,
+                                          mock_rbd_cfg.return_value)
+        self.assertEqual(2, mock_execute.call_count)
+        mock_execute.assert_has_calls([
+            mock.call('which', 'rbd'),
+            mock.call('rbd', 'map', 'fake_volume', '--pool', 'fake_pool',
+                      mock.sentinel.rbd_args,
+                      root_helper=connector._root_helper, run_as_root=True)
+        ])
+
+        mock_delete.assert_called_once_with(mock_rbd_cfg.return_value)
+
     @mock.patch('os_brick.initiator.linuxrbd.rbd')
     @mock.patch('os_brick.initiator.linuxrbd.rados')
     @mock.patch.object(linuxrbd.RBDVolumeIOWrapper, 'close')
@@ -261,8 +340,10 @@ class RBDConnectorTestCase(test_connector.ConnectorTestCase):
          "1":{"pool":"pool","device":"/dev/rdb1","name":"image_2"}}
         """,  # old-style output
     )
+    @mock.patch('os_brick.privileged.rbd.delete_if_exists')
     @mock.patch.object(priv_rootwrap, 'execute', return_value=None)
-    def test_disconnect_local_volume(self, rbd_map_out, mock_execute):
+    def test_disconnect_local_volume(self, rbd_map_out, mock_execute,
+                                     mock_delete):
         """Test the disconnect volume case with local attach."""
         rbd_connector = rbd.RBDConnector(None, do_local_attach=True)
         conn = {'name': 'pool/image',
@@ -281,6 +362,28 @@ class RBDConnectorTestCase(test_connector.ConnectorTestCase):
         mock_execute.assert_has_calls([
             mock.call(*show_cmd, root_helper=None, run_as_root=True),
             mock.call(*unmap_cmd, root_helper=None, run_as_root=True)])
+
+        mock_delete.assert_not_called()
+
+    @mock.patch('os_brick.privileged.rbd.delete_if_exists')
+    @mock.patch.object(rbd.RBDConnector, '_find_root_device')
+    @mock.patch.object(rbd.RBDConnector, '_execute')
+    def test_disconnect_local_volume_non_openstack(self, mock_execute,
+                                                   mock_find, mock_delete):
+        connector = rbd.RBDConnector(None, do_local_attach=True)
+        mock_find.return_value = '/dev/rbd0'
+
+        connector.disconnect_volume(self.connection_properties,
+                                    {'conf': mock.sentinel.conf})
+
+        mock_find.assert_called_once_with(self.connection_properties,
+                                          mock.sentinel.conf)
+
+        mock_execute.assert_called_once_with(
+            'rbd', 'unmap', '/dev/rbd0', '--id', 'fake_user', '--mon_host',
+            '192.168.10.2:6789', '--conf', mock.sentinel.conf,
+            root_helper=connector._root_helper, run_as_root=True)
+        mock_delete.assert_called_once_with(mock.sentinel.conf)
 
     @mock.patch.object(priv_rootwrap, 'execute', return_value=None)
     def test_disconnect_local_volume_no_mapping(self, mock_execute):
@@ -321,3 +424,37 @@ class RBDConnectorTestCase(test_connector.ConnectorTestCase):
         self.assertRaises(NotImplementedError,
                           rbd_connector.extend_volume,
                           self.connection_properties)
+
+    def test__get_rbd_args(self):
+        res = rbd.RBDConnector._get_rbd_args(self.connection_properties, None)
+        expected = ['--id', self.user,
+                    '--mon_host', self.hosts[0] + ':' + self.ports[0]]
+        self.assertEqual(expected, res)
+
+    def test__get_rbd_args_with_conf(self):
+        res = rbd.RBDConnector._get_rbd_args(self.connection_properties,
+                                             mock.sentinel.conf_path)
+        expected = ['--id', self.user,
+                    '--mon_host', self.hosts[0] + ':' + self.ports[0],
+                    '--conf', mock.sentinel.conf_path]
+        self.assertEqual(expected, res)
+
+    @mock.patch.object(rbd.RBDConnector, '_get_rbd_args')
+    @mock.patch.object(rbd.RBDConnector, '_execute')
+    def test_find_root_device(self, mock_execute, mock_args):
+        mock_args.return_value = [mock.sentinel.rbd_args]
+        mock_execute.return_value = (
+            '{"0":{"pool":"pool","device":"/dev/rdb0","name":"image"},'
+            '"1":{"pool":"pool","device":"/dev/rbd1","name":"fake_volume"}}',
+            'stderr')
+
+        connector = rbd.RBDConnector(None)
+        res = connector._find_root_device(self.connection_properties,
+                                          mock.sentinel.conf)
+
+        mock_args.assert_called_once_with(self.connection_properties,
+                                          mock.sentinel.conf)
+        mock_execute.assert_called_once_with(
+            'rbd', 'showmapped', '--format=json', mock.sentinel.rbd_args,
+            root_helper=connector._root_helper, run_as_root=True)
+        self.assertEqual('/dev/rbd1', res)

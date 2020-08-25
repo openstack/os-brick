@@ -19,6 +19,7 @@ import tempfile
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
 from oslo_serialization import jsonutils
+from oslo_utils import excutils
 from oslo_utils import fileutils
 from oslo_utils import netutils
 
@@ -27,6 +28,7 @@ from os_brick.i18n import _
 from os_brick import initiator
 from os_brick.initiator.connectors import base
 from os_brick.initiator import linuxrbd
+from os_brick.privileged import rbd as rbd_privsep
 from os_brick import utils
 
 LOG = logging.getLogger(__name__)
@@ -63,14 +65,16 @@ class RBDConnector(base.BaseLinuxConnector):
         # TODO(e0ne): Implement this for local volume.
         return []
 
-    def _sanitize_mon_hosts(self, hosts):
+    @staticmethod
+    def _sanitize_mon_hosts(hosts):
         def _sanitize_host(host):
             if netutils.is_valid_ipv6(host):
                 host = '[%s]' % host
             return host
         return list(map(_sanitize_host, hosts))
 
-    def _check_or_get_keyring_contents(self, keyring, cluster_name, user):
+    @staticmethod
+    def _check_or_get_keyring_contents(keyring, cluster_name, user):
         try:
             if keyring is None:
                 if user:
@@ -85,14 +89,15 @@ class RBDConnector(base.BaseLinuxConnector):
             msg = (_("Keyring path %s is not readable.") % (keyring_path))
             raise exception.BrickException(msg=msg)
 
-    def _create_ceph_conf(self, monitor_ips, monitor_ports,
+    @classmethod
+    def _create_ceph_conf(cls, monitor_ips, monitor_ports,
                           cluster_name, user, keyring):
         monitors = ["%s:%s" % (ip, port) for ip, port in
-                    zip(self._sanitize_mon_hosts(monitor_ips), monitor_ports)]
+                    zip(cls._sanitize_mon_hosts(monitor_ips), monitor_ports)]
         mon_hosts = "mon_host = %s" % (','.join(monitors))
 
-        keyring = self._check_or_get_keyring_contents(keyring, cluster_name,
-                                                      user)
+        keyring = cls._check_or_get_keyring_contents(keyring, cluster_name,
+                                                     user)
 
         try:
             fd, ceph_conf_path = tempfile.mkstemp(prefix="brickrbd_")
@@ -130,7 +135,8 @@ class RBDConnector(base.BaseLinuxConnector):
 
         return rbd_handle
 
-    def _get_rbd_args(self, connection_properties):
+    @classmethod
+    def _get_rbd_args(cls, connection_properties, conf=None):
         try:
             user = connection_properties['auth_username']
             monitor_ips = connection_properties.get('hosts')
@@ -143,10 +149,14 @@ class RBDConnector(base.BaseLinuxConnector):
         if monitor_ips and monitor_ports:
             monitors = ["%s:%s" % (ip, port) for ip, port in
                         zip(
-                            self._sanitize_mon_hosts(monitor_ips),
+                            cls._sanitize_mon_hosts(monitor_ips),
                             monitor_ports)]
             for monitor in monitors:
                 args += ['--mon_host', monitor]
+
+        if conf:
+            args += ['--conf', conf]
+
         return args
 
     @staticmethod
@@ -160,33 +170,46 @@ class RBDConnector(base.BaseLinuxConnector):
         """
         return '/dev/rbd/{pool}/{volume}'.format(pool=pool, volume=volume)
 
-    @utils.trace
-    def connect_volume(self, connection_properties):
-        """Connect to a volume.
+    @classmethod
+    def create_non_openstack_config(cls, connection_properties):
+        """Get root owned Ceph's .conf file for non OpenStack usage."""
+        # If keyring info is missing then we are in OpenStack, nothing to do
+        keyring = connection_properties.get('keyring')
+        if not keyring:
+            return None
 
-        :param connection_properties: The dictionary that describes all
-                                      of the target volume attributes.
-        :type connection_properties: dict
-        :returns: dict
-        """
-        do_local_attach = connection_properties.get('do_local_attach',
-                                                    self.do_local_attach)
-
-        if do_local_attach:
-            # NOTE(e0ne): sanity check if ceph-common is installed.
-            cmd = ['which', 'rbd']
-            try:
-                self._execute(*cmd)
-            except putils.ProcessExecutionError:
-                msg = _("ceph-common package is not installed.")
-                LOG.error(msg)
-                raise exception.BrickException(message=msg)
-
-            # NOTE(e0ne): map volume to a block device
-            # via the rbd kernel module.
+        try:
+            user = connection_properties['auth_username']
             pool, volume = connection_properties['name'].split('/')
-            rbd_dev_path = RBDConnector.get_rbd_device_name(pool, volume)
+            cluster_name = connection_properties['cluster_name']
+            monitor_ips = connection_properties['hosts']
+            monitor_ports = connection_properties['ports']
+            keyring = connection_properties.get('keyring')
+        except (KeyError, ValueError):
+            msg = _("Connect volume failed, malformed connection properties.")
+            raise exception.BrickException(msg=msg)
 
+        conf = rbd_privsep.root_create_ceph_conf(monitor_ips, monitor_ports,
+                                                 str(cluster_name), user,
+                                                 keyring)
+        return conf
+
+    def _local_attach_volume(self, connection_properties):
+        # NOTE(e0ne): sanity check if ceph-common is installed.
+        try:
+            self._execute('which', 'rbd')
+        except putils.ProcessExecutionError:
+            msg = _("ceph-common package is not installed.")
+            LOG.error(msg)
+            raise exception.BrickException(message=msg)
+
+        # NOTE(e0ne): map volume to a block device
+        # via the rbd kernel module.
+        pool, volume = connection_properties['name'].split('/')
+        rbd_dev_path = self.get_rbd_device_name(pool, volume)
+        # If we are not running on OpenStack, create config file
+        conf = self.create_non_openstack_config(connection_properties)
+        try:
             if (
                 not os.path.islink(rbd_dev_path) or
                 not os.path.exists(os.path.realpath(rbd_dev_path))
@@ -195,7 +218,7 @@ class RBDConnector(base.BaseLinuxConnector):
                 # command introduced in ceph 13.0 (commit 6a57358add1157629a6d)
                 # when we drop support earlier versions
                 cmd = ['rbd', 'map', volume, '--pool', pool]
-                cmd += self._get_rbd_args(connection_properties)
+                cmd += self._get_rbd_args(connection_properties, conf)
                 self._execute(*cmd, root_helper=self._root_helper,
                               run_as_root=True)
             else:
@@ -215,13 +238,37 @@ class RBDConnector(base.BaseLinuxConnector):
                     'more information.',
                     {'vol': volume, 'dev': rbd_dev_path},
                 )
+        except Exception:
+            # Cleanup conf file on failure
+            with excutils.save_and_reraise_exception():
+                if conf:
+                    rbd_privsep.delete_if_exists(conf)
 
-            return {'path': rbd_dev_path, 'type': 'block'}
+        res = {'path': rbd_dev_path,
+               'type': 'block'}
+        if conf:
+            res['conf'] = conf
+        return res
+
+    @utils.trace
+    def connect_volume(self, connection_properties):
+        """Connect to a volume.
+
+        :param connection_properties: The dictionary that describes all
+                                      of the target volume attributes.
+        :type connection_properties: dict
+        :returns: dict
+        """
+        do_local_attach = connection_properties.get('do_local_attach',
+                                                    self.do_local_attach)
+
+        if do_local_attach:
+            return self._local_attach_volume(connection_properties)
 
         rbd_handle = self._get_rbd_handle(connection_properties)
         return {'path': rbd_handle}
 
-    def _find_root_device(self, connection_properties):
+    def _find_root_device(self, connection_properties, conf):
         """Find the underlying /dev/rbd* device for a mapping.
 
         Use the showmapped command to list all acive mappings and find the
@@ -237,7 +284,7 @@ class RBDConnector(base.BaseLinuxConnector):
         # command introduced in ceph 13.0 (commit 6a57358add1157629a6d)
         # when we drop support earlier versions
         cmd = ['rbd', 'showmapped', '--format=json']
-        cmd += self._get_rbd_args(connection_properties)
+        cmd += self._get_rbd_args(connection_properties, conf)
         (out, err) = self._execute(*cmd, root_helper=self._root_helper,
                                    run_as_root=True)
 
@@ -295,15 +342,18 @@ class RBDConnector(base.BaseLinuxConnector):
         do_local_attach = connection_properties.get('do_local_attach',
                                                     self.do_local_attach)
         if do_local_attach:
-            root_device = self._find_root_device(connection_properties)
+            conf = device_info.get('conf') if device_info else None
+            root_device = self._find_root_device(connection_properties, conf)
             if root_device:
                 # TODO(stephenfin): Update to the unified 'rbd device unmap'
                 # command introduced in ceph 13.0 (commit 6a57358add1157629a6d)
                 # when we drop support earlier versions
                 cmd = ['rbd', 'unmap', root_device]
-                cmd += self._get_rbd_args(connection_properties)
+                cmd += self._get_rbd_args(connection_properties, conf)
                 self._execute(*cmd, root_helper=self._root_helper,
                               run_as_root=True)
+                if conf:
+                    rbd_privsep.delete_if_exists(conf)
         else:
             if device_info:
                 rbd_handle = device_info.get('path', None)
