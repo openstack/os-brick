@@ -262,10 +262,6 @@ class ConnectorTestCase(test_base.TestCase):
             arch='x86_64')
         self.assertEqual("RemoteFsConnector", obj.__class__.__name__)
 
-        obj = connector.InitiatorConnector.factory(
-            "disco", None, arch='x86_64')
-        self.assertEqual("DISCOConnector", obj.__class__.__name__)
-
         self.assertRaises(exception.InvalidConnectorProtocol,
                           connector.InitiatorConnector.factory,
                           "bogus", None)

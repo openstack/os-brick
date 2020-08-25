@@ -12,12 +12,10 @@
 #    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #    License for the specific language governing permissions and limitations
 #    under the License.
-"""
-Brick's Initiator module.
+"""Brick's Initiator module.
 
 The initator module contains the capabilities for discovering the initiator
 information as well as discovering and removing volumes from a host.
-
 """
 
 import re
@@ -54,7 +52,6 @@ RBD = "RBD"
 SCALEIO = "SCALEIO"
 SCALITY = "SCALITY"
 QUOBYTE = "QUOBYTE"
-DISCO = "DISCO"
 VZSTORAGE = "VZSTORAGE"
 VMDK = "VMDK"
 GPFS = "GPFS"

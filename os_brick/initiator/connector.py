@@ -62,7 +62,6 @@ unix_connector_list = [
     'os_brick.initiator.connectors.huawei.HuaweiStorHyperConnector',
     'os_brick.initiator.connectors.hgst.HGSTConnector',
     'os_brick.initiator.connectors.scaleio.ScaleIOConnector',
-    'os_brick.initiator.connectors.disco.DISCOConnector',
     'os_brick.initiator.connectors.vmware.VmdkConnector',
     'os_brick.initiator.connectors.storpool.StorPoolConnector',
     'os_brick.initiator.connectors.nvmeof.NVMeOFConnector',
@@ -108,8 +107,6 @@ _connector_mapping_linux = {
         'os_brick.initiator.connectors.rbd.RBDConnector',
     initiator.SCALEIO:
         'os_brick.initiator.connectors.scaleio.ScaleIOConnector',
-    initiator.DISCO:
-        'os_brick.initiator.connectors.disco.DISCOConnector',
     initiator.VMDK:
         'os_brick.initiator.connectors.vmware.VmdkConnector',
     initiator.GPFS:
