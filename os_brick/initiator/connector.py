@@ -59,7 +59,6 @@ unix_connector_list = [
     'os_brick.initiator.connectors.rbd.RBDConnector',
     'os_brick.initiator.connectors.local.LocalConnector',
     'os_brick.initiator.connectors.gpfs.GPFSConnector',
-    'os_brick.initiator.connectors.drbd.DRBDConnector',
     'os_brick.initiator.connectors.huawei.HuaweiStorHyperConnector',
     'os_brick.initiator.connectors.hgst.HGSTConnector',
     'os_brick.initiator.connectors.scaleio.ScaleIOConnector',
@@ -81,9 +80,6 @@ def _get_connector_list():
 _connector_mapping_linux = {
     initiator.AOE:
         'os_brick.initiator.connectors.aoe.AoEConnector',
-    initiator.DRBD:
-        'os_brick.initiator.connectors.drbd.DRBDConnector',
-
     initiator.GLUSTERFS:
         'os_brick.initiator.connectors.remotefs.RemoteFsConnector',
     initiator.NFS:
@@ -133,8 +129,6 @@ _connector_mapping_linux_s390x = {
     initiator.FIBRE_CHANNEL:
         'os_brick.initiator.connectors.fibre_channel_s390x.'
         'FibreChannelConnectorS390X',
-    initiator.DRBD:
-        'os_brick.initiator.connectors.drbd.DRBDConnector',
     initiator.NFS:
         'os_brick.initiator.connectors.remotefs.RemoteFsConnector',
     initiator.ISCSI:
@@ -152,8 +146,6 @@ _connector_mapping_linux_ppc64 = {
     initiator.FIBRE_CHANNEL:
         ('os_brick.initiator.connectors.fibre_channel_ppc64.'
          'FibreChannelConnectorPPC64'),
-    initiator.DRBD:
-        'os_brick.initiator.connectors.drbd.DRBDConnector',
     initiator.NFS:
         'os_brick.initiator.connectors.remotefs.RemoteFsConnector',
     initiator.ISCSI:
