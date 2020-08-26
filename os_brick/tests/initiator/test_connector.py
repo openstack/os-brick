@@ -226,9 +226,6 @@ class ConnectorTestCase(test_base.TestCase):
                                                    arch='s390x')
         self.assertEqual("FibreChannelConnectorS390X", obj.__class__.__name__)
 
-        obj = connector.InitiatorConnector.factory('aoe', None, arch='x86_64')
-        self.assertEqual("AoEConnector", obj.__class__.__name__)
-
         obj = connector.InitiatorConnector.factory(
             'nfs', None, nfs_mount_point_base='/mnt/test')
         self.assertEqual("RemoteFsConnector", obj.__class__.__name__)
