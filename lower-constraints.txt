@@ -10,6 +10,7 @@ cryptography==2.1
 ddt==1.0.1
 debtcollector==1.22.0
 dnspython==1.16.0
+doc8==0.6.0
 entrypoints==0.3
 eventlet==0.25.1
 extras==1.0.0
