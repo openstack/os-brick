@@ -393,5 +393,45 @@ class RBDConnector(base.BaseLinuxConnector):
         return self._check_valid_device(path)
 
     def extend_volume(self, connection_properties):
-        # TODO(walter-boring): is this possible?
-        raise NotImplementedError
+        """Refresh local volume view and return current size in bytes."""
+        # Nothing to do, RBD attached volumes are automatically refreshed, but
+        # we need to return the new size for compatibility
+        do_local_attach = connection_properties.get('do_local_attach',
+                                                    self.do_local_attach)
+
+        if not do_local_attach:
+            handle = self._get_rbd_handle(connection_properties)
+            try:
+                # Handles should return absolute position on seek, but the RBD
+                # wrapper doesn't, so we need to call tell afterwards
+                handle.seek(0, 2)
+                return handle.tell()
+            finally:
+                fileutils.delete_if_exists(handle.rbd_conf)
+                handle.close()
+
+        # Create config file when we do the attach on the host and not the VM
+        conf = self.create_non_openstack_config(connection_properties)
+
+        try:
+            device_path = self._find_root_device(connection_properties, conf)
+        finally:
+            # If we have generated the config file we need to remove it
+            if conf:
+                try:
+                    rbd_privsep.delete_if_exists(conf)
+                except Exception as exc:
+                    LOG.warning(_('Could not remove config file %(filename)s: '
+                                  '%(exc)s'), {'filename': conf, 'exc': exc})
+
+        if not device_path:
+            msg = _('Cannot extend non mapped device.')
+            raise exception.BrickException(msg=msg)
+
+        device_name = os.path.basename(device_path)  # ie: rbd0
+        device_number = device_name[3:]  # ie: 0
+        # Get size from /sys/devices/rbd/0/size instead of
+        # /sys/class/block/rbd0/size because the latter isn't updated
+        with open('/sys/devices/rbd/' + device_number + '/size') as f:
+            size_bytes = f.read().strip()
+        return int(size_bytes)

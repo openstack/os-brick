@@ -1,0 +1,5 @@
+---
+fixes:
+  - |
+    Implement the extend_volume method for the RBD connector.
+    (Bug #1884554).
