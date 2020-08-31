@@ -158,6 +158,11 @@ class VolumeEncryptionNotSupported(Invalid):
                 "volume %(volume_id)s.")
 
 
+class VolumeLocalCacheNotSupported(Invalid):
+    message = _("Volume local cache is not supported for %(volume_type)s "
+                "volume %(volume_id)s.")
+
+
 # NOTE(mriedem): This extends ValueError to maintain backward compatibility.
 class InvalidConnectorProtocol(ValueError):
     pass
