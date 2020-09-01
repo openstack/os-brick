@@ -738,10 +738,10 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
             # We have devices but we don't know the wwn yet
             if not wwn and found:
                 wwn = self._linuxscsi.get_sysfs_wwn(found)
-            # We have the wwn but not a multipath
-            if wwn and not mpath:
+            if not mpath and found:
                 mpath = self._linuxscsi.find_sysfs_multipath_dm(found)
-                if not (mpath or wwn_added):
+                # We have the wwn but not a multipath
+                if wwn and not(mpath or wwn_added):
                     # Tell multipathd that this wwn is a multipath and hint
                     # multipathd to recheck all the devices we have just
                     # connected.  We only do this once, since for any new
