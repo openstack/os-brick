@@ -186,20 +186,34 @@ class RBDConnector(base.BaseLinuxConnector):
             # via the rbd kernel module.
             pool, volume = connection_properties['name'].split('/')
             rbd_dev_path = RBDConnector.get_rbd_device_name(pool, volume)
-            if (not os.path.islink(rbd_dev_path) or
-                    not os.path.exists(os.path.realpath(rbd_dev_path))):
+
+            if (
+                not os.path.islink(rbd_dev_path) or
+                not os.path.exists(os.path.realpath(rbd_dev_path))
+            ):
                 cmd = ['rbd', 'map', volume, '--pool', pool]
                 cmd += self._get_rbd_args(connection_properties)
                 self._execute(*cmd, root_helper=self._root_helper,
                               run_as_root=True)
             else:
-                LOG.debug('volume %(vol)s is already mapped to local'
-                          ' device %(dev)s',
-                          {'vol': volume,
-                           'dev': os.path.realpath(rbd_dev_path)})
+                LOG.debug(
+                    'Volume %(vol)s is already mapped to local device %(dev)s',
+                    {'vol': volume, 'dev': os.path.realpath(rbd_dev_path)}
+                )
 
-            return {'path': rbd_dev_path,
-                    'type': 'block'}
+            if (
+                not os.path.islink(rbd_dev_path) or
+                not os.path.exists(os.path.realpath(rbd_dev_path))
+            ):
+                LOG.warning(
+                    'Volume %(vol)s has not been mapped to local device '
+                    '%(dev)s; is the udev daemon running and are the '
+                    'ceph-renamer udev rules configured? See bug #1884114 for '
+                    'more information.',
+                    {'vol': volume, 'dev': rbd_dev_path},
+                )
+
+            return {'path': rbd_dev_path, 'type': 'block'}
 
         rbd_handle = self._get_rbd_handle(connection_properties)
         return {'path': rbd_handle}
