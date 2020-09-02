@@ -1206,6 +1206,8 @@ Setting up iSCSI targets: unused
         result = list(get_wwn_mock.call_args[0][0])
         result.sort()
         self.assertEqual(['sda', 'sdb', 'sdc', 'sdd'], result)
+        # Check we pass the mpath
+        self.assertIsNone(get_wwn_mock.call_args[0][1])
         add_wwid_mock.assert_called_once_with('wwn')
         self.assertNotEqual(0, add_path_mock.call_count)
         self.assertGreaterEqual(find_dm_mock.call_count, 2)
@@ -1238,10 +1240,13 @@ Setting up iSCSI targets: unused
                     'path': '/dev/dm-0'}
         self.assertEqual(expected, res)
 
-        self.assertGreaterEqual(get_wwn_mock.call_count, 2)
+        self.assertGreaterEqual(get_wwn_mock.call_count, 3)
         result = list(get_wwn_mock.call_args[0][0])
         result.sort()
         self.assertEqual(['sda', 'sdb', 'sdc', 'sdd'], result)
+        # Initially mpath we pass is None, but on last call is the mpath
+        mpath_values = [c[1][1] for c in get_wwn_mock._mock_mock_calls]
+        self.assertEqual([None, None, 'dm-0'], mpath_values[0:3])
         add_wwid_mock.assert_not_called()
         add_path_mock.assert_not_called()
         self.assertGreaterEqual(find_dm_mock.call_count, 2)

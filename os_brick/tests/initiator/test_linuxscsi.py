@@ -848,6 +848,16 @@ loop0                                     0"""
         mock_exec.assert_called_once_with(
             'multipathd', 'show', 'status', run_as_root=True, root_helper=None)
 
+    @mock.patch('six.moves.builtins.open')
+    def test_get_sysfs_wwn_mpath(self, open_mock):
+        wwn = '3600d0230000000000e13955cc3757800'
+        cm_open = open_mock.return_value.__enter__.return_value
+        cm_open.read.return_value = 'mpath-' + wwn
+
+        res = self.linuxscsi.get_sysfs_wwn(mock.sentinel.device_names, 'dm-1')
+        open_mock.assert_called_once_with('/sys/block/dm-1/dm/uuid')
+        self.assertEqual(wwn, res)
+
     @mock.patch('glob.glob')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_sysfs_wwid')
     def test_get_sysfs_wwn_single_designator(self, get_wwid_mock, glob_mock):
@@ -855,6 +865,20 @@ loop0                                     0"""
                                   '/dev/disk/by-id/scsi-wwid2']
         get_wwid_mock.return_value = 'wwid1'
         res = self.linuxscsi.get_sysfs_wwn(mock.sentinel.device_names)
+        self.assertEqual('wwid1', res)
+        glob_mock.assert_called_once_with('/dev/disk/by-id/scsi-*')
+        get_wwid_mock.assert_called_once_with(mock.sentinel.device_names)
+
+    @mock.patch('six.moves.builtins.open', side_effect=Exception)
+    @mock.patch('glob.glob')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_sysfs_wwid')
+    def test_get_sysfs_wwn_mpath_exc(self, get_wwid_mock, glob_mock,
+                                     open_mock):
+        glob_mock.return_value = ['/dev/disk/by-id/scsi-wwid1',
+                                  '/dev/disk/by-id/scsi-wwid2']
+        get_wwid_mock.return_value = 'wwid1'
+        res = self.linuxscsi.get_sysfs_wwn(mock.sentinel.device_names, 'dm-1')
+        open_mock.assert_called_once_with('/sys/block/dm-1/dm/uuid')
         self.assertEqual('wwid1', res)
         glob_mock.assert_called_once_with('/dev/disk/by-id/scsi-*')
         get_wwid_mock.assert_called_once_with(mock.sentinel.device_names)
