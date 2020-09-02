@@ -1,0 +1,9 @@
+---
+fixes:
+  - |
+    `Bug #1865754 <https://bugs.launchpad.net/cinder/+bug/1865754>`_:
+    Fix to the rbd connector to work with Ceph Octopus (Version 15.2.0 and
+    later). Octopus has slightly changed its requirements such that it now
+    needs a ``[global]`` heading at the beginning of the ``ini`` config file
+    that is generated within the ``RBDConnector`` class.  This release
+    detects the Ceph version and supplies the appropriate config file.
