@@ -97,7 +97,12 @@ class RBDConnector(base.BaseLinuxConnector):
         try:
             fd, ceph_conf_path = tempfile.mkstemp(prefix="brickrbd_")
             with os.fdopen(fd, 'w') as conf_file:
-                conf_file.writelines([mon_hosts, "\n", keyring, "\n"])
+                # Bug #1865754 - '[global]' has been the appropriate
+                # place for this stuff since at least Hammer, but in
+                # Octopus (15.2.0+), Ceph began enforcing this.
+                conf_file.writelines(["[global]", "\n",
+                                      mon_hosts, "\n",
+                                      keyring, "\n"])
             return ceph_conf_path
         except IOError:
             msg = (_("Failed to write data to %s.") % (ceph_conf_path))
