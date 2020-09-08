@@ -171,6 +171,10 @@ class RBDConnectorTestCase(test_connector.ConnectorTestCase):
                 self.keyring)
         self.assertEqual(conf_path, tmpfile)
         mock_mkstemp.assert_called_once_with(prefix='brickrbd_')
+        # Bug #1865754 - make sure generated config file has a '[global]'
+        # section
+        _, args, _ = mockopen().writelines.mock_calls[0]
+        self.assertIn('[global]', args[0])
 
     @mock.patch.object(priv_rootwrap, 'execute', return_value=None)
     def test_connect_local_volume(self, mock_execute):
