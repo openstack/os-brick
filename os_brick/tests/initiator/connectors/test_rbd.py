@@ -172,6 +172,10 @@ class RBDConnectorTestCase(test_connector.ConnectorTestCase):
                 self.keyring)
         self.assertEqual(conf_path, tmpfile)
         mock_mkstemp.assert_called_once_with(prefix='brickrbd_')
+        # Bug #1865754 - make sure generated config file has a '[global]'
+        # section
+        _, args, _ = mockopen().writelines.mock_calls[0]
+        self.assertIn('[global]', args[0])
 
     @mock.patch('os_brick.privileged.rbd.root_create_ceph_conf')
     def test_create_non_openstack_config(self, mock_priv_create):
