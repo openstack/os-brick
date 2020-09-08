@@ -158,13 +158,8 @@ class RBDConnectorTestCase(test_connector.ConnectorTestCase):
         conn = rbd.RBDConnector(None)
         self.assertEqual(hosts_out, conn._sanitize_mon_hosts(hosts_in))
 
-    @ddt.data(
-        "ceph version 14.2.9 (581f...) nautilus (stable)",
-        "ceph version 14.2.11-99-gaf0268dc91 (af0268dc9) nautilus (stable)")
-    @mock.patch.object(priv_rootwrap, 'execute')
     @mock.patch('os_brick.initiator.connectors.rbd.tempfile.mkstemp')
-    def test_create_ceph_conf(self, ceph_version, mock_mkstemp, mock_execute):
-        mock_execute.return_value = (ceph_version, None)
+    def test_create_ceph_conf(self, mock_mkstemp):
         mockopen = mock.mock_open()
         fd = mock.sentinel.fd
         tmpfile = mock.sentinel.tmpfile
@@ -177,37 +172,6 @@ class RBDConnectorTestCase(test_connector.ConnectorTestCase):
                 self.keyring)
         self.assertEqual(conf_path, tmpfile)
         mock_mkstemp.assert_called_once_with(prefix='brickrbd_')
-        _, args, _ = mockopen().writelines.mock_calls[0]
-        self.assertNotIn('[global]', args[0])
-
-    @ddt.data(
-        ("ceph version 15.2.3 (d289...) octopus (stable)", True),
-        ("ceph version 15.2.3-00-d289 (d289) octopus (stable)", True),
-        ("ceph version 14.2.9 (581f...) nautilus (stable)", False),
-        ("ceph version 14.2.11-99-ga..1 (af0268dc9) nautilus (stable)", False))
-    @mock.patch.object(priv_rootwrap, 'execute')
-    @mock.patch('os_brick.initiator.connectors.rbd.tempfile.mkstemp')
-    @ddt.unpack
-    def test_create_ceph_conf_octopus(self, ceph_version, is_octopus,
-                                      mock_mkstemp, mock_execute):
-        mock_execute.return_value = (ceph_version, None)
-        mockopen = mock.mock_open()
-        fd = mock.sentinel.fd
-        tmpfile = mock.sentinel.tmpfile
-        mock_mkstemp.return_value = (fd, tmpfile)
-
-        with mock.patch('os.fdopen', mockopen, create=True):
-            rbd_connector = rbd.RBDConnector(None)
-            conf_path = rbd_connector._create_ceph_conf(
-                self.hosts, self.ports, self.clustername, self.user,
-                self.keyring)
-        self.assertEqual(conf_path, tmpfile)
-        mock_mkstemp.assert_called_once_with(prefix='brickrbd_')
-        _, args, _ = mockopen().writelines.mock_calls[0]
-        if is_octopus:
-            self.assertIn('[global]', args[0])
-        else:
-            self.assertNotIn('[global]', args[0])
 
     @mock.patch('os_brick.privileged.rbd.root_create_ceph_conf')
     def test_create_non_openstack_config(self, mock_priv_create):
@@ -354,20 +318,13 @@ class RBDConnectorTestCase(test_connector.ConnectorTestCase):
 
         mock_delete.assert_called_once_with(mock_rbd_cfg.return_value)
 
-    @ddt.data(
-        "ceph version 14.2.9 (581f...) nautilus (stable)",
-        "ceph version 14.2.11-99-gaf0268dc91 (af0268dc9) nautilus (stable)")
-    @mock.patch.object(priv_rootwrap, 'execute')
     @mock.patch('os_brick.initiator.linuxrbd.rbd')
     @mock.patch('os_brick.initiator.linuxrbd.rados')
     @mock.patch.object(linuxrbd.RBDVolumeIOWrapper, 'close')
-    def test_disconnect_volume(self, ceph_version, volume_close, mock_rados,
-                               mock_rbd, mock_execute):
+    def test_disconnect_volume(self, volume_close, mock_rados, mock_rbd):
         """Test the disconnect volume case."""
-        mock_execute.return_value = (ceph_version, None)
         rbd_connector = rbd.RBDConnector(None)
         device_info = rbd_connector.connect_volume(self.connection_properties)
-
         rbd_connector.disconnect_volume(
             self.connection_properties, device_info)
 
