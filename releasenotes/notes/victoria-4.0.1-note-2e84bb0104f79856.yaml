@@ -1,0 +1,6 @@
+prelude: >
+    The previous release contained a fix for
+    `Bug #1865754 <https://bugs.launchpad.net/cinder/+bug/1865754>`_ that
+    required the presence of a heavyweight binary dependency solely to check
+    the Ceph version.  This release reverts that change and substitutes a
+    lightweight fix that does not impose that dependency.
