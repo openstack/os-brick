@@ -121,7 +121,8 @@ class RBDConnector(base.BaseLinuxConnector):
             monitor_ips = connection_properties['hosts']
             monitor_ports = connection_properties['ports']
             # NOTE: cinder no longer passes keyring data in the connection
-            # properties as of the victoria release.  See OSSN-0085.
+            # properties as of the victoria release.  See OSSN-0085.  But
+            # cinderlib does, so we must keep the code related to the keyring.
             keyring = connection_properties.get('keyring')
         except (KeyError, ValueError):
             msg = _("Connect volume failed, malformed connection properties.")
