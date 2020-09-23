@@ -49,6 +49,12 @@
 - job:
     name: os-brick-src-tempest-lvm-lio-barbican
     parent: cinder-tempest-plugin-lvm-lio-barbican
+    # TODO(gmann): Remove the below nodeset setting to Bionic once
+    # https://storyboard.openstack.org/#!/story/2007732 is fixed
+    # Once nodeset is removed form here then devstack-tempest job
+    # will automatically run this job on Ubuntu Focal nodeset from
+    # Victoria gate onwards.
+    nodeset: openstack-single-node-bionic
     description: |
       Specialized cinder-tempest-lvm-lio-barbican
       which runs against os-brick from sources.
