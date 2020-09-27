@@ -18,9 +18,7 @@ import logging as py_logging
 import time
 
 from oslo_log import log as logging
-from oslo_utils import encodeutils
 from oslo_utils import strutils
-import six
 
 from os_brick.i18n import _
 
@@ -40,7 +38,6 @@ def _sleep(duration):
 
 time.sleep = _sleep
 
-
 import tenacity  # noqa
 
 
@@ -55,7 +52,7 @@ def retry(exceptions, interval=1, retries=3, backoff_rate=2):
 
     def _decorator(f):
 
-        @six.wraps(f)
+        @functools.wraps(f)
         def _wrapper(*args, **kwargs):
             r = tenacity.Retrying(
                 before_sleep=tenacity.before_sleep_log(LOG, logging.DEBUG),
@@ -150,7 +147,7 @@ def trace(f):
                       # and don't use mask_dict_password because it results in
                       # an infinite recursion failure.
                       'all_args': strutils.mask_password(
-                          six.text_type(all_args))})
+                          str(all_args))})
 
         start_time = time.time() * 1000
         try:
@@ -166,7 +163,7 @@ def trace(f):
 
         if isinstance(result, dict):
             mask_result = strutils.mask_dict_password(result)
-        elif isinstance(result, six.string_types):
+        elif isinstance(result, str):
             mask_result = strutils.mask_password(result)
         else:
             mask_result = result
@@ -184,14 +181,9 @@ def convert_str(text):
 
     Convert bytes and Unicode strings to native strings:
 
-    * convert to bytes on Python 2:
-      encode Unicode using encodeutils.safe_encode()
     * convert to Unicode on Python 3: decode bytes from UTF-8
     """
-    if six.PY2:
-        return encodeutils.to_utf8(text)
+    if isinstance(text, bytes):
+        return text.decode('utf-8')
     else:
-        if isinstance(text, bytes):
-            return text.decode('utf-8')
-        else:
-            return text
+        return text

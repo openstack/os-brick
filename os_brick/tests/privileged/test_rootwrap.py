@@ -13,7 +13,6 @@
 from unittest import mock
 
 from oslo_concurrency import processutils as putils
-import six
 
 from os_brick import exception
 from os_brick import privileged
@@ -114,7 +113,7 @@ class PrivRootwrapTestCase(base.TestCase):
         out, err = priv_rootwrap.custom_execute('sleep', '2', timeout=0.05,
                                                 raise_timeout=False)
         self.assertEqual('', out)
-        self.assertIsInstance(err, six.string_types)
+        self.assertIsInstance(err, str)
 
     def test_custom_execute_check_exit_code(self):
         self.assertRaises(putils.ProcessExecutionError,
@@ -125,7 +124,7 @@ class PrivRootwrapTestCase(base.TestCase):
         out, err = priv_rootwrap.custom_execute('ls', '-y',
                                                 check_exit_code=False)
         self.assertEqual('', out)
-        self.assertIsInstance(err, six.string_types)
+        self.assertIsInstance(err, str)
 
     @mock.patch.object(priv_rootwrap.unlink_root.privsep_entrypoint,
                        'client_mode', False)

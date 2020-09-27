@@ -16,8 +16,6 @@
 from unittest import mock
 
 import ddt
-import six
-
 from os_brick import exception
 from os_brick.initiator.windows import base as base_win_conn
 from os_brick.tests.windows import fake_win_conn
@@ -87,7 +85,8 @@ class BaseWindowsConnectorTestCase(test_base.WindowsConnectorTestBase):
         mock_get_uid_and_type.assert_called_once_with(mock.sentinel.dev_num)
 
     @ddt.data(None, IOError)
-    @mock.patch.object(six.moves.builtins, 'open')
+    @mock.patch('os_brick.initiator.windows.base.open',
+                new_callable=mock.mock_open)
     def test_check_valid_device(self, exc, mock_open):
         mock_open.side_effect = exc
 

@@ -17,7 +17,6 @@ import os
 from oslo_concurrency import lockutils
 from oslo_log import log as logging
 from oslo_service import loopingcall
-import six
 
 from os_brick import exception
 from os_brick.i18n import _
@@ -80,7 +79,7 @@ class FibreChannelConnector(base.BaseLinuxConnector):
             wwns = target_wwns
         elif isinstance(target_wwn, list):
             wwns = target_wwn
-        elif isinstance(target_wwn, six.string_types):
+        elif isinstance(target_wwn, str):
             wwns = [target_wwn]
         else:
             wwns = []

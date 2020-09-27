@@ -16,7 +16,6 @@ import os
 from unittest import mock
 
 import ddt
-import six
 
 from os_brick import exception
 from os_brick.initiator.connectors import base
@@ -259,7 +258,7 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
         # Should work for string, unicode, and list
         wwns_luns = [
             ('1234567890123456', 1),
-            (six.text_type('1234567890123456'), 1),
+            (str('1234567890123456'), 1),
             (['1234567890123456', '1234567890123457'], 1),
             (['1234567890123456', '1234567890123457'], 1),
         ]
@@ -720,7 +719,7 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
         # Check that we turn to lowercase target wwns
         key = 'target_wwns' if 'target_wwns' in target_info else 'target_wwn'
         wwns = target_info.get(key)
-        wwns = [wwns] if isinstance(wwns, six.string_types) else wwns
+        wwns = [wwns] if isinstance(wwns, str) else wwns
         wwns = [w.lower() for w in wwns]
         if wwns:
             self.assertEqual(wwns, conn['data'][key])

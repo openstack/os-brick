@@ -15,7 +15,6 @@ import tempfile
 from unittest import mock
 
 from oslo_concurrency import processutils as putils
-import six
 
 from os_brick import exception
 from os_brick.privileged import rootwrap as priv_rootwrap
@@ -61,13 +60,12 @@ class RemoteFsClientTestCase(base.TestCase):
     def test_read_mounts(self):
         mounts = """device1 mnt_point1 ext4 rw,seclabel,relatime 0 0
                     device2 mnt_point2 ext4 rw,seclabel,relatime 0 0"""
-        mockopen = mock.mock_open(read_data=mounts)
-        mockopen.return_value.__iter__ = lambda self: iter(self.readline, '')
-        with mock.patch.object(six.moves.builtins, "open", mockopen,
-                               create=True):
+        with mock.patch('os_brick.remotefs.remotefs.open',
+                        mock.mock_open(read_data=mounts)) as mock_open:
             client = remotefs.RemoteFsClient("cifs", root_helper='true',
                                              smbfs_mount_point_base='/mnt')
             ret = client._read_mounts()
+            mock_open.assert_called_once_with('/proc/mounts', 'r')
         self.assertEqual(ret, {'mnt_point1': 'device1',
                                'mnt_point2': 'device2'})
 
@@ -197,9 +195,8 @@ class VZStorageRemoteFSClientTestVase(RemoteFsClientTestCase):
 
         with mock.patch.object(tempfile, 'mkdtemp',
                                return_value=tmp_dir):
-            mock_open = mock.mock_open()
-            with mock.patch.object(six.moves.builtins, "open",
-                                   mock_open, create=True):
+            with mock.patch('os_brick.remotefs.remotefs.open',
+                            new_callable=mock.mock_open) as mock_open:
                 client.mount(share)
 
                 write_calls = [mock.call(tmp_dir + 'bs_list', 'w'),

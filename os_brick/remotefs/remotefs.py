@@ -22,7 +22,6 @@ import tempfile
 from oslo_concurrency import processutils
 from oslo_log import log as logging
 from oslo_utils.secretutils import md5
-import six
 
 from os_brick import exception
 from os_brick import executor
@@ -68,7 +67,7 @@ class RemoteFsClient(executor.Executor):
 
     def _get_hash_str(self, base_str):
         """Return a string that represents hash of base_str (hex format)."""
-        if isinstance(base_str, six.text_type):
+        if isinstance(base_str, str):
             base_str = base_str.encode('utf-8')
         return md5(base_str,
                    usedforsecurity=False).hexdigest()
@@ -152,7 +151,7 @@ class RemoteFsClient(executor.Executor):
                           {'sh': nfs_share, 'mnt_type': mnt_type})
                 return
             except Exception as e:
-                mnt_errors[mnt_type] = six.text_type(e)
+                mnt_errors[mnt_type] = str(e)
                 LOG.debug('Failed to do %s mount.', mnt_type)
         raise exception.BrickException(_("NFS mount failed for share %(sh)s. "
                                          "Error - %(error)s")

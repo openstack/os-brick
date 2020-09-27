@@ -17,11 +17,9 @@
 import abc
 
 from os_brick import executor
-import six
 
 
-@six.add_metaclass(abc.ABCMeta)
-class VolumeEncryptor(executor.Executor):
+class VolumeEncryptor(executor.Executor, metaclass=abc.ABCMeta):
     """Base class to support encrypted volumes.
 
     A VolumeEncryptor provides hooks for attaching and detaching volumes, which
