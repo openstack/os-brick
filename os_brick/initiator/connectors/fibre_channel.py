@@ -225,8 +225,8 @@ class FibreChannelConnector(base.BaseLinuxConnector):
                           {'device': device})
                 if os.path.exists(device) and self.check_valid_device(device):
                     self.host_device = device
-                    # get the /dev/sdX device.  This is used
-                    # to find the multipath device.
+                    # get the /dev/sdX device.  This variable is maintained to
+                    # keep the same log output.
                     self.device_name = os.path.realpath(device)
                     raise loopingcall.LoopingCallDone()
 
@@ -260,8 +260,11 @@ class FibreChannelConnector(base.BaseLinuxConnector):
         # see if the new drive is part of a multipath
         # device.  If so, we'll use the multipath device.
         if self.use_multipath:
+            # Pass a symlink, not a real path, otherwise we'll get a real path
+            # back if we don't find a multipath and we'll return that to the
+            # caller, breaking Nova's encryption which requires a symlink.
             (device_path, multipath_id) = self._discover_mpath_device(
-                device_wwn, connection_properties, self.device_name)
+                device_wwn, connection_properties, self.host_device)
             if multipath_id:
                 # only set the multipath_id if we found one
                 device_info['multipath_id'] = multipath_id
@@ -344,8 +347,8 @@ class FibreChannelConnector(base.BaseLinuxConnector):
                 mpath_path = self._linuxscsi.find_multipath_device_path(wwn)
                 if mpath_path:
                     self._linuxscsi.flush_multipath_device(mpath_path)
-            device_info = self._linuxscsi.get_device_info(real_path)
-            devices.append(device_info)
+            dev_info = self._linuxscsi.get_device_info(real_path)
+            devices.append(dev_info)
 
         LOG.debug("devices to remove = %s", devices)
         self._remove_devices(connection_properties, devices, device_info)
@@ -356,7 +359,15 @@ class FibreChannelConnector(base.BaseLinuxConnector):
         # all of them
         path_used = self._linuxscsi.get_dev_path(connection_properties,
                                                  device_info)
-        was_multipath = '/pci-' not in path_used
+        # NOTE: Due to bug #1897787 device_info may have a real path for some
+        # single paths instead of a symlink as it should have, so it'll only
+        # be a multipath if it was a symlink (not real path) and it wasn't a
+        # single path symlink (those have filenames starting with pci-)
+        # We don't use os.path.islink in case the file is no longer there.
+        was_symlink = path_used.count(os.sep) > 2
+        # We check for /pci because that's the value we return for single
+        # paths, whereas for multipaths we have multiple link formats.
+        was_multipath = '/pci-' not in path_used and was_symlink
         for device in devices:
             device_path = device['device']
             flush = self._linuxscsi.requires_flush(device_path,
