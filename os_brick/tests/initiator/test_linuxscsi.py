@@ -1126,8 +1126,15 @@ loop0                                     0"""
     def test_get_dev_path_no_path(self, con_props, dev_info):
         self.assertEqual('', self.linuxscsi.get_dev_path(con_props, dev_info))
 
-    @ddt.data(('/dev/sda', '/dev/sda', True, False, None),
+    @ddt.data(('/dev/sda', '/dev/sda', False, True, None),
+              # This checks that we ignore the was_multipath parameter if it
+              # doesn't make sense (because the used path is the one we are
+              # asking about)
+              ('/dev/sda', '/dev/sda', True, True, None),
               ('/dev/sda', '', True, False, None),
+              # Check for encrypted volume
+              ('/dev/link_sda', '/dev/disk/by-path/pci-XYZ', False, True,
+               ('/dev/sda', '/dev/mapper/crypt-pci-XYZ')),
               ('/dev/link_sda', '/dev/link_sdb', False, False, ('/dev/sda',
                                                                 '/dev/sdb')),
               ('/dev/link_sda', '/dev/link2_sda', False, True, ('/dev/sda',
