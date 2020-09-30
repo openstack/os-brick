@@ -474,6 +474,9 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
             find_mp_dev_mock, 'rw', False)
 
         self.assertNotIn('multipathd_id', connection_info['data'])
+        # Ensure we don't call it with the real path
+        device_name = discover_mp_dev_mock.call_args[0][-1]
+        self.assertNotEqual(realpath_mock.return_value, device_name)
 
     @mock.patch.object(fibre_channel.FibreChannelConnector, 'get_volume_paths')
     def test_extend_volume_no_path(self, mock_volume_paths):
@@ -731,6 +734,8 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
 
     @ddt.data(('/dev/mapper/<WWN>', True),
               ('/dev/mapper/mpath0', True),
+              # Check real devices are properly detected as non multipaths
+              ('/dev/sda', False),
               ('/dev/disk/by-path/pci-1-fc-1-lun-1', False))
     @ddt.unpack
     @mock.patch('os_brick.initiator.linuxscsi.LinuxSCSI.remove_scsi_device')
