@@ -73,7 +73,15 @@ class PrivRootwrapTestCase(base.TestCase):
                                           run_as_root=False,
                                           keyword_arg=mock.sentinel.kwarg)
 
-    def test_custom_execute(self):
+    @mock.patch('threading.Timer')
+    def test_custom_execute_default_timeout(self, mock_timer):
+        """Confirm timeout defaults to 600 and the thread timer is started."""
+        priv_rootwrap.custom_execute('echo', 'hola')
+        mock_timer.assert_called_once_with(600, mock.ANY, mock.ANY)
+        mock_timer.return_value.start.assert_called_once_with()
+
+    def test_custom_execute_callbacks(self):
+        """Confirm execute callbacks are called on execute."""
         on_execute = mock.Mock()
         on_completion = mock.Mock()
         msg = 'hola'

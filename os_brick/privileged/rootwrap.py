@@ -130,7 +130,11 @@ def custom_execute(*cmd, **kwargs):
         interval = kwargs.pop('interval', 1)
         backoff_rate = kwargs.pop('backoff_rate', 2)
 
-    timeout = kwargs.pop('timeout', None)
+    # Operations performed by OS-Brick should be relatively quick.  The longest
+    # default timeout is probably the iSCSI ones, with 120 seconds.  Since CLI
+    # tools may get stuck we don't want to leave the timeout to infinite, so we
+    # set the more than reasonable timeout of 10 minutes (600 seconds).
+    timeout = kwargs.pop('timeout', 600)
     sig_end = kwargs.pop('signal', signal.SIGTERM)
     default_raise_timeout = kwargs.get('check_exit_code', True)
     raise_timeout = kwargs.pop('raise_timeout', default_raise_timeout)
