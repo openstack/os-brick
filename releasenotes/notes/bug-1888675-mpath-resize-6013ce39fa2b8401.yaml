@@ -1,0 +1,5 @@
+---
+fixes:
+  - |
+    `Bug #1888675 <https://bugs.launchpad.net/os-brick/+bug/1888675>`_: Fixed
+    in-use volume resize issues caused by the multipath-tools version.
