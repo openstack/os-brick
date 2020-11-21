@@ -156,7 +156,10 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         for line in out.splitlines():
             if line:
                 info = line.split()
-                lines.append((info[0].split(',')[0], info[1]))
+                try:
+                    lines.append((info[0].split(',')[0], info[1]))
+                except IndexError:
+                    pass
         return lines
 
     def _get_iscsi_sessions(self):
