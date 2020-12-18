@@ -26,7 +26,7 @@ keystoneauth1==3.4.0
 linecache2==1.0.0
 lxml==3.4.1
 MarkupSafe==1.0
-mccabe==0.2.1
+mccabe==0.6.0
 mock==2.0.0
 monotonic==0.6
 mox3==0.20.0
