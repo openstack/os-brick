@@ -1,0 +1,5 @@
+---
+fixes:
+  - |
+    Add a 10 minutes default timeout to shell commands executed through
+    subprocess to prevent the possibility of them getting stuck forever.
