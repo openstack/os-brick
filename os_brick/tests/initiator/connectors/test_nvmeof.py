@@ -13,66 +13,10 @@
 from unittest import mock
 
 import ddt
-from oslo_concurrency import processutils as putils
 
-from os_brick import exception
 from os_brick.initiator.connectors import nvmeof
 from os_brick.initiator import linuxscsi
 from os_brick.tests.initiator import test_connector
-
-FAKE_NVME_LIST_OUTPUT = """
-Node             SN                   Model                                  \
-  Namespace Usage                      Format           FW Rev\n
----------------- -------------------- ---------------------------------------\
-- --------- -------------------------- ---------------- --------\n
-/dev/nvme0n1     67ff9467da6e5567     Linux                                  \
-  10          1.07  GB /   1.07  GB    512   B +  0 B   4.8.0-58\n
-/dev/nvme11n12   fecc8e73584753d7     Linux                                  \
-  1           3.22  GB /   3.22  GB    512   B +  0 B   4.8.0-56\n
-"""
-
-FAKE_NVME_LIST_SUBSYS = """
-{
-  "Subsystems" : [
-    {
-      "Name" : "nvme-subsys0",
-      "NQN" : "nqn.fake:cnode1"
-    },
-    {
-      "Paths" : [
-        {
-          "Name" : "nvme0",
-          "Transport" : "rdma",
-          "Address" : "traddr=10.0.2.15 trsvcid=4420"
-        }
-      ]
-    },
-    {
-      "Name" : "nvme-subsys1",
-      "NQN" : "nqn.2016-06.io.spdk:cnode1"
-    },
-    {
-      "Paths" : [
-        {
-          "Name" : "nvme1",
-          "Transport" : "rdma",
-          "Address" : "traddr=10.0.2.15 trsvcid=4420"
-        }
-      ]
-    }
-  ]
-}
-"""
-
-NVME_DATA1 = {'nvme_transport_type': 'rdma',
-              'conn_nqn': 'nqn.2016-06.io.spdk:cnode1',
-              'target_portal': '10.0.2.15',
-              'port': '4420'}
-
-NVME_DATA2 = {'nvme_transport_type': 'rdma',
-              'conn_nqn': 'nqn.2016-06.io.spdk:cnode2',
-              'target_portal': '10.0.2.15',
-              'port': '4420'}
 
 
 @ddt.ddt
@@ -90,371 +34,359 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
     def test_get_sysuuid_without_newline(self, mock_execute):
         mock_execute.return_value = (
             "9126E942-396D-11E7-B0B7-A81E84C186D1\n", "")
-        uuid = self.connector._get_system_uuid()
+        uuid = self.connector._get_host_uuid()
         expected_uuid = "9126E942-396D-11E7-B0B7-A81E84C186D1"
         self.assertEqual(expected_uuid, uuid)
 
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_execute', autospec=True)
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_host_nqn',
+                       return_value='fakenqn')
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_host_uuid',
+                       return_value=None)
     def test_get_connector_properties_without_sysuuid(
-            self, mock_execute):
-        mock_execute.side_effect = putils.ProcessExecutionError
+            self, mock_uuid, mock_nqn):
         props = self.connector.get_connector_properties('sudo')
-        expected_props = {}
+        expected_props = {'nqn': 'fakenqn'}
         self.assertEqual(expected_props, props)
 
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_system_uuid',
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_host_nqn',
+                       autospec=True)
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_host_uuid',
                        autospec=True)
     def test_get_connector_properties_with_sysuuid(
-            self, mock_sysuuid):
+            self, mock_sysuuid, mock_nqn):
         mock_sysuuid.return_value = "9126E942-396D-11E7-B0B7-A81E84C186D1"
+        mock_nqn.return_value = "nqn.2014-08.org.nvmexpress:uuid:c417f2d3"
         props = self.connector.get_connector_properties('sudo')
         expected_props = {
-            "system uuid": "9126E942-396D-11E7-B0B7-A81E84C186D1"}
+            "uuid": "9126E942-396D-11E7-B0B7-A81E84C186D1",
+            "nqn": "nqn.2014-08.org.nvmexpress:uuid:c417f2d3"}
         self.assertEqual(expected_props, props)
 
-    def _nvmeof_list_cmd(self, *args, **kwargs):
-        return FAKE_NVME_LIST_OUTPUT, None
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'get_nvme_device_path')
+    def test_get_volume_paths_unreplicated(self, mock_get_device_path):
+        mock_get_device_path.return_value = '/dev/nvme1n1'
+        self.assertEqual(self.connector.get_volume_paths(
+            {'target_nqn': 'fakenqn',
+                'vol_uuid': 'fakeuuid',
+                'portals': [('fake', 'portal', 'tcp')]}),
+            ['/dev/nvme1n1'])
+        mock_get_device_path.assert_called_with(
+            self.connector, 'fakenqn', 'fakeuuid')
 
-    def test__get_nvme_devices(self):
-        expected = ['/dev/nvme0n1', '/dev/nvme11n12']
-        self.connector._execute = self._nvmeof_list_cmd
-        actual = self.connector._get_nvme_devices()
-        self.assertEqual(expected, actual)
+    def test_get_volume_paths_replicated(self):
+        connection_properties = {
+            'alias': 'fakealias',
+            'volume_replicas': [
+                {
+                    'target_nqn': 'fakenqn1',
+                    'vol_uuid': 'fakeuuid1',
+                    'portals': [('10.0.0.1', 4420, 'tcp')]
+                }, {
+                    'target_nqn': 'fakenqn2',
+                    'vol_uuid': 'fakeuuid2',
+                    'portals': [('10.0.0.2', 4420, 'tcp')]
+                }, {
+                    'target_nqn': 'fakenqn3',
+                    'vol_uuid': 'fakeuuid3',
+                    'portals': [('10.0.0.3', 4420, 'tcp')]
+                }
+            ]
+        }
+        self.assertEqual(self.connector.get_volume_paths(
+            connection_properties),
+            ['/dev/md/fakealias'])
 
-    @ddt.unpack
-    @ddt.data({'expected': True, 'nvme': NVME_DATA1,
-               'list_subsys': FAKE_NVME_LIST_SUBSYS,
-               'nvme_list': ['/dev/nvme0n1', '/dev/nvme1n1']},
-              {'expected': False, 'nvme': NVME_DATA2,
-               'list_subsys': FAKE_NVME_LIST_SUBSYS,
-               'nvme_list': ['/dev/nvme1n1']},
-              {'expected': False, 'nvme': NVME_DATA1,
-               'list_subsys': '{}',
-               'nvme_list': ['dev/nvme1n1']})
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_devices',
-                       autospec=True)
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_subsys',
-                       autospec=True)
-    @mock.patch('os_brick.utils._time_sleep')
-    def test__wait_for_blk(self, mock_sleep, mock_nvme_subsys,
-                           mock_nvme_dev, expected, nvme,
-                           list_subsys, nvme_list):
-        mock_nvme_subsys.return_value = (list_subsys, "")
-        mock_nvme_dev.return_value = nvme_list
-        actual = self.connector._wait_for_blk(**nvme)
-        self.assertEqual(expected, actual)
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_connect_target_volume')
+    def test_connect_volume_unreplicated(
+            self, mock_connect_target_volume):
+        mock_connect_target_volume.return_value = '/dev/nvme0n1'
+        self.assertEqual(
+            self.connector.connect_volume(
+                {
+                    'target_nqn': 'fakenqn',
+                    'vol_uuid': 'fakeuuid',
+                    'portals': [('fake', 'portal', 'tcp')]
+                }
+            ),
+            {'type': 'block', 'path': '/dev/nvme0n1'})
+        mock_connect_target_volume.assert_called_with(
+            'fakenqn', 'fakeuuid', [('fake', 'portal', 'tcp')])
 
-    @ddt.unpack
-    @ddt.data({'expected': False, 'nvme': NVME_DATA1,
-               'list_subsys': FAKE_NVME_LIST_SUBSYS,
-               'nvme_list': ['/dev/nvme0n1']})
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_devices',
-                       autospec=True)
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_subsys',
-                       autospec=True)
-    @mock.patch('os_brick.utils._time_sleep')
-    def test__wait_for_blk_raise(self, mock_sleep, mock_nvme_subsys,
-                                 mock_nvme_dev, expected, nvme,
-                                 list_subsys, nvme_list):
-        mock_nvme_subsys.return_value = (list_subsys, "")
-        mock_nvme_dev.return_value = nvme_list
-        self.assertRaises(exception.NotFound,
-                          self.connector._wait_for_blk,
-                          **nvme)
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_handle_replicated_volume')
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_connect_target_volume')
+    def test_connect_volume_replicated(
+            self, mock_connect_target_volume, mock_replicated_volume):
+        mock_connect_target_volume.side_effect = (
+            '/dev/nvme0n1', '/dev/nvme1n2', '/dev/nvme2n1')
+        mock_replicated_volume.return_value = '/dev/md/md1'
+        connection_properties = {
+            'alias': 'fakealias',
+            'volume_replicas': [
+                {
+                    'target_nqn': 'fakenqn1',
+                    'vol_uuid': 'fakeuuid1',
+                    'portals': [('10.0.0.1', 4420, 'tcp')]
+                }, {
+                    'target_nqn': 'fakenqn2',
+                    'vol_uuid': 'fakeuuid2',
+                    'portals': [('10.0.0.2', 4420, 'tcp')]
+                }, {
+                    'target_nqn': 'fakenqn3',
+                    'vol_uuid': 'fakeuuid3',
+                    'portals': [('10.0.0.3', 4420, 'tcp')]
+                }
+            ]
+        }
+        actual = self.connector.connect_volume(connection_properties)
+        mock_connect_target_volume.assert_any_call(
+            'fakenqn1', 'fakeuuid1', [('10.0.0.1', 4420, 'tcp')])
+        mock_connect_target_volume.assert_any_call(
+            'fakenqn2', 'fakeuuid2', [('10.0.0.2', 4420, 'tcp')])
+        mock_connect_target_volume.assert_any_call(
+            'fakenqn3', 'fakeuuid3', [('10.0.0.3', 4420, 'tcp')])
+        mock_replicated_volume.assert_called_with(
+            ['/dev/nvme0n1', '/dev/nvme1n2', '/dev/nvme2n1'],
+            connection_properties['alias'],
+            len(connection_properties['volume_replicas']))
+        self.assertEqual(actual, {'type': 'block', 'path': '/dev/md/md1'})
 
-    @ddt.unpack
-    @ddt.data({'expected': True, 'nvme': NVME_DATA1,
-               'list_subsys': FAKE_NVME_LIST_SUBSYS,
-               'nvme_list': ['dev/nvme0n1', '/dev/nvme1n1']})
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_devices',
-                       autospec=True)
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_subsys',
-                       autospec=True)
-    @mock.patch('os_brick.utils._time_sleep')
-    def test__wait_for_blk_retry_success(self, mock_sleep, mock_nvme_subsys,
-                                         mock_nvme_dev, expected, nvme,
-                                         list_subsys, nvme_list):
-        mock_nvme_subsys.return_value = (list_subsys, "")
-        mock_nvme_dev.side_effect = [[], nvme_list]
-        actual = self.connector._wait_for_blk(**nvme)
-        self.assertEqual(expected, actual)
-
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_execute', autospec=True)
-    @mock.patch('os_brick.utils._time_sleep')
-    def test_get_nvme_devices_raise(self, mock_sleep, mock_execute):
-        mock_execute.side_effect = putils.ProcessExecutionError
-        self.assertRaises(exception.CommandExecutionFailed,
-                          self.connector._get_nvme_devices)
-
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_wait_for_blk',
-                       autospec=True)
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_devices',
-                       autospec=True)
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_execute', autospec=True)
-    @mock.patch('os_brick.utils._time_sleep')
-    def test_connect_volume(self, mock_sleep, mock_execute, mock_devices,
-                            mock_blk):
-        connection_properties = {'target_portal': 'portal',
-                                 'target_port': 1,
-                                 'nqn': 'nqn.volume_123',
-                                 'device_path': '',
-                                 'transport_type': 'rdma'}
-
-        mock_devices.side_effect = [
-            ['/dev/nvme0n1'], ['/dev/nvme0n2']]
-        mock_blk.return_value = True
-
-        device_info = self.connector.connect_volume(
-            connection_properties)
-        self.assertEqual('/dev/nvme0n2', device_info['path'])
-        self.assertEqual('block', device_info['type'])
-
-        self.assertEqual(2, mock_devices.call_count)
-
-        mock_execute.assert_called_once_with(
-            self.connector,
-            'nvme', 'connect', '-t',
-            connection_properties['transport_type'], '-n',
-            'nqn.volume_123',
-            '-a', connection_properties['target_portal'],
-            '-s', connection_properties['target_port'],
-            root_helper=None,
-            run_as_root=True)
-
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_wait_for_blk',
-                       autospec=True)
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_devices',
-                       autospec=True)
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_execute', autospec=True)
-    @mock.patch('os_brick.utils._time_sleep')
-    def test_connect_volume_hostnqn(
-            self, mock_sleep, mock_execute, mock_devices,
-            mock_blk):
-        connection_properties = {'target_portal': 'portal',
-                                 'target_port': 1,
-                                 'nqn': 'nqn.volume_123',
-                                 'device_path': '',
-                                 'transport_type': 'rdma',
-                                 'host_nqn': 'nqn.host_456'}
-
-        mock_devices.side_effect = [
-            ['/dev/nvme0n1'], ['/dev/nvme0n2']]
-        mock_blk.return_value = True
-
-        device_info = self.connector.connect_volume(
-            connection_properties)
-        self.assertEqual('/dev/nvme0n2', device_info['path'])
-        self.assertEqual('block', device_info['type'])
-
-        self.assertEqual(2, mock_devices.call_count)
-
-        mock_execute.assert_called_once_with(
-            self.connector,
-            'nvme', 'connect',
-            '-t', connection_properties['transport_type'],
-            '-n', connection_properties['nqn'],
-            '-a', connection_properties['target_portal'],
-            '-s', connection_properties['target_port'],
-            '-q', connection_properties['host_nqn'],
-            root_helper=None,
-            run_as_root=True)
-
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_execute', autospec=True)
-    @mock.patch('os_brick.utils._time_sleep')
-    def test_connect_volume_raise(self, mock_sleep, mock_execute):
-        connection_properties = {'target_portal': 'portal',
-                                 'target_port': 1,
-                                 'nqn': 'nqn.volume_123',
-                                 'device_path': '',
-                                 'transport_type': 'rdma'}
-        mock_execute.side_effect = putils.ProcessExecutionError
-        self.assertRaises(exception.CommandExecutionFailed,
-                          self.connector.connect_volume,
-                          connection_properties)
-
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_execute', autospec=True)
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_devices',
-                       autospec=True)
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_subsys',
-                       autospec=True)
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_wait_for_blk',
-                       autospec=True)
-    @mock.patch('os_brick.utils._time_sleep')
-    def test_connect_volume_wait_for_blk_raise(self, mock_sleep, mock_blk,
-                                               mock_subsys, mock_devices,
-                                               mock_execute):
-        connection_properties = {'target_portal': 'portal',
-                                 'target_port': 1,
-                                 'nqn': 'nqn.volume_123',
-                                 'device_path': '',
-                                 'transport_type': 'rdma'}
-        mock_blk.side_effect = exception.NotFound
-        self.assertRaises(exception.NotFound,
-                          self.connector.connect_volume,
-                          connection_properties)
-
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_wait_for_blk',
-                       autospec=True)
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_devices',
-                       autospec=True)
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_execute', autospec=True)
-    @mock.patch('os_brick.utils._time_sleep')
-    def test_connect_volume_max_retry(
-            self, mock_sleep, mock_execute, mock_devices,
-            mock_blk):
-        connection_properties = {'target_portal': 'portal',
-                                 'target_port': 1,
-                                 'nqn': 'nqn.volume_123',
-                                 'device_path': '',
-                                 'transport_type': 'rdma'}
-
-        mock_devices.return_value = '/dev/nvme0n1'
-        mock_blk.return_value = True
-
-        self.assertRaises(exception.VolumePathsNotFound,
-                          self.connector.connect_volume,
-                          connection_properties)
-
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_wait_for_blk',
-                       autospec=True)
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_devices',
-                       autospec=True)
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_execute', autospec=True)
-    @mock.patch('os_brick.utils._time_sleep')
-    def test_connect_volume_nvmelist_retry_success(
-            self, mock_sleep, mock_execute, mock_devices,
-            mock_blk):
-        connection_properties = {'target_portal': 'portal',
-                                 'target_port': 1,
-                                 'nqn': 'nqn.volume_123',
-                                 'device_path': '',
-                                 'transport_type': 'rdma'}
-        mock_devices.side_effect = [
-            ['/dev/nvme0n1'],
-            ['/dev/nvme0n1'],
-            ['/dev/nvme0n1', '/dev/nvme0n2']]
-        mock_blk.return_value = True
-        device_info = self.connector.connect_volume(
-            connection_properties)
-        self.assertEqual('/dev/nvme0n2', device_info['path'])
-        self.assertEqual('block', device_info['type'])
-
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_wait_for_blk',
-                       autospec=True)
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_devices',
-                       autospec=True)
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_execute', autospec=True)
-    @mock.patch('os_brick.utils._time_sleep')
-    def test_connect_nvme_retry_success(
-            self, mock_sleep, mock_execute, mock_devices,
-            mock_blk):
-        connection_properties = {'target_portal': 'portal',
-                                 'target_port': 1,
-                                 'nqn': 'nqn.volume_123',
-                                 'device_path': '',
-                                 'transport_type': 'rdma'}
-        mock_devices.side_effect = [
-            ['/dev/nvme0n1'],
-            ['/dev/nvme0n1', '/dev/nvme0n2']]
-        mock_blk.return_value = True
-        device_info = self.connector.connect_volume(
-            connection_properties)
-        mock_execute.side_effect = [
-            putils.ProcessExecutionError,
-            putils.ProcessExecutionError,
-            None]
-        self.assertEqual('/dev/nvme0n2', device_info['path'])
-        self.assertEqual('block', device_info['type'])
-
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_devices',
-                       autospec=True)
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_execute', autospec=True)
-    @mock.patch('os_brick.utils._time_sleep')
-    def test_disconnect_volume_nova(
-            self, mock_sleep, mock_execute, mock_devices):
-        connection_properties = {'target_portal': 'portal',
-                                 'target_port': 1,
-                                 'nqn': 'nqn.volume_123',
-                                 'device_path': '/dev/nvme0n1',
-                                 'transport_type': 'rdma'}
-        mock_devices.return_value = '/dev/nvme0n1'
+    def test_disconnect_unreplicated_volume_nova(self):
+        connection_properties = {
+            'vol_uuid': 'fakeuuid',
+            'portals': [('10.0.0.1', 4420, 'tcp')],
+            'target_nqn': 'fakenqn',
+            'device_path': '/dev/nvme0n1'
+        }
         self.connector.disconnect_volume(connection_properties, None)
-        mock_execute.assert_called_once_with(
-            self.connector,
-            'nvme', 'disconnect', '-n', 'nqn.volume_123',
-            root_helper=None,
-            run_as_root=True)
 
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_devices',
-                       autospec=True)
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_execute', autospec=True)
-    @mock.patch('os_brick.utils._time_sleep')
-    def test_disconnect_volume_cinder(
-            self, mock_sleep, mock_execute, mock_devices):
-        connection_properties = {'target_portal': 'portal',
-                                 'target_port': 1,
-                                 'nqn': 'nqn.volume_123',
-                                 'transport_type': 'rdma'}
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'end_raid')
+    def test_disconnect_replicated_volume_nova(self, mock_end_raid):
+        connection_properties = {
+            'vol_uuid': 'fakeuuid',
+            'volume_replicas': [
+                {
+                    'target_nqn': 'fakenqn1',
+                    'vol_uuid': 'fakeuuid1',
+                    'portals': [('10.0.0.1', 4420, 'tcp')]
+                }, {
+                    'target_nqn': 'fakenqn2',
+                    'vol_uuid': 'fakeuuid2',
+                    'portals': [('10.0.0.2', 4420, 'tcp')]
+                }, {
+                    'target_nqn': 'fakenqn3',
+                    'vol_uuid': 'fakeuuid3',
+                    'portals': [('10.0.0.3', 4420, 'tcp')]
+                }
+            ],
+            'device_path': '/dev/md/md1'
+        }
+        self.connector.disconnect_volume(connection_properties, None)
+        mock_end_raid.assert_called_with(self.connector, '/dev/md/md1')
+
+    def test_disconnect_unreplicated_volume_cinder(self):
+        connection_properties = {
+            'vol_uuid': 'fakeuuid',
+            'portals': [('10.0.0.1', 4420, 'tcp')],
+            'target_nqn': 'fakenqn',
+        }
         device_info = {'path': '/dev/nvme0n1'}
-        mock_devices.return_value = '/dev/nvme0n1'
         self.connector.disconnect_volume(connection_properties,
                                          device_info,
                                          ignore_errors=True)
 
-        mock_execute.assert_called_once_with(
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'end_raid')
+    def test_disconnect_replicated_volume_cinder(self, mock_end_raid):
+        connection_properties = {
+            'volume_replicas': [
+                {
+                    'target_nqn': 'fakenqn1',
+                    'vol_uuid': 'fakeuuid1',
+                    'portals': [('10.0.0.1', 4420, 'tcp')]
+                }, {
+                    'target_nqn': 'fakenqn2',
+                    'vol_uuid': 'fakeuuid2',
+                    'portals': [('10.0.0.2', 4420, 'tcp')]
+                }, {
+                    'target_nqn': 'fakenqn3',
+                    'vol_uuid': 'fakeuuid3',
+                    'portals': [('10.0.0.3', 4420, 'tcp')]
+                }
+            ]
+        }
+        device_info = {'path': '/dev/md/md1'}
+        self.connector.disconnect_volume(connection_properties,
+                                         device_info,
+                                         ignore_errors=True)
+        mock_end_raid.assert_called_with(self.connector, '/dev/md/md1')
+
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'get_nvme_device_path')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_device_size')
+    def test_extend_volume_unreplicated(
+            self, mock_device_size, mock_device_path):
+        connection_properties = {
+            'target_nqn': 'fakenqn',
+            'vol_uuid': 'fakeuuid'
+        }
+        mock_device_path.return_value = '/dev/nvme0n1'
+        mock_device_size.return_value = 100
+        self.assertEqual(
+            self.connector.extend_volume(connection_properties),
+            100)
+        mock_device_path.assert_called_with(
+            self.connector, 'fakenqn', 'fakeuuid')
+        mock_device_size.assert_called_with('/dev/nvme0n1')
+
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'run_mdadm')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_device_size')
+    def test_extend_volume_replicated(
+            self, mock_device_size, mock_mdadm):
+        connection_properties = {
+            'alias': 'fakealias',
+            'volume_replicas': [
+                {
+                    'target_nqn': 'fakenqn1',
+                    'vol_uuid': 'fakeuuid1',
+                    'portals': [('10.0.0.1', 4420, 'tcp')]
+                }, {
+                    'target_nqn': 'fakenqn2',
+                    'vol_uuid': 'fakeuuid2',
+                    'portals': [('10.0.0.2', 4420, 'tcp')]
+                }, {
+                    'target_nqn': 'fakenqn3',
+                    'vol_uuid': 'fakeuuid3',
+                    'portals': [('10.0.0.3', 4420, 'tcp')]
+                }
+            ]
+        }
+        mock_device_size.return_value = 100
+        self.assertEqual(
+            self.connector.extend_volume(connection_properties),
+            100)
+        device_path = '/dev/md/' + connection_properties['alias']
+        mock_mdadm.assert_called_with(
+            self.connector, ['mdadm', '--grow', '--size', 'max', device_path])
+        mock_device_size.assert_called_with(device_path)
+
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'rescan')
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'get_nvme_device_path')
+    def test__connect_target_volume_with_connected_device(
+            self, mock_device_path, mock_rescan):
+        mock_device_path.return_value = '/dev/nvme0n1'
+        self.assertEqual(
+            self.connector._connect_target_volume(
+                'fakenqn', 'fakeuuid', [('fake', 'portal', 'tcp')]),
+            '/dev/nvme0n1')
+        mock_device_path.assert_called_with(
+            self.connector, 'fakenqn', 'fakeuuid')
+
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'connect_to_portals')
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'get_nvme_device_path')
+    def test__connect_target_volume_new_device_path(
+            self, mock_device_path, mock_connect_portal):
+        mock_device_path.side_effect = (None, '/dev/nvme0n1')
+        self.assertEqual(
+            self.connector._connect_target_volume(
+                'fakenqn', 'fakeuuid', [('fake', 'portal', 'tcp')]),
+            '/dev/nvme0n1')
+        mock_connect_portal.assert_called_with(
+            self.connector, 'fakenqn', [('fake', 'portal', 'tcp')])
+        mock_device_path.assert_called_with(
+            self.connector, 'fakenqn', 'fakeuuid')
+
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'run_nvme_cli')
+    def test_connect_to_portals(self, mock_nvme_cli):
+        nvme_command = (
+            'connect', '-a', '10.0.0.1', '-s', 4420, '-t',
+            'tcp', '-n', 'fakenqn', '-Q', '128', '-l', '-1')
+        self.assertEqual(
+            self.connector.connect_to_portals(
+                self.connector, 'fakenqn', [('10.0.0.1', 4420, 'tcp')]),
+            True)
+        mock_nvme_cli.assert_called_with(self.connector, nvme_command)
+
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'stop_and_assemble_raid')
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_is_device_in_raid')
+    def test_handle_replicated_volume_existing(
+            self, mock_device_raid, mock_stop_assemble_raid):
+        mock_device_raid.return_value = True
+        self.assertEqual(
+            self.connector._handle_replicated_volume(
+                ['/dev/nvme1n1', '/dev/nvme1n2', '/dev/nvme1n3'],
+                'fakealias', 3),
+            '/dev/md/fakealias')
+        mock_device_raid.assert_called_with(self.connector, '/dev/nvme1n1')
+        mock_stop_assemble_raid.assert_called_with(
+            self.connector, ['/dev/nvme1n1', '/dev/nvme1n2', '/dev/nvme1n3'],
+            '/dev/md/fakealias', False)
+
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'create_raid')
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_is_device_in_raid')
+    def test_handle_replicated_volume_new(
+            self, mock_device_raid, mock_create_raid):
+        mock_device_raid.return_value = False
+        self.assertEqual(
+            self.connector._handle_replicated_volume(
+                ['/dev/nvme1n1', '/dev/nvme1n2', '/dev/nvme1n3'],
+                'fakealias', 3),
+            '/dev/md/fakealias')
+        mock_device_raid.assert_any_call(self.connector, '/dev/nvme1n1')
+        mock_device_raid.assert_any_call(self.connector, '/dev/nvme1n2')
+        mock_device_raid.assert_any_call(self.connector, '/dev/nvme1n3')
+        mock_create_raid.assert_called_with(
+            self.connector, ['/dev/nvme1n1', '/dev/nvme1n2', '/dev/nvme1n3'],
+            '1', 'fakealias', 'fakealias', False)
+
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'ks_readlink')
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'get_md_name')
+    def test_stop_and_assemble_raid_existing_simple(
+            self, mock_md_name, mock_readlink):
+        mock_readlink.return_value = '/dev/md/mdalias'
+        mock_md_name.return_value = 'mdalias'
+        self.assertIsNone(self.connector.stop_and_assemble_raid(
+            self.connector, ['/dev/sda'], '/dev/md/mdalias', False))
+        mock_md_name.assert_called_with(self.connector, 'sda')
+        mock_readlink.assert_called_with('/dev/md/mdalias')
+
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'run_mdadm')
+    def test_assemble_raid_simple(self, mock_run_mdadm):
+        self.assertEqual(self.connector.assemble_raid(
+            self.connector, ['/dev/sda'], '/dev/md/md1', True), True)
+        mock_run_mdadm.assert_called_with(
             self.connector,
-            'nvme', 'disconnect', '-n', 'nqn.volume_123',
-            root_helper=None,
-            run_as_root=True)
+            ['mdadm', '--assemble', '--run', '/dev/md/md1', '-o', '/dev/sda'],
+            True)
 
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_devices',
-                       autospec=True)
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_execute', autospec=True)
-    @mock.patch('os_brick.utils._time_sleep')
-    def test_disconnect_volume_raise(
-            self, mock_sleep, mock_execute, mock_devices):
-        mock_execute.side_effect = putils.ProcessExecutionError
-        mock_devices.return_value = '/dev/nvme0n1'
-        connection_properties = {'target_portal': 'portal',
-                                 'target_port': 1,
-                                 'nqn': 'nqn.volume_123',
-                                 'device_path': '/dev/nvme0n1',
-                                 'transport_type': 'rdma'}
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'run_mdadm')
+    def test_create_raid_cmd_simple(self, mock_run_mdadm):
+        self.assertIsNone(self.connector.create_raid(
+            self.connector, ['/dev/sda'], '1', 'md1', 'name', True))
+        mock_run_mdadm.assert_called_with(
+            self.connector,
+            ['mdadm', '-C', '-o', 'md1', '-R', '-N', 'name', '--level', '1',
+             '--raid-devices=1', '--bitmap=internal', '--homehost=any',
+             '--failfast', '--assume-clean', '/dev/sda'])
 
-        self.assertRaises(putils.ProcessExecutionError,
-                          self.connector.disconnect_volume,
-                          connection_properties,
-                          None)
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'stop_raid')
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'is_raid_exists')
+    def test_end_raid_simple(self, mock_raid_exists, mock_stop_raid):
+        mock_raid_exists.return_value = True
+        mock_stop_raid.return_value = False
+        self.assertIsNone(self.connector.end_raid(
+            self.connector, '/dev/md/md1'))
+        mock_raid_exists.assert_called_with(self.connector, '/dev/md/md1')
+        mock_stop_raid.assert_called_with(self.connector, '/dev/md/md1')
 
-    @mock.patch.object(nvmeof.NVMeOFConnector, 'get_volume_paths',
-                       autospec=True)
-    def test_extend_volume_no_path(self, mock_volume_paths):
-        mock_volume_paths.return_value = []
-        connection_properties = {'target_portal': 'portal',
-                                 'target_port': 1,
-                                 'nqn': 'nqn.volume_123',
-                                 'device_path': '',
-                                 'transport_type': 'rdma'}
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'run_mdadm')
+    def test_stop_raid_simple(self, mock_run_mdadm):
+        mock_run_mdadm.return_value = 'mdadm output'
+        self.assertEqual(self.connector.stop_raid(
+            self.connector, '/dev/md/md1'), 'mdadm output')
+        mock_run_mdadm.assert_called_with(
+            self.connector, ['mdadm', '--stop', '/dev/md/md1'])
 
-        self.assertRaises(exception.VolumePathsNotFound,
-                          self.connector.extend_volume,
-                          connection_properties)
-
-    @mock.patch.object(linuxscsi.LinuxSCSI, 'find_multipath_device_path',
-                       autospec=True)
-    @mock.patch.object(linuxscsi.LinuxSCSI, 'extend_volume', autospec=True)
-    @mock.patch.object(nvmeof.NVMeOFConnector, 'get_volume_paths',
-                       autospec=True)
-    def test_extend_volume(self, mock_volume_paths, mock_scsi_extend,
-                           mock_scsi_find_mpath):
-        fake_new_size = 1024
-        mock_volume_paths.return_value = ['/dev/vdx']
-        mock_scsi_extend.return_value = fake_new_size
-        connection_properties = {'target_portal': 'portal',
-                                 'target_port': 1,
-                                 'nqn': 'nqn.volume_123',
-                                 'device_path': '',
-                                 'transport_type': 'rdma'}
-        new_size = self.connector.extend_volume(connection_properties)
-        self.assertEqual(fake_new_size, new_size)
-        self.assertFalse(mock_scsi_find_mpath.called)
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'run_mdadm')
+    def test_remove_raid_simple(self, mock_run_mdadm):
+        self.assertIsNone(self.connector.remove_raid(
+            self.connector, '/dev/md/md1'))
+        mock_run_mdadm.assert_called_with(
+            self.connector, ['mdadm', '--remove', '/dev/md/md1'])
