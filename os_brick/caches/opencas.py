@@ -88,7 +88,7 @@ class OpenCASEngine(executor.Executor, caches.CacheEngineBase):
             fields = line.split()
             return fields[5]
 
-        raise Exception('Cannot find emulated device.')
+        raise exception.BrickException('Cannot find emulated device.')
 
     def _get_mapped_coredev(self, casdev):
         cmd = ['casadm', '-L']
@@ -102,7 +102,7 @@ class OpenCASEngine(executor.Executor, caches.CacheEngineBase):
             fields = line.split()
             return (fields[1], fields[2])
 
-        raise Exception('Cannot find core device.')
+        raise exception.BrickException('Cannot find core device.')
 
     def _map_casdisk(self, core):
         cmd = ['casadm', '-A', '-i', self.cache_id, '-d', core]
