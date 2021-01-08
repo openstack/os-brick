@@ -119,6 +119,21 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
         res = self.connector._get_iscsi_nodes()
         self.assertEqual([], res)
 
+    @mock.patch.object(iscsi.ISCSIConnector, '_execute')
+    def test_get_iscsi_nodes_corrupt(self, exec_mock):
+        iscsiadm_result = ('ip1:port1,-1 tgt1\n'
+                           'ip2:port2,-1 tgt2\n'
+                           '[]:port3,-1\n'
+                           'ip4:port4,-1 tgt4\n')
+        exec_mock.return_value = (iscsiadm_result, '')
+        res = self.connector._get_iscsi_nodes()
+        expected = [('ip1:port1', 'tgt1'), ('ip2:port2', 'tgt2'),
+                    ('ip4:port4', 'tgt4')]
+        self.assertListEqual(expected, res)
+        exec_mock.assert_called_once_with(
+            'iscsiadm', '-m', 'node', run_as_root=True,
+            root_helper=self.connector._root_helper, check_exit_code=False)
+
     @mock.patch.object(iscsi.ISCSIConnector, '_get_ips_iqns_luns')
     @mock.patch('glob.glob')
     @mock.patch.object(iscsi.ISCSIConnector, '_get_iscsi_sessions_full')
