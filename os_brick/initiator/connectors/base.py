@@ -31,7 +31,7 @@ LOG = logging.getLogger(__name__)
 class BaseLinuxConnector(initiator_connector.InitiatorConnector):
     os_type = initiator.OS_TYPE_LINUX
 
-    def __init__(self, root_helper, driver=None, execute=None,
+    def __init__(self, root_helper: str, driver=None, execute=None,
                  *args, **kwargs):
         self._linuxscsi = linuxscsi.LinuxSCSI(root_helper, execute=execute)
 
@@ -43,7 +43,7 @@ class BaseLinuxConnector(initiator_connector.InitiatorConnector):
                                                  *args, **kwargs)
 
     @staticmethod
-    def get_connector_properties(root_helper, *args, **kwargs):
+    def get_connector_properties(root_helper: str, *args, **kwargs) -> dict:
         """The generic connector properties."""
         multipath = kwargs['multipath']
         enforce_multipath = kwargs['enforce_multipath']
@@ -56,7 +56,7 @@ class BaseLinuxConnector(initiator_connector.InitiatorConnector):
 
         return props
 
-    def check_valid_device(self, path, run_as_root=True):
+    def check_valid_device(self, path: str, run_as_root: bool = True) -> bool:
         cmd = ('dd', 'if=%(path)s' % {"path": path},
                'of=/dev/null', 'count=1')
         out, info = None, None
@@ -85,8 +85,10 @@ class BaseLinuxConnector(initiator_connector.InitiatorConnector):
 
         return volumes
 
-    def _discover_mpath_device(self, device_wwn, connection_properties,
-                               device_name):
+    def _discover_mpath_device(self,
+                               device_wwn: str,
+                               connection_properties: dict,
+                               device_name: str) -> tuple:
         """This method discovers a multipath device.
 
         Discover a multipath device based on a defined connection_property

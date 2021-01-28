@@ -20,6 +20,7 @@ import glob
 import os
 import re
 import time
+from typing import Dict, List, Optional  # noqa: H301
 
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
@@ -42,7 +43,7 @@ class LinuxSCSI(executor.Executor):
     # As found in drivers/scsi/scsi_lib.c
     WWN_TYPES = {'t10.': '1', 'eui.': '2', 'naa.': '3'}
 
-    def echo_scsi_command(self, path, content):
+    def echo_scsi_command(self, path, content) -> None:
         """Used to echo strings to scsi subsystem."""
 
         args = ["-a", path]
@@ -51,7 +52,7 @@ class LinuxSCSI(executor.Executor):
                       root_helper=self._root_helper)
         self._execute('tee', *args, **kwargs)
 
-    def get_name_from_path(self, path):
+    def get_name_from_path(self, path) -> Optional[str]:
         """Translates /dev/disk/by-path/ entry to /dev/sdX."""
 
         name = os.path.realpath(path)
@@ -60,8 +61,11 @@ class LinuxSCSI(executor.Executor):
         else:
             return None
 
-    def remove_scsi_device(self, device, force=False, exc=None,
-                           flush=True):
+    def remove_scsi_device(self,
+                           device: str,
+                           force: bool = False,
+                           exc=None,
+                           flush: bool = True) -> None:
         """Removes a scsi device based upon /dev/sdX name."""
         path = "/sys/block/%s/device/delete" % device.replace("/dev/", "")
         if os.path.exists(path):
@@ -76,7 +80,7 @@ class LinuxSCSI(executor.Executor):
             with exc.context(force, 'Removing %s failed', device):
                 self.echo_scsi_command(path, "1")
 
-    def wait_for_volumes_removal(self, volumes_names):
+    def wait_for_volumes_removal(self, volumes_names: List[str]) -> None:
         """Wait for device paths to be removed from the system."""
         str_names = ', '.join(volumes_names)
         LOG.debug('Checking to see if SCSI volumes %s have been removed.',
@@ -99,7 +103,7 @@ class LinuxSCSI(executor.Executor):
                     LOG.debug('%s still exist.', ', '.join(exist))
         raise exception.VolumePathNotRemoved(volume_path=exist)
 
-    def get_device_info(self, device):
+    def get_device_info(self, device: str) -> Dict[str, Optional[str]]:
         dev_info = {'device': device, 'host': None,
                     'channel': None, 'id': None, 'lun': None}
         # The input argument 'device' can be of 2 types:
@@ -126,7 +130,7 @@ class LinuxSCSI(executor.Executor):
         LOG.debug('dev_info=%s', str(dev_info))
         return dev_info
 
-    def get_sysfs_wwn(self, device_names, mpath=None):
+    def get_sysfs_wwn(self, device_names, mpath=None) -> str:
         """Return the wwid from sysfs in any of devices in udev format."""
         # If we have a multipath DM we know that it has found the WWN
         if mpath:
@@ -201,7 +205,9 @@ class LinuxSCSI(executor.Executor):
         return out.strip()
 
     @staticmethod
-    def is_multipath_running(enforce_multipath, root_helper, execute=None):
+    def is_multipath_running(enforce_multipath,
+                             root_helper,
+                             execute=None) -> bool:
         try:
             if execute is None:
                 execute = priv_rootwrap.execute
@@ -495,8 +501,8 @@ class LinuxSCSI(executor.Executor):
                 cmd='multipath -l %s' % device)
 
         if out:
-            lines = out.strip()
-            lines = lines.split("\n")
+            lines_str = out.strip()
+            lines = lines_str.split("\n")
             lines = [line for line in lines
                      if not re.match(MULTIPATH_ERROR_REGEX, line) and
                      len(line)]

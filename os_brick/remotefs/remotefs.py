@@ -35,7 +35,7 @@ class RemoteFsClient(executor.Executor):
     def __init__(self, mount_type, root_helper,
                  execute=None, *args, **kwargs):
         super(RemoteFsClient, self).__init__(root_helper, execute=execute,
-                                             *args, **kwargs)
+                                             *args, **kwargs)  # type: ignore
 
         mount_type_to_option_prefix = {
             'nfs': 'nfs',
@@ -52,7 +52,9 @@ class RemoteFsClient(executor.Executor):
         self._mount_type = mount_type
         option_prefix = mount_type_to_option_prefix[mount_type]
 
-        self._mount_base = kwargs.get(option_prefix + '_mount_point_base')
+        self._mount_base: str
+        self._mount_base = kwargs.get(option_prefix +
+                                      '_mount_point_base')  # type: ignore
         if not self._mount_base:
             raise exception.InvalidParameterValue(
                 err=_('%s_mount_point_base required') % option_prefix)
@@ -72,7 +74,7 @@ class RemoteFsClient(executor.Executor):
         return md5(base_str,
                    usedforsecurity=False).hexdigest()
 
-    def get_mount_point(self, device_name):
+    def get_mount_point(self, device_name: str):
         """Get Mount Point.
 
         :param device_name: example 172.18.194.100:/var/nfs
@@ -197,9 +199,9 @@ class RemoteFsClient(executor.Executor):
 class ScalityRemoteFsClient(RemoteFsClient):
     def __init__(self, mount_type, root_helper,
                  execute=None, *args, **kwargs):
-        super(ScalityRemoteFsClient, self).__init__(mount_type, root_helper,
-                                                    execute=execute,
-                                                    *args, **kwargs)
+        super(ScalityRemoteFsClient, self).__init__(
+            mount_type, root_helper, execute=execute,
+            *args, **kwargs)  # type: ignore
         self._mount_type = mount_type
         self._mount_base = kwargs.get(
             'scality_mount_point_base', "").rstrip('/')

@@ -19,6 +19,7 @@
 """
 
 import threading
+from typing import Tuple
 
 from oslo_concurrency import processutils as putils
 from oslo_context import context as context_utils
@@ -47,7 +48,7 @@ class Executor(object):
             if value:
                 setattr(exc, field, cls.safe_decode(value))
 
-    def _execute(self, *args, **kwargs):
+    def _execute(self, *args, **kwargs) -> Tuple[str, str]:
         try:
             result = self.__execute(*args, **kwargs)
             if result:

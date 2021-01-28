@@ -224,7 +224,7 @@ class Luks2Encryptor(LuksEncryptor):
             connection_info=connection_info,
             keymgr=keymgr,
             execute=execute,
-            *args, **kwargs)
+            *args, **kwargs)  # type: ignore
 
     def _format_volume(self, passphrase, **kwargs):
         """Creates a LUKS v2 header on the volume.
