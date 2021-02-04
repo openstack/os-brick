@@ -195,7 +195,7 @@ class ConnectorTestCase(test_base.TestCase):
     def test_get_connector_mapping_win32(self):
         mapping_win32 = connector.get_connector_mapping()
         self.assertTrue('ISCSI' in mapping_win32)
-        self.assertFalse('RBD' in mapping_win32)
+        self.assertTrue('RBD' in mapping_win32)
         self.assertFalse('STORPOOL' in mapping_win32)
 
     @mock.patch('os_brick.initiator.connector.platform.machine')

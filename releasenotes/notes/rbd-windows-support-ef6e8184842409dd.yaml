@@ -1,0 +1,5 @@
+---
+features:
+  - |
+    RBD volumes can now be attached to Windows hosts and Hyper-V VMs.
+    The minimum requirements are Ceph 16 (Pacific) and Windows Server 2016.
