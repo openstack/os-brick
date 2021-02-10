@@ -196,7 +196,7 @@ class RBDConnectorTestCase(test_base_rbd.RBDConnectorTestMixin,
                '--mon_host', '192.168.10.2:6789']
         execute_call2 = mock.call(*cmd, root_helper=None, run_as_root=True)
         mock_execute.assert_has_calls([execute_call1])
-        self.assertFalse(execute_call2 in mock_execute.mock_calls)
+        self.assertNotIn(execute_call2, mock_execute.mock_calls)
         expected_info = {'path': '/dev/rbd/pool/image',
                          'type': 'block'}
         self.assertEqual(expected_info, device_info)
