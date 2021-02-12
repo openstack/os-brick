@@ -41,7 +41,9 @@ class ZeroIntervalLoopingCall(loopingcall.FixedIntervalLoopingCall):
 
 class ConnectorUtilsTestCase(test_base.TestCase):
 
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_system_uuid',
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_host_uuid',
+                       return_value=None)
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_host_nqn',
                        return_value=None)
     @mock.patch.object(iscsi.ISCSIConnector, 'get_initiator',
                        return_value='fakeinitiator')
@@ -56,6 +58,7 @@ class ConnectorUtilsTestCase(test_base.TestCase):
                                              multipath_result,
                                              mock_wwnns, mock_wwpns,
                                              mock_initiator,
+                                             mock_nqn,
                                              mock_sysuuid,
                                              host='fakehost'):
         props_actual = connector.get_connector_properties('sudo',
