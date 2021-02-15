@@ -1,0 +1,7 @@
+---
+fixes:
+  - |
+    `Bug #1915678 <https://bugs.launchpad.net/cinder/+bug/1915678>`_: Fix
+    unhandled exception during iscsi volume attachment with multipath enabled
+    that resulted in the cinder-volume service becoming stuck and requiring
+    a restart.

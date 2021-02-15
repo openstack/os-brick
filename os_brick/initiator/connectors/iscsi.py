@@ -630,18 +630,23 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         """
         device = hctl = None
         portal = props['target_portal']
-        session, manual_scan = self._connect_to_iscsi_portal(props)
-        do_scans = rescans > 0 or manual_scan
-        # Scan is sent on connect by iscsid, but we must do it manually on
-        # manual scan mode.  This scan cannot count towards total rescans.
-        if manual_scan:
-            num_rescans = -1
-            seconds_next_scan = 0
-        else:
-            num_rescans = 0
-            seconds_next_scan = 4
+        try:
+            session, manual_scan = self._connect_to_iscsi_portal(props)
+        except Exception:
+            LOG.exception('Exception connecting to %s', portal)
+            session = None
 
         if session:
+            do_scans = rescans > 0 or manual_scan
+            # Scan is sent on connect by iscsid, but we must do it manually on
+            # manual scan mode.  This scan cannot count towards total rescans.
+            if manual_scan:
+                num_rescans = -1
+                seconds_next_scan = 0
+            else:
+                num_rescans = 0
+                seconds_next_scan = 4
+
             data['num_logins'] += 1
             LOG.debug('Connected to %s', portal)
             while do_scans:
