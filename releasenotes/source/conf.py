@@ -34,7 +34,7 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-copyright = u'2015, Cinder Developers'
+copyright = '2015, Cinder Developers'
 
 # Release notes are unversioned, so we don't need to set version and release
 version = ''
