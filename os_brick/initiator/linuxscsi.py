@@ -270,16 +270,23 @@ class LinuxSCSI(executor.Executor):
         """
         # No used path happens on failed attachs, when we don't care about
         # individual flushes.
-        # When Nova used a multipath we don't need to do individual flushes.
-        if not path_used or was_multipath:
+        if not path_used:
             return False
 
-        # We need to flush the single path that was used.
-        # For encrypted volumes the symlink has been replaced, so realpath
-        # won't return device under /dev but under /dev/disk/...
         path = os.path.realpath(path)
         path_used = os.path.realpath(path_used)
-        return path_used == path or '/dev' != os.path.split(path_used)[0]
+
+        # Need to flush this device if we used this specific path.  We check
+        # this before checking if it's multipath in case we don't detect it
+        # being multipath correctly (as in bug #1897787).
+        if path_used == path:
+            return True
+
+        # We flush individual path if Nova didn't use a multipath and we
+        # replaced the symlink to a real device with a link to the decrypted
+        # DM.  We know we replaced it because it doesn't link to /dev/XYZ,
+        # instead it maps to /dev/mapped/crypt-XYZ
+        return not was_multipath and '/dev' != os.path.split(path_used)[0]
 
     def remove_connection(self, devices_names, is_multipath, force=False,
                           exc=None, path_used=None, was_multipath=False):

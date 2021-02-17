@@ -1,0 +1,6 @@
+---
+fixes:
+  - |
+    `Bug #1897787 <https://bugs.launchpad.net/cinder/+bug/1897787>`_: Fix
+    Fibre Channel not flushing volumes on detach when a multipath connection
+    was requested on their attach, but one was not found.
