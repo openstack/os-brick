@@ -11,7 +11,9 @@
 #    under the License.
 
 import glob
+import json
 import os.path
+import re
 import time
 
 from oslo_concurrency import lockutils
@@ -19,12 +21,15 @@ from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
 
 from os_brick import exception
+from os_brick.i18n import _
 from os_brick.initiator.connectors import base
 try:
     from os_brick.initiator.connectors import nvmeof_agent
 except ImportError:
     nvmeof_agent = None
 from os_brick import utils
+
+DEV_SEARCH_PATH = '/dev/'
 
 DEVICE_SCAN_ATTEMPTS_DEFAULT = 5
 
@@ -46,14 +51,18 @@ class NVMeOFConnector(base.BaseLinuxConnector):
             *args, **kwargs)
         self.use_multipath = use_multipath
 
+    @staticmethod
     def get_search_path():
-        return '/dev/'
+        return DEV_SEARCH_PATH
 
     def get_volume_paths(self, connection_properties):
         device_path = connection_properties.get('device_path')
         if device_path:
             return [device_path]
         volume_replicas = connection_properties.get('volume_replicas')
+        if not volume_replicas:  # compatibility
+            return []
+
         try:
             if volume_replicas and len(volume_replicas) > 1:
                 return ['/dev/md/' + connection_properties.get('alias')]
@@ -75,9 +84,12 @@ class NVMeOFConnector(base.BaseLinuxConnector):
                                execute=kwargs.get('execute'))
         ret = {}
         uuid = nvmf._get_host_uuid()
+        suuid = nvmf._get_system_uuid()
         nqn = nvmf._get_host_nqn()
         if uuid:
             ret['uuid'] = uuid
+        if suuid:
+            ret['system uuid'] = suuid  # compatibility
         if nqn:
             ret['nqn'] = nqn
         return ret
@@ -98,27 +110,312 @@ class NVMeOFConnector(base.BaseLinuxConnector):
             return None
 
     def _get_host_nqn(self):
+        host_nqn = None
         try:
             with open('/etc/nvme/hostnqn', 'r') as f:
                 host_nqn = f.read().strip()
                 f.close()
         except IOError:
             try:
-                out, err = self._execute(
-                    'nvme', 'gen-hostuuid',
+                self._execute(
+                    'mkdir', '-m', '755', '-p', '/etc/nvme',
                     root_helper=self._root_helper, run_as_root=True)
-                host_nqn = out.strip()
-                with open('/etc/nvme/hostnqn', 'w') as f:
-                    f.write(host_nqn)
-                    f.close()
+                out, err = self._execute(
+                    'nvme', 'gen-hostnqn', '|', 'tee', '/etc/nvme/hostnqn',
+                    root_helper=self._root_helper, run_as_root=True)
+                if out.strip():
+                    host_nqn = out.strip()
+                self._execute(
+                    'chmod', '644', '/etc/nvme/hostnqn',
+                    root_helper=self._root_helper, run_as_root=True)
             except Exception as e:
                 LOG.warning("Could not generate host nqn: %s" % str(e))
-                return None
         return host_nqn
+
+    def _get_system_uuid(self):
+        # RSD requires system_uuid to let Cinder RSD Driver identify
+        # Nova node for later RSD volume attachment.
+        try:
+            out, err = self._execute('cat', '/sys/class/dmi/id/product_uuid',
+                                     root_helper=self._root_helper,
+                                     run_as_root=True)
+        except putils.ProcessExecutionError:
+            try:
+                out, err = self._execute('dmidecode', '-ssystem-uuid',
+                                         root_helper=self._root_helper,
+                                         run_as_root=True)
+                if not out:
+                    LOG.warning('dmidecode returned empty system-uuid')
+            except putils.ProcessExecutionError as e:
+                LOG.debug("Unable to locate dmidecode. For Cinder RSD Backend,"
+                          " please make sure it is installed: %s", e)
+                out = ""
+        return out.strip()
+
+    def _get_nvme_devices(self):
+        nvme_devices = []
+        # match nvme devices like /dev/nvme10n10
+        pattern = r'/dev/nvme[0-9]+n[0-9]+'
+        cmd = ['nvme', 'list']
+        for retry in range(1, self.device_scan_attempts + 1):
+            try:
+                (out, err) = self._execute(*cmd,
+                                           root_helper=self._root_helper,
+                                           run_as_root=True)
+                for line in out.split('\n'):
+                    result = re.match(pattern, line)
+                    if result:
+                        nvme_devices.append(result.group(0))
+                LOG.debug("_get_nvme_devices returned %(nvme_devices)s",
+                          {'nvme_devices': nvme_devices})
+                return nvme_devices
+
+            except putils.ProcessExecutionError:
+                LOG.warning(
+                    "Failed to list available NVMe connected controllers, "
+                    "retrying.")
+                time.sleep(retry ** 2)
+        else:
+            msg = _("Failed to retrieve available connected NVMe controllers "
+                    "when running nvme list.")
+            raise exception.CommandExecutionFailed(message=msg)
+
+    @utils.retry(exceptions=exception.VolumePathsNotFound)
+    def _get_device_path(self, current_nvme_devices):
+        all_nvme_devices = self._get_nvme_devices()
+        LOG.debug("all_nvme_devices are %(all_nvme_devices)s",
+                  {'all_nvme_devices': all_nvme_devices})
+        path = set(all_nvme_devices) - set(current_nvme_devices)
+        if not path:
+            raise exception.VolumePathsNotFound()
+        return list(path)
+
+    @utils.retry(exceptions=putils.ProcessExecutionError)
+    def _try_connect_nvme(self, cmd):
+        self._execute(*cmd, root_helper=self._root_helper,
+                      run_as_root=True)
+
+    def _get_nvme_subsys(self):
+        # Example output:
+        # {
+        #   'Subsystems' : [
+        #     {
+        #       'Name' : 'nvme-subsys0',
+        #       'NQN' : 'nqn.2016-06.io.spdk:cnode1'
+        #     },
+        #     {
+        #       'Paths' : [
+        #         {
+        #           'Name' : 'nvme0',
+        #           'Transport' : 'rdma',
+        #           'Address' : 'traddr=10.0.2.15 trsvcid=4420'
+        #         }
+        #       ]
+        #     }
+        #   ]
+        # }
+        #
+
+        cmd = ['nvme', 'list-subsys', '-o', 'json']
+        ret_val = self._execute(*cmd, root_helper=self._root_helper,
+                                run_as_root=True)
+
+        return ret_val
+
+    @utils.retry(exceptions=exception.NotFound, retries=5)
+    def _is_nvme_available(self, nvme_name):
+        nvme_name_pattern = "/dev/%sn[0-9]+" % nvme_name
+        for nvme_dev_name in self._get_nvme_devices():
+            if re.match(nvme_name_pattern, nvme_dev_name):
+                return True
+        else:
+            LOG.error("Failed to find nvme device")
+            raise exception.NotFound()
+
+    def _wait_for_blk(self, nvme_transport_type, conn_nqn,
+                      target_portal, port):
+        # Find nvme name in subsystem list and wait max 15 seconds
+        # until new volume will be available in kernel
+        nvme_name = ""
+        nvme_address = "traddr=%s trsvcid=%s" % (target_portal, port)
+
+        # Get nvme subsystems in order to find
+        # nvme name for connected nvme
+        try:
+            (out, err) = self._get_nvme_subsys()
+        except putils.ProcessExecutionError:
+            LOG.error("Failed to get nvme subsystems")
+            raise
+
+        # Get subsystem list. Throw exception if out is currupt or empty
+        try:
+            subsystems = json.loads(out)['Subsystems']
+        except Exception:
+            return False
+
+        # Find nvme name among subsystems
+        for i in range(0, int(len(subsystems) / 2)):
+            subsystem = subsystems[i * 2]
+            if 'NQN' in subsystem and subsystem['NQN'] == conn_nqn:
+                for path in subsystems[i * 2 + 1]['Paths']:
+                    if (path['Transport'] == nvme_transport_type
+                            and path['Address'] == nvme_address):
+                        nvme_name = path['Name']
+                        break
+
+        if not nvme_name:
+            return False
+
+        # Wait until nvme will be available in kernel
+        return self._is_nvme_available(nvme_name)
+
+    def _try_disconnect_volume(self, conn_nqn, ignore_errors=False):
+        cmd = [
+            'nvme',
+            'disconnect',
+            '-n',
+            conn_nqn]
+        try:
+            self._execute(
+                *cmd,
+                root_helper=self._root_helper,
+                run_as_root=True)
+
+        except putils.ProcessExecutionError:
+            LOG.error(
+                "Failed to disconnect from NVMe nqn "
+                "%(conn_nqn)s", {'conn_nqn': conn_nqn})
+            if not ignore_errors:
+                raise
 
     @utils.trace
     @synchronized('connect_volume')
     def connect_volume(self, connection_properties):
+        """Discover and attach the volume.
+
+        :param connection_properties: The dictionary that describes all
+                                      of the target volume attributes.
+               connection_properties must include:
+               nqn - NVMe subsystem name to the volume to be connected
+               target_port - NVMe target port that hosts the nqn sybsystem
+               target_portal - NVMe target ip that hosts the nqn sybsystem
+        :type connection_properties: dict
+        :returns: dict
+        """
+        if connection_properties.get('vol_uuid'):  # compatibility
+            return self._connect_volume_replicated(connection_properties)
+
+        current_nvme_devices = self._get_nvme_devices()
+
+        device_info = {'type': 'block'}
+        conn_nqn = connection_properties['nqn']
+        target_portal = connection_properties['target_portal']
+        port = connection_properties['target_port']
+        nvme_transport_type = connection_properties['transport_type']
+        host_nqn = connection_properties.get('host_nqn')
+        cmd = [
+            'nvme', 'connect',
+            '-t', nvme_transport_type,
+            '-n', conn_nqn,
+            '-a', target_portal,
+            '-s', port]
+        if host_nqn:
+            cmd.extend(['-q', host_nqn])
+
+        self._try_connect_nvme(cmd)
+        try:
+            self._wait_for_blk(nvme_transport_type, conn_nqn,
+                               target_portal, port)
+        except exception.NotFound:
+            LOG.error("Waiting for nvme failed")
+            self._try_disconnect_volume(conn_nqn, True)
+            raise exception.NotFound(message="nvme connect: NVMe device "
+                                             "not found")
+        path = self._get_device_path(current_nvme_devices)
+        device_info['path'] = path[0]
+        LOG.debug("NVMe device to be connected to is %(path)s",
+                  {'path': path[0]})
+        return device_info
+
+    @utils.trace
+    @synchronized('connect_volume')
+    def disconnect_volume(self, connection_properties, device_info,
+                          force=False, ignore_errors=False):
+        """Detach and flush the volume.
+
+        :param connection_properties: The dictionary that describes all
+                                      of the target volume attributes.
+               connection_properties must include:
+               device_path - path to the volume to be connected
+        :type connection_properties: dict
+
+        :param device_info: historical difference, but same as connection_props
+        :type device_info: dict
+
+        """
+        if connection_properties.get('vol_uuid'):  # compatibility
+            return self._disconnect_volume_replicated(
+                connection_properties, device_info,
+                force=force, ignore_errors=ignore_errors)
+
+        conn_nqn = connection_properties['nqn']
+        if device_info and device_info.get('path'):
+            device_path = device_info.get('path')
+        else:
+            device_path = connection_properties['device_path'] or ''
+        current_nvme_devices = self._get_nvme_devices()
+        if device_path not in current_nvme_devices:
+            LOG.warning("Trying to disconnect device %(device_path)s with "
+                        "subnqn %(conn_nqn)s that is not connected.",
+                        {'device_path': device_path, 'conn_nqn': conn_nqn})
+            return
+
+        LOG.debug(
+            "Trying to disconnect from device %(device_path)s with "
+            "subnqn %(conn_nqn)s",
+            {'device_path': device_path, 'conn_nqn': conn_nqn})
+        cmd = [
+            'nvme',
+            'disconnect',
+            '-n',
+            conn_nqn]
+        try:
+            self._execute(
+                *cmd,
+                root_helper=self._root_helper,
+                run_as_root=True)
+
+        except putils.ProcessExecutionError:
+            LOG.error(
+                "Failed to disconnect from NVMe nqn "
+                "%(conn_nqn)s with device_path %(device_path)s",
+                {'conn_nqn': conn_nqn, 'device_path': device_path})
+            if not ignore_errors:
+                raise
+
+    @utils.trace
+    @synchronized('extend_volume')
+    def extend_volume(self, connection_properties):
+        """Update the local kernel's size information.
+
+        Try and update the local kernel's size information
+        for an LVM volume.
+        """
+        if connection_properties.get('vol_uuid'):  # compatibility
+            return self._extend_volume_replicated(connection_properties)
+
+        volume_paths = self.get_volume_paths(connection_properties)
+        if volume_paths:
+            return self._linuxscsi.extend_volume(
+                volume_paths, use_multipath=self.use_multipath)
+        else:
+            LOG.warning("Couldn't find any volume paths on the host to "
+                        "extend volume for %(props)s",
+                        {'props': connection_properties})
+            raise exception.VolumePathsNotFound()
+
+    @utils.trace
+    def _connect_volume_replicated(self, connection_properties):
         """connect to volume on host
 
         connection_properties for NVMe-oF must include:
@@ -142,20 +439,21 @@ class NVMeOFConnector(base.BaseLinuxConnector):
                         host_device_paths.append(rep_host_device_path)
                 except Exception as ex:
                     LOG.error("_connect_target_volume: %s", ex)
+            if not host_device_paths:
+                raise exception.VolumeDeviceNotFound(
+                    device=volume_replicas)
 
             if len(volume_replicas) > 1:
                 device_path = self._handle_replicated_volume(
                     host_device_paths, volume_alias, len(volume_replicas))
             else:
-                device_path = host_device_paths[0]
+                device_path = self._handle_single_replica(
+                    host_device_paths, volume_alias)
         else:
-            try:
-                device_path = self._connect_target_volume(
-                    connection_properties['target_nqn'],
-                    connection_properties['vol_uuid'],
-                    connection_properties['portals'])
-            except Exception as ex:
-                LOG.error("_connect_target_volume: %s", ex)
+            device_path = self._connect_target_volume(
+                connection_properties['target_nqn'],
+                connection_properties['vol_uuid'],
+                connection_properties['portals'])
 
         if nvmeof_agent:
             nvmeof_agent.NVMeOFAgent.ensure_running(self)
@@ -163,9 +461,8 @@ class NVMeOFConnector(base.BaseLinuxConnector):
         return {'type': 'block', 'path': device_path}
 
     @utils.trace
-    @synchronized('connect_volume')
-    def disconnect_volume(self, connection_properties, device_info,
-                          force=False, ignore_errors=False):
+    def _disconnect_volume_replicated(self, connection_properties, device_info,
+                                      force=False, ignore_errors=False):
         device_path = None
         volume_replicas = connection_properties.get('volume_replicas')
         if device_info and device_info.get('path'):
@@ -181,7 +478,7 @@ class NVMeOFConnector(base.BaseLinuxConnector):
             if self._get_fs_type(device_path) == 'linux_raid_member':
                 NVMeOFConnector.end_raid(self, device_path)
 
-    def extend_volume(self, connection_properties):
+    def _extend_volume_replicated(self, connection_properties):
         volume_replicas = connection_properties.get('volume_replicas')
 
         if volume_replicas and len(volume_replicas) > 1:
@@ -206,14 +503,16 @@ class NVMeOFConnector(base.BaseLinuxConnector):
                 self, target_nqn, vol_uuid)
         except exception.VolumeDeviceNotFound:
             host_device_path = None
+
         if not host_device_path:
-            any_connect = NVMeOFConnector.connect_to_portals(self, target_nqn,
-                                                             portals)
+            any_connect = NVMeOFConnector.connect_to_portals(
+                self, target_nqn, portals)
             if not any_connect:
                 LOG.error(
                     "No successful connections: %(host_devices)s",
                     {'host_devices': target_nqn})
                 raise exception.VolumeDeviceNotFound(device=target_nqn)
+
             host_device_path = NVMeOFConnector.get_nvme_device_path(
                 self, target_nqn, vol_uuid)
             if not host_device_path:
@@ -314,6 +613,14 @@ class NVMeOFConnector(base.BaseLinuxConnector):
 
         return device_path
 
+    def _handle_single_replica(self, host_device_paths, volume_alias):
+        if self._get_fs_type(host_device_paths[0]) == 'linux_raid_member':
+            md_path = '/dev/md/' + volume_alias
+            NVMeOFConnector.stop_and_assemble_raid(
+                self, host_device_paths, md_path, False)
+            return md_path
+        return host_device_paths[0]
+
     @staticmethod
     def run_mdadm(executor, cmd, raise_exception=False):
         cmd_output = None
@@ -402,7 +709,7 @@ class NVMeOFConnector(base.BaseLinuxConnector):
 
             try:
                 assembled = NVMeOFConnector.assemble_raid(
-                    executor, drives, md_path, False)
+                    executor, drives, md_path, read_only)
             except Exception:
                 i += 1
 

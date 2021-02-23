@@ -1,0 +1,14 @@
+---
+features:
+  - |
+    NVMeOF connector: The NVMeOF connector was upgraded in the
+    previous release to support MDRAID replication, but we forgot
+    to mention it.  The connector continues to support MDRAID
+    replication in this release.
+
+fixes:
+  - |
+    `Bug #1916264 <https://bugs.launchpad.net/os-brick/+bug/1916264>`_:
+    fixed a regression in the NVMeOF connector that prevented volume
+    attachments for drivers not using MDRAID replication.
+
