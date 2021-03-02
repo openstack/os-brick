@@ -100,7 +100,7 @@ class ScaleIOConnector(base.BaseLinuxConnector):
             password = priv_scaleio.get_connector_password(
                 CONNECTOR_CONF_PATH,
                 connection_properties['config_group'],
-                connection_properties['failed_over'])
+                connection_properties.get('failed_over', False))
             return password, None
         except Exception as e:
             msg = _("Error getting ScaleIO connector password from "
