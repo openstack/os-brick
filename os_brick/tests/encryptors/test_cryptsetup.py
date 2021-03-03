@@ -20,10 +20,11 @@ from unittest import mock
 
 from castellan.common.objects import symmetric_key as key
 from castellan.tests.unit.key_manager import fake
+from oslo_concurrency import processutils as putils
+
 from os_brick.encryptors import cryptsetup
 from os_brick import exception
 from os_brick.tests.encryptors import test_base
-from oslo_concurrency import processutils as putils
 
 
 def fake__get_key(context, passphrase):

@@ -12,8 +12,9 @@
 #    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #    License for the specific language governing permissions and limitations
 #    under the License.
-from oslo_concurrency import processutils as putils
 from unittest import mock
+
+from oslo_concurrency import processutils as putils
 
 from os_brick.caches import opencas
 from os_brick import exception

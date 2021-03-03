@@ -13,6 +13,7 @@
 """Generic RBD connection utilities."""
 
 import io
+
 from oslo_log import log as logging
 
 from os_brick import exception

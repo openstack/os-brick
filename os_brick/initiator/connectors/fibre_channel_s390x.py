@@ -15,7 +15,6 @@
 from oslo_log import log as logging
 
 from os_brick import initiator
-
 from os_brick.initiator.connectors import fibre_channel
 from os_brick.initiator import linuxfc
 

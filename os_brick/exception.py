@@ -14,11 +14,12 @@
 
 """Exceptions for the Brick library."""
 
-from oslo_concurrency import processutils as putils
 import traceback
 
-from os_brick.i18n import _
+from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
+
+from os_brick.i18n import _
 
 
 LOG = logging.getLogger(__name__)
