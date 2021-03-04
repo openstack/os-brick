@@ -15,8 +15,7 @@
 import json
 import os
 import requests
-import six
-from six.moves import urllib
+import urllib
 
 from oslo_concurrency import lockutils
 from oslo_log import log as logging
@@ -537,7 +536,7 @@ class ScaleIOConnector(base.BaseLinuxConnector):
         (out, _err) = self._execute('blockdev', '--getsize64',
                                     device, run_as_root=True,
                                     root_helper=self._root_helper)
-        var = six.text_type(out.strip())
+        var = str(out.strip())
         LOG.debug("Device %(dev)s size: %(var)s",
                   {'dev': device, 'var': var})
         if var.isnumeric():

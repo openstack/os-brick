@@ -38,7 +38,6 @@ the urgency of (1)), then work on the larger refactor that addresses
 
 import os
 import signal
-import six
 import threading
 import time
 
@@ -188,7 +187,7 @@ def execute(*cmd, **kwargs):
 
         sanitized_cmd = strutils.mask_password(' '.join(cmd))
         raise putils.ProcessExecutionError(
-            cmd=sanitized_cmd, description=six.text_type(e))
+            cmd=sanitized_cmd, description=str(e))
 
 
 # See comment on `execute`

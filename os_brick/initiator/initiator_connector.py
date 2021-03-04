@@ -15,15 +15,12 @@
 
 import abc
 
-import six
-
 from os_brick import exception
 from os_brick import executor
 from os_brick import initiator
 
 
-@six.add_metaclass(abc.ABCMeta)
-class InitiatorConnector(executor.Executor):
+class InitiatorConnector(executor.Executor, metaclass=abc.ABCMeta):
 
     # This object can be used on any platform (x86, S390)
     platform = initiator.PLATFORM_ALL

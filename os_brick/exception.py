@@ -15,7 +15,6 @@
 """Exceptions for the Brick library."""
 
 from oslo_concurrency import processutils as putils
-import six
 import traceback
 
 from os_brick.i18n import _
@@ -66,9 +65,6 @@ class BrickException(Exception):
         # message it will be overshadowed by the class' message attribute
         self.msg = message
         super(BrickException, self).__init__(message)
-
-    def __unicode__(self):
-        return six.text_type(self.msg)
 
 
 class NotFound(BrickException):
@@ -200,7 +196,7 @@ class ExceptionChainer(BrickException):
                                    for i, t in enumerate(tracebacks))
         return self._repr
 
-    __str__ = __unicode__ = __repr__
+    __str__ = __repr__
 
     def __nonzero__(self):
         # We want to be able to do boolean checks on the exception

@@ -18,8 +18,6 @@ import binascii
 import copy
 from unittest import mock
 
-import six
-
 from castellan.common.objects import symmetric_key as key
 from castellan.tests.unit.key_manager import fake
 from os_brick.encryptors import cryptsetup
@@ -113,7 +111,7 @@ class CryptsetupEncryptorTestCase(test_base.VolumeEncryptorTestCase):
                                 root_helper=self.root_helper,
                                 connection_info=connection_info,
                                 keymgr=fake.fake_api())
-        self.assertIn(type, six.text_type(exc))
+        self.assertIn(type, str(exc))
 
     @mock.patch('os_brick.executor.Executor._execute')
     @mock.patch('os.path.exists', return_value=True)

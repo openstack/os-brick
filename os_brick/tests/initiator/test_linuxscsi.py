@@ -142,7 +142,7 @@ class LinuxSCSITestCase(base.TestCase):
         wwn = self.linuxscsi.get_scsi_wwn(fake_path)
         self.assertEqual(fake_wwn, wwn)
 
-    @mock.patch('six.moves.builtins.open')
+    @mock.patch('builtins.open')
     def test_get_dm_name(self, open_mock):
         dm_map_name = '3600d0230000000000e13955cc3757800'
         cm_open = open_mock.return_value.__enter__.return_value
@@ -151,7 +151,7 @@ class LinuxSCSITestCase(base.TestCase):
         self.assertEqual(dm_map_name, res)
         open_mock.assert_called_once_with('/sys/block/dm-0/dm/name')
 
-    @mock.patch('six.moves.builtins.open', side_effect=IOError)
+    @mock.patch('builtins.open', side_effect=IOError)
     def test_get_dm_name_failure(self, open_mock):
         self.assertEqual('', self.linuxscsi.get_dm_name('dm-0'))
 
@@ -860,7 +860,7 @@ loop0                                     0"""
                                     'id': '0',
                                     'lun': '0'})
 
-    @mock.patch('six.moves.builtins.open')
+    @mock.patch('builtins.open')
     def test_get_sysfs_wwn_mpath(self, open_mock):
         wwn = '3600d0230000000000e13955cc3757800'
         cm_open = open_mock.return_value.__enter__.return_value
@@ -881,7 +881,7 @@ loop0                                     0"""
         glob_mock.assert_called_once_with('/dev/disk/by-id/scsi-*')
         get_wwid_mock.assert_called_once_with(mock.sentinel.device_names)
 
-    @mock.patch('six.moves.builtins.open', side_effect=Exception)
+    @mock.patch('builtins.open', side_effect=Exception)
     @mock.patch('glob.glob')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_sysfs_wwid')
     def test_get_sysfs_wwn_mpath_exc(self, get_wwid_mock, glob_mock,
@@ -974,7 +974,7 @@ loop0                                     0"""
               {'wwn_type': 'eui.', 'num_val': '2'},
               {'wwn_type': 'naa.', 'num_val': '3'})
     @ddt.unpack
-    @mock.patch('six.moves.builtins.open')
+    @mock.patch('builtins.open')
     def test_get_sysfs_wwid(self, open_mock, wwn_type, num_val):
         read_fail = mock.MagicMock()
         read_fail.__enter__.return_value.read.side_effect = IOError
@@ -989,7 +989,7 @@ loop0                                     0"""
                                     mock.call('/sys/block/sdb/device/wwid'),
                                     mock.call('/sys/block/sdc/device/wwid')])
 
-    @mock.patch('six.moves.builtins.open', side_effect=IOError)
+    @mock.patch('builtins.open', side_effect=IOError)
     def test_get_sysfs_wwid_not_found(self, open_mock):
         res = self.linuxscsi.get_sysfs_wwid(['sda', 'sdb'])
         self.assertEqual('', res)

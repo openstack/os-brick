@@ -26,8 +26,6 @@ from os_brick import utils
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
 from oslo_utils import excutils
-from six import moves
-
 
 LOG = logging.getLogger(__name__)
 
@@ -313,7 +311,7 @@ class LVM(executor.Executor):
         lv_list = []
         if out is not None:
             volumes = out.split()
-            iterator = moves.zip(*[iter(volumes)] * 3)  # pylint: disable=E1101
+            iterator = zip(*[iter(volumes)] * 3)  # pylint: disable=E1101
             for vg, name, size in iterator:
                 lv_list.append({"vg": vg, "name": name, "size": size})
 

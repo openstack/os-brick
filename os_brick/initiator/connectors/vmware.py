@@ -27,7 +27,6 @@ try:
     from oslo_vmware import vim_util
 except ImportError:
     vim_util = None
-import six
 
 from os_brick import exception
 from os_brick.i18n import _
@@ -257,7 +256,7 @@ class VmdkConnector(initiator_connector.InitiatorConnector):
             VmdkConnector.TMP_IMAGES_DATASTORE_FOLDER_PATH,
             os.path.basename(tmp_file_path))
         self._create_temp_ds_folder(
-            session, six.text_type(ds_path.parent), dc_ref)
+            session, str(ds_path.parent), dc_ref)
 
         with open(tmp_file_path, "rb") as tmp_file:
             dc_name = session.invoke_api(
@@ -272,7 +271,7 @@ class VmdkConnector(initiator_connector.InitiatorConnector):
         disk_device = self._get_disk_device(session, backing)
         self._detach_disk_from_backing(session, backing, disk_device)
 
-        src = six.text_type(ds_path)
+        src = str(ds_path)
         LOG.debug("Copying %(src)s to %(dest)s", {'src': src,
                                                   'dest': vmdk_path})
         disk_mgr = session.vim.service_content.virtualDiskManager

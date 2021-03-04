@@ -16,8 +16,6 @@ import os
 import requests
 from unittest import mock
 
-import six
-
 from os_brick import exception
 from os_brick.initiator.connectors import scaleio
 from os_brick.tests.initiator import test_connector
@@ -110,7 +108,7 @@ class ScaleIOConnectorTestCase(test_connector.ConnectorTestCase):
             self.status_code = status_code
 
         def json(self, **kwargs):
-            if isinstance(self._content, six.string_types):
+            if isinstance(self._content, str):
                 return super(ScaleIOConnectorTestCase.MockHTTPSResponse,
                              self).json(**kwargs)
 
@@ -118,7 +116,7 @@ class ScaleIOConnectorTestCase(test_connector.ConnectorTestCase):
 
         @property
         def text(self):
-            if not isinstance(self._content, six.string_types):
+            if not isinstance(self._content, str):
                 return json.dumps(self._content)
 
             self._content = self._content.encode('utf-8')
