@@ -13,8 +13,9 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from castellan.tests.unit.key_manager import fake
 from unittest import mock
+
+from castellan.tests.unit.key_manager import fake
 
 from os_brick import encryptors
 from os_brick.tests import base

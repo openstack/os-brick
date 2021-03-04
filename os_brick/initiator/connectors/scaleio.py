@@ -14,11 +14,11 @@
 
 import json
 import os
-import requests
 import urllib
 
 from oslo_concurrency import lockutils
 from oslo_log import log as logging
+import requests
 
 from os_brick import exception
 from os_brick.i18n import _

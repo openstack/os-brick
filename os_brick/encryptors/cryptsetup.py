@@ -18,11 +18,12 @@ import array
 import binascii
 import os
 
-from os_brick.encryptors import base
-from os_brick import exception
 from oslo_concurrency import processutils
 from oslo_log import log as logging
 from oslo_log import versionutils
+
+from os_brick.encryptors import base
+from os_brick import exception
 
 LOG = logging.getLogger(__name__)
 

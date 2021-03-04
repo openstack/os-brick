@@ -15,11 +15,11 @@
 
 import logging
 import os
-import testtools
 from unittest import mock
 
 import fixtures
 from oslo_utils import strutils
+import testtools
 
 
 class TestCase(testtools.TestCase):

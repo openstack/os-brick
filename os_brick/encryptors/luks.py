@@ -13,10 +13,11 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from os_brick.encryptors import cryptsetup
-from os_brick.privileged import rootwrap as priv_rootwrap
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
+
+from os_brick.encryptors import cryptsetup
+from os_brick.privileged import rootwrap as priv_rootwrap
 
 LOG = logging.getLogger(__name__)
 

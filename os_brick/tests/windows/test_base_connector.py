@@ -16,6 +16,7 @@
 from unittest import mock
 
 import ddt
+
 from os_brick import exception
 from os_brick.initiator.windows import base as base_win_conn
 from os_brick.tests.windows import fake_win_conn

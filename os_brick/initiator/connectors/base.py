@@ -21,7 +21,6 @@ from oslo_log import log as logging
 
 from os_brick import exception
 from os_brick import initiator
-
 from os_brick.initiator import host_driver
 from os_brick.initiator import initiator_connector
 from os_brick.initiator import linuxscsi

@@ -13,11 +13,12 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from os_brick.encryptors import nop
 
 from oslo_log import log as logging
 from oslo_utils import importutils
 from oslo_utils import strutils
+
+from os_brick.encryptors import nop
 
 LOG = logging.getLogger(__name__)
 

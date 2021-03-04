@@ -13,8 +13,9 @@
 #    under the License.
 import json
 import os
-import requests
 from unittest import mock
+
+import requests
 
 from os_brick import exception
 from os_brick.initiator.connectors import scaleio

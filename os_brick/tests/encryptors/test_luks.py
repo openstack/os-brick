@@ -17,9 +17,10 @@ import binascii
 from unittest import mock
 
 from castellan.common.objects import symmetric_key as key
+from oslo_concurrency import processutils as putils
+
 from os_brick.encryptors import luks
 from os_brick.tests.encryptors import test_cryptsetup
-from oslo_concurrency import processutils as putils
 
 
 class LuksEncryptorTestCase(test_cryptsetup.CryptsetupEncryptorTestCase):
