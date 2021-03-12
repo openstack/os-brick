@@ -48,8 +48,8 @@ class TestExecutor(base.TestCase):
         executor = brick_executor.Executor(root_helper=None)
         exc = self.assertRaises(putils.ProcessExecutionError,
                                 executor._execute)
-        self.assertEqual(u'Espa\xf1a', exc.stdout)
-        self.assertEqual(u'Z\xfcrich', exc.stderr)
+        self.assertEqual('Espa\xf1a', exc.stdout)
+        self.assertEqual('Z\xfcrich', exc.stderr)
 
     @mock.patch('sys.stdin', encoding='UTF-8')
     @mock.patch('os_brick.executor.priv_rootwrap.execute')
@@ -58,8 +58,8 @@ class TestExecutor(base.TestCase):
 
         executor = brick_executor.Executor(root_helper=None)
         stdout, stderr = executor._execute()
-        self.assertEqual(u'Espa\xf1a', stdout)
-        self.assertEqual(u'Z\xfcrich', stderr)
+        self.assertEqual('Espa\xf1a', stdout)
+        self.assertEqual('Z\xfcrich', stderr)
 
     @mock.patch('sys.stdin', encoding='UTF-8')
     @mock.patch('os_brick.executor.priv_rootwrap.execute')
@@ -71,8 +71,8 @@ class TestExecutor(base.TestCase):
         executor = brick_executor.Executor(root_helper=None)
         exc = self.assertRaises(putils.ProcessExecutionError,
                                 executor._execute)
-        self.assertEqual(u'Espa\xf1a', exc.stdout)
-        self.assertEqual(u'Z\xfcrich', exc.stderr)
+        self.assertEqual('Espa\xf1a', exc.stdout)
+        self.assertEqual('Z\xfcrich', exc.stderr)
 
     @mock.patch('sys.stdin', encoding='UTF-8')
     @mock.patch('os_brick.executor.priv_rootwrap.execute')
@@ -82,8 +82,8 @@ class TestExecutor(base.TestCase):
 
         executor = brick_executor.Executor(root_helper=None)
         stdout, stderr = executor._execute()
-        self.assertEqual(u'Espa\xf1a', stdout)
-        self.assertEqual(u'Z\xfcrich', stderr)
+        self.assertEqual('Espa\xf1a', stdout)
+        self.assertEqual('Z\xfcrich', stderr)
 
 
 class TestThread(base.TestCase):

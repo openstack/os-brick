@@ -25,7 +25,7 @@ extensions = [
 master_doc = 'index'
 
 # General information about the project.
-copyright = u'2015, OpenStack Foundation'
+copyright = '2015, OpenStack Foundation'
 
 # If true, '()' will be appended to :func: etc. cross-reference text.
 add_function_parentheses = True
@@ -62,7 +62,7 @@ openstackdocs_bug_tag = ''
 # (source start file, target name, title, author, documentclass
 # [howto/manual]).
 latex_documents = [
-    ('index', 'doc-os-brick.tex', u'OS Brick Documentation',
+    ('index', 'doc-os-brick.tex', 'OS Brick Documentation',
      'Cinder Contributors', 'manual')
 ]
 
