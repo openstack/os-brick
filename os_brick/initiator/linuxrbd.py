@@ -189,8 +189,14 @@ class RBDVolumeIOWrapper(io.RawIOBase):
         if (offset + length) > total:
             length = total - offset
 
+        try:
+            data = self._rbd_volume.image.read(int(offset), int(length))
+        except Exception:
+            LOG.exception('Exception encountered during image read')
+            raise
+
         self._inc_offset(length)
-        return self._rbd_volume.image.read(int(offset), int(length))
+        return data
 
     def write(self, data):
         self._rbd_volume.image.write(data, self._offset)
