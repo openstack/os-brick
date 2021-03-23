@@ -29,13 +29,18 @@ class BaseISCSIConnector(initiator_connector.InitiatorConnector):
                 props.pop(key, None)
             yield props
 
+    @staticmethod
+    def _get_luns(con_props, iqns=None):
+        luns = con_props.get('target_luns')
+        num_luns = len(con_props['target_iqns']) if iqns is None else len(iqns)
+        return luns or [con_props['target_lun']] * num_luns
+
     def _get_all_targets(self, connection_properties):
-        if all([key in connection_properties for key in ('target_portals',
-                                                         'target_iqns',
-                                                         'target_luns')]):
-            return zip(connection_properties['target_portals'],
-                       connection_properties['target_iqns'],
-                       connection_properties['target_luns'])
+        if all(key in connection_properties for key in ('target_portals',
+                                                        'target_iqns')):
+            return list(zip(connection_properties['target_portals'],
+                            connection_properties['target_iqns'],
+                            self._get_luns(connection_properties)))
 
         return [(connection_properties['target_portal'],
                  connection_properties['target_iqn'],

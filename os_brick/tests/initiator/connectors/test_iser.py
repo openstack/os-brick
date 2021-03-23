@@ -56,7 +56,8 @@ class ISERConnectorTestCase(test_connector.ConnectorTestCase):
         res = self.connector._get_connection_devices(self.connection_data)
         expected = {('ip:port', 'target_1'): ({'sda'}, set())}
         self.assertDictEqual(expected, res)
-        iql_mock.assert_called_once_with(self.connection_data, discover=False)
+        iql_mock.assert_called_once_with(self.connection_data, discover=False,
+                                         is_disconnect_call=False)
 
     @mock.patch.object(iscsi.ISCSIConnector, '_get_iscsi_sessions_full')
     @mock.patch.object(iscsi.ISCSIConnector, '_execute')
