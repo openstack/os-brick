@@ -1,0 +1,6 @@
+---
+fixes:
+  - |
+    `Bug #1921381 <https://bugs.launchpad.net/cinder/+bug/1921381>`_: Fix
+    disconnecting volumes when the use_multipath value is changed from the
+    connect_volume call to the disconnect_volume call.

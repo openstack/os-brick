@@ -51,16 +51,29 @@ class BaseISCSIConnectorTestCase(test_base.TestCase):
         self.assertEqual(expected_props, list_props[0])
 
     def test_get_all_targets(self):
-        connection_properties = {
-            'target_portals': [mock.sentinel.target_portals],
-            'target_iqns': [mock.sentinel.target_iqns],
-            'target_luns': [mock.sentinel.target_luns]}
+        portals = [mock.sentinel.portals1, mock.sentinel.portals2]
+        iqns = [mock.sentinel.iqns1, mock.sentinel.iqns2]
+        luns = [mock.sentinel.luns1, mock.sentinel.luns2]
+        connection_properties = {'target_portals': portals,
+                                 'target_iqns': iqns,
+                                 'target_luns': luns}
 
         all_targets = self.connector._get_all_targets(connection_properties)
 
-        expected_targets = zip([mock.sentinel.target_portals],
-                               [mock.sentinel.target_iqns],
-                               [mock.sentinel.target_luns])
+        expected_targets = zip(portals, iqns, luns)
+        self.assertEqual(list(expected_targets), list(all_targets))
+
+    def test_get_all_targets_no_target_luns(self):
+        portals = [mock.sentinel.portals1, mock.sentinel.portals2]
+        iqns = [mock.sentinel.iqns1, mock.sentinel.iqns2]
+        lun = mock.sentinel.luns
+        connection_properties = {'target_portals': portals,
+                                 'target_iqns': iqns,
+                                 'target_lun': lun}
+
+        all_targets = self.connector._get_all_targets(connection_properties)
+
+        expected_targets = zip(portals, iqns, [lun, lun])
         self.assertEqual(list(expected_targets), list(all_targets))
 
     def test_get_all_targets_single_target(self):

@@ -117,7 +117,7 @@ class TargetPortalNotFound(BrickException):
     message = _("Unable to find target portal %(target_portal)s.")
 
 
-class TargetPortalsNotFound(BrickException):
+class TargetPortalsNotFound(TargetPortalNotFound):
     message = _("Unable to find target portal in %(target_portals)s.")
 
 
