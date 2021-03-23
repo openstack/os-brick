@@ -288,12 +288,11 @@ class LinuxSCSI(executor.Executor):
         # instead it maps to /dev/mapped/crypt-XYZ
         return not was_multipath and '/dev' != os.path.split(path_used)[0]
 
-    def remove_connection(self, devices_names, is_multipath, force=False,
-                          exc=None, path_used=None, was_multipath=False):
+    def remove_connection(self, devices_names, force=False, exc=None,
+                          path_used=None, was_multipath=False):
         """Remove LUNs and multipath associated with devices names.
 
         :param devices_names: Iterable with real device names ('sda', 'sdb')
-        :param is_multipath: Whether this is a multipath connection or not
         :param force: Whether to forcefully disconnect even if flush fails.
         :param exc: ExceptionChainer where to add exceptions if forcing
         :param path_used: What path was used by Nova/Cinder for I/O
@@ -302,19 +301,17 @@ class LinuxSCSI(executor.Executor):
         """
         if not devices_names:
             return
-        multipath_name = None
         exc = exception.ExceptionChainer() if exc is None else exc
-        LOG.debug('Removing %(type)s devices %(devices)s',
-                  {'type': 'multipathed' if is_multipath else 'single pathed',
-                   'devices': ', '.join(devices_names)})
 
-        if is_multipath:
-            multipath_dm = self.find_sysfs_multipath_dm(devices_names)
-            multipath_name = multipath_dm and self.get_dm_name(multipath_dm)
-            if multipath_name:
-                with exc.context(force, 'Flushing %s failed', multipath_name):
-                    self.flush_multipath_device(multipath_name)
-                    multipath_name = None
+        multipath_dm = self.find_sysfs_multipath_dm(devices_names)
+        LOG.debug('Removing %(type)s devices %(devices)s',
+                  {'type': 'multipathed' if multipath_dm else 'single pathed',
+                   'devices': ', '.join(devices_names)})
+        multipath_name = multipath_dm and self.get_dm_name(multipath_dm)
+        if multipath_name:
+            with exc.context(force, 'Flushing %s failed', multipath_name):
+                self.flush_multipath_device(multipath_name)
+                multipath_name = None
 
         for device_name in devices_names:
             dev_path = '/dev/' + device_name

@@ -140,7 +140,6 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(iscsi.ISCSIConnector, '_get_iscsi_nodes')
     def test_get_connection_devices(self, nodes_mock, sessions_mock,
                                     glob_mock, iql_mock):
-        self.connector.use_multipath = True
         iql_mock.return_value = self.connector._get_all_targets(self.CON_PROPS)
 
         # List sessions from other targets and non tcp sessions
@@ -166,7 +165,8 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
                     ('ip2:port2', 'tgt2'): ({'sdb'}, {'sdc'}),
                     ('ip3:port3', 'tgt3'): (set(), set())}
         self.assertDictEqual(expected, res)
-        iql_mock.assert_called_once_with(self.CON_PROPS, discover=False)
+        iql_mock.assert_called_once_with(self.CON_PROPS, discover=False,
+                                         is_disconnect_call=False)
 
     @mock.patch('glob.glob')
     @mock.patch.object(iscsi.ISCSIConnector, '_get_iscsi_sessions_full')
@@ -560,7 +560,8 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
             mock.sentinel.con_props,
             force=mock.sentinel.Force,
             ignore_errors=mock.sentinel.ignore_errors,
-            device_info=mock.sentinel.dev_info)
+            device_info=mock.sentinel.dev_info,
+            is_disconnect_call=True)
 
     @ddt.data(True, False)
     @mock.patch.object(iscsi.ISCSIConnector, '_get_transport')
@@ -692,19 +693,17 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
             (('ip2:port2', 'tgt2'), ({'sdb'}, {'sdc'})),
             (('ip3:port3', 'tgt3'), (set(), set()))))
 
-        with mock.patch.object(self.connector,
-                               'use_multipath') as use_mp_mock:
-            self.connector._cleanup_connection(
-                self.CON_PROPS, ips_iqns_luns=mock.sentinel.ips_iqns_luns,
-                force=False, ignore_errors=False,
-                device_info=mock.sentinel.device_info)
+        self.connector._cleanup_connection(
+            self.CON_PROPS, ips_iqns_luns=mock.sentinel.ips_iqns_luns,
+            force=False, ignore_errors=False,
+            device_info=mock.sentinel.device_info)
 
         get_dev_path_mock.called_once_with(self.CON_PROPS,
                                            mock.sentinel.device_info)
         con_devs_mock.assert_called_once_with(self.CON_PROPS,
-                                              mock.sentinel.ips_iqns_luns)
-        remove_mock.assert_called_once_with({'sda', 'sdb'}, use_mp_mock,
-                                            False, mock.ANY,
+                                              mock.sentinel.ips_iqns_luns,
+                                              False)
+        remove_mock.assert_called_once_with({'sda', 'sdb'}, False, mock.ANY,
                                             path_used, was_multipath)
         discon_mock.assert_called_once_with(
             self.CON_PROPS,
@@ -730,17 +729,16 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
             (('ip2:port2', 'tgt2'), ({'sdb'}, {'sdc'})),
             (('ip3:port3', 'tgt3'), (set(), set()))))
 
-        with mock.patch.object(self.connector, 'use_multipath',
-                               wraps=True) as use_mp_mock:
-            self.assertRaises(exception.ExceptionChainer,
-                              self.connector._cleanup_connection,
-                              self.CON_PROPS,
-                              ips_iqns_luns=mock.sentinel.ips_iqns_luns,
-                              force=mock.sentinel.force, ignore_errors=False)
+        self.assertRaises(exception.ExceptionChainer,
+                          self.connector._cleanup_connection,
+                          self.CON_PROPS,
+                          ips_iqns_luns=mock.sentinel.ips_iqns_luns,
+                          force=mock.sentinel.force, ignore_errors=False)
 
         con_devs_mock.assert_called_once_with(self.CON_PROPS,
-                                              mock.sentinel.ips_iqns_luns)
-        remove_mock.assert_called_once_with({'sda', 'sdb'}, use_mp_mock,
+                                              mock.sentinel.ips_iqns_luns,
+                                              False)
+        remove_mock.assert_called_once_with({'sda', 'sdb'},
                                             mock.sentinel.force, mock.ANY,
                                             '', False)
         discon_mock.assert_called_once_with(
@@ -975,6 +973,21 @@ Setting up iSCSI targets: unused
         self.assertListEqual(db_portals_mock.return_value, res)
         db_portals_mock.assert_called_once_with(self.SINGLE_CON_PROPS)
         discover_mock.assert_not_called()
+
+    @mock.patch.object(iscsi.ISCSIConnector, '_get_all_targets')
+    @mock.patch.object(iscsi.ISCSIConnector, '_get_discoverydb_portals')
+    @mock.patch.object(iscsi.ISCSIConnector, '_discover_iscsi_portals')
+    def test_get_ips_iqns_luns_disconnect_single_path(self, discover_mock,
+                                                      db_portals_mock,
+                                                      get_targets_mock):
+        db_portals_mock.side_effect = exception.TargetPortalsNotFound
+        res = self.connector._get_ips_iqns_luns(self.SINGLE_CON_PROPS,
+                                                discover=False,
+                                                is_disconnect_call=True)
+        db_portals_mock.assert_called_once_with(self.SINGLE_CON_PROPS)
+        discover_mock.assert_not_called()
+        get_targets_mock.assert_called_once_with(self.SINGLE_CON_PROPS)
+        self.assertEqual(get_targets_mock.return_value, res)
 
     @mock.patch.object(iscsi.ISCSIConnector, '_discover_iscsi_portals')
     def test_get_ips_iqns_luns_no_target_iqns_share_iqn(self, discover_mock):
@@ -1249,7 +1262,9 @@ Setting up iSCSI targets: unused
 
         connect_mock.side_effect = my_connect
 
-        res = self.connector._connect_multipath_volume(self.CON_PROPS)
+        with mock.patch.object(self.connector,
+                               'use_multipath'):
+            res = self.connector._connect_multipath_volume(self.CON_PROPS)
 
         expected = {'type': 'block', 'scsi_wwn': '', 'multipath_id': '',
                     'path': '/dev/dm-0'}
