@@ -167,35 +167,45 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         # entry: [tcp, [1], 192.168.121.250:3260,1 ...]
         return [entry[2] for entry in self._get_iscsi_sessions_full()]
 
-    def _get_ips_iqns_luns(self, connection_properties, discover=True):
+    def _get_ips_iqns_luns(self, connection_properties, discover=True,
+                           is_disconnect_call=False):
         """Build a list of ips, iqns, and luns.
 
-        Used only when doing multipath, we have 3 cases:
+        Used when doing singlepath and multipath, and we have 4 cases:
 
         - All information is in the connection properties
         - We have to do an iSCSI discovery to get the information
         - We don't want to do another discovery and we query the discoverydb
+        - Discovery failed because it was actually a single pathed attachment
 
         :param connection_properties: The dictionary that describes all
                                       of the target volume attributes.
         :type connection_properties: dict
         :param discover: Whether doing an iSCSI discovery is acceptable.
         :type discover: bool
+        :param is_disconnect_call: Whether this is a call coming from a user
+                                   disconnect_volume call or a call from some
+                                   other operation's cleanup.
+        :type is_disconnect_call: bool
         :returns: list of tuples of (ip, iqn, lun)
         """
+        # There are cases where we don't know if the local attach was done
+        # using multipathing or single pathing, so assume multipathing.
         try:
             if ('target_portals' in connection_properties and
                     'target_iqns' in connection_properties):
                 # Use targets specified by connection_properties
-                ips_iqns_luns = list(
-                    zip(connection_properties['target_portals'],
-                        connection_properties['target_iqns'],
-                        self._get_luns(connection_properties)))
+                ips_iqns_luns = self._get_all_targets(connection_properties)
             else:
                 method = (self._discover_iscsi_portals if discover
                           else self._get_discoverydb_portals)
                 ips_iqns_luns = method(connection_properties)
-        except exception.TargetPortalsNotFound:
+        except exception.TargetPortalNotFound:
+            # Discovery failed, on disconnect this will happen if we
+            # are detaching a single pathed connection, so we use the
+            # connection properties to return the tuple.
+            if is_disconnect_call:
+                return self._get_all_targets(connection_properties)
             raise
         except Exception:
             LOG.exception('Exception encountered during portal discovery')
@@ -310,12 +320,6 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
 
     def _get_transport(self):
         return self.transport
-
-    @staticmethod
-    def _get_luns(con_props, iqns=None):
-        luns = con_props.get('target_luns')
-        num_luns = len(con_props['target_iqns']) if iqns is None else len(iqns)
-        return luns or [con_props.get('target_lun')] * num_luns
 
     def _get_discoverydb_portals(self, connection_properties):
         """Retrieve iscsi portals information from the discoverydb.
@@ -792,7 +796,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                                         mpath)
 
     def _get_connection_devices(self, connection_properties,
-                                ips_iqns_luns=None):
+                                ips_iqns_luns=None, is_disconnect_call=False):
         """Get map of devices by sessions from our connection.
 
         For each of the TCP sessions that correspond to our connection
@@ -812,14 +816,15 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         connection properties (sendtargets was used on connect) so we may have
         to retrieve the info from the discoverydb.  Call _get_ips_iqns_luns to
         do the right things.
+
+        This method currently assumes that it's only called by the
+        _cleanup_conection method.
         """
         if not ips_iqns_luns:
-            if self.use_multipath:
-                # We are only called from disconnect, so don't discover
-                ips_iqns_luns = self._get_ips_iqns_luns(connection_properties,
-                                                        discover=False)
-            else:
-                ips_iqns_luns = self._get_all_targets(connection_properties)
+            # This is a cleanup, don't do discovery
+            ips_iqns_luns = self._get_ips_iqns_luns(
+                connection_properties, discover=False,
+                is_disconnect_call=is_disconnect_call)
         LOG.debug('Getting connected devices for (ips,iqns,luns)=%s',
                   ips_iqns_luns)
         nodes = self._get_iscsi_nodes()
@@ -879,11 +884,12 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         """
         return self._cleanup_connection(connection_properties, force=force,
                                         ignore_errors=ignore_errors,
-                                        device_info=device_info)
+                                        device_info=device_info,
+                                        is_disconnect_call=True)
 
     def _cleanup_connection(self, connection_properties, ips_iqns_luns=None,
                             force=False, ignore_errors=False,
-                            device_info=None):
+                            device_info=None, is_disconnect_call=False):
         """Cleans up connection flushing and removing devices and multipath.
 
         :param connection_properties: The dictionary that describes all
@@ -900,13 +906,18 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                               ignore errors or raise an exception once finished
                               the operation.  Default is False.
         :param device_info: Attached device information.
+        :param is_disconnect_call: Whether this is a call coming from a user
+                                   disconnect_volume call or a call from some
+                                   other operation's cleanup.
+        :type is_disconnect_call: bool
         :type ignore_errors: bool
         """
         exc = exception.ExceptionChainer()
         try:
             devices_map = self._get_connection_devices(connection_properties,
-                                                       ips_iqns_luns)
-        except exception.TargetPortalsNotFound as exc:
+                                                       ips_iqns_luns,
+                                                       is_disconnect_call)
+        except exception.TargetPortalNotFound as exc:
             # When discovery sendtargets failed on connect there is no
             # information in the discoverydb, so there's nothing to clean.
             LOG.debug('Skipping cleanup %s', exc)
@@ -922,8 +933,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         was_multipath = (path_used.startswith('/dev/dm-') or
                          'mpath' in path_used)
         multipath_name = self._linuxscsi.remove_connection(
-            remove_devices, self.use_multipath, force, exc,
-            path_used, was_multipath)
+            remove_devices, force, exc, path_used, was_multipath)
 
         # Disconnect sessions and remove nodes that are left without devices
         disconnect = [conn for conn, (__, keep) in devices_map.items()

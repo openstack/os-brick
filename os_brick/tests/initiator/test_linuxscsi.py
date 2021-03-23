@@ -245,7 +245,6 @@ class LinuxSCSITestCase(base.TestCase):
         devices_names = ('sda', 'sdb')
         exc = exception.ExceptionChainer()
         mp_name = self.linuxscsi.remove_connection(devices_names,
-                                                   is_multipath=True,
                                                    force=mock.sentinel.Force,
                                                    exc=exc)
         find_dm_mock.assert_called_once_with(devices_names)
@@ -275,8 +274,7 @@ class LinuxSCSITestCase(base.TestCase):
         exc = exception.ExceptionChainer()
         self.assertRaises(exception.ExceptionChainer,
                           self.linuxscsi.remove_connection,
-                          devices_names, is_multipath=True,
-                          force=False, exc=exc)
+                          devices_names, force=False, exc=exc)
         find_dm_mock.assert_called_once_with(devices_names)
         get_dm_name_mock.assert_called_once_with(find_dm_mock.return_value)
         flush_mp_mock.assert_called_once_with(get_dm_name_mock.return_value)
@@ -285,36 +283,49 @@ class LinuxSCSITestCase(base.TestCase):
         remove_link_mock.assert_not_called()
         self.assertTrue(bool(exc))
 
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'find_sysfs_multipath_dm')
     @mock.patch.object(linuxscsi.LinuxSCSI, '_remove_scsi_symlinks')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'wait_for_volumes_removal')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'remove_scsi_device')
-    def test_remove_connection_singlepath(self, remove_mock, wait_mock,
-                                          remove_link_mock):
+    def test_remove_connection_singlepath_no_path(self, remove_mock, wait_mock,
+                                                  remove_link_mock,
+                                                  find_dm_mock):
+        # Test remove connection when we didn't form a multipath and didn't
+        # even use any of the devices that were found.  This means that we
+        # don't flush any of the single paths when removing them.
+        find_dm_mock.return_value = None
         devices_names = ('sda', 'sdb')
         exc = exception.ExceptionChainer()
-        self.linuxscsi.remove_connection(devices_names, is_multipath=False,
+        self.linuxscsi.remove_connection(devices_names,
                                          force=mock.sentinel.Force,
                                          exc=exc)
+        find_dm_mock.assert_called_once_with(devices_names)
         remove_mock.assert_has_calls(
             [mock.call('/dev/sda', mock.sentinel.Force, exc, False),
              mock.call('/dev/sdb', mock.sentinel.Force, exc, False)])
         wait_mock.assert_called_once_with(devices_names)
         remove_link_mock.assert_called_once_with(devices_names)
 
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'find_sysfs_multipath_dm')
     @mock.patch.object(linuxscsi.LinuxSCSI, '_remove_scsi_symlinks')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'wait_for_volumes_removal')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'remove_scsi_device')
     def test_remove_connection_singlepath_used(self, remove_mock, wait_mock,
-                                               remove_link_mock):
+                                               remove_link_mock, find_dm_mock):
+        # Test remove connection when we didn't form a multipath and just used
+        # one of the single paths that were found.  This means that we don't
+        # flush any of the single paths when removing them.
+        find_dm_mock.return_value = None
         devices_names = ('sda', 'sdb')
         exc = exception.ExceptionChainer()
 
         # realpath was mocked on test setup
         with mock.patch('os.path.realpath', side_effect=self.realpath):
-            self.linuxscsi.remove_connection(devices_names, is_multipath=True,
+            self.linuxscsi.remove_connection(devices_names,
                                              force=mock.sentinel.Force,
                                              exc=exc, path_used='/dev/sdb',
                                              was_multipath=False)
+        find_dm_mock.assert_called_once_with(devices_names)
         remove_mock.assert_has_calls(
             [mock.call('/dev/sda', mock.sentinel.Force, exc, False),
              mock.call('/dev/sdb', mock.sentinel.Force, exc, True)])
