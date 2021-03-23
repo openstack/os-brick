@@ -1,0 +1,5 @@
+---
+prelude: >
+    This release fixes an issue that could cause data loss when the
+    configuration enabling/disabling multipathing is changed on a compute
+    when volumes are currently attached.
