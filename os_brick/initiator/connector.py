@@ -210,8 +210,8 @@ def get_connector_properties(root_helper, my_ip, multipath, enforce_multipath,
     :param multipath: Enable multipath?
     :type multipath: bool
     :param enforce_multipath: Should we enforce that the multipath daemon is
-                              running?  If the daemon isn't running then the
-                              return dict will have multipath as False.
+                              running?  If the daemon isn't running then raise
+                              ProcessExecutionError to the caller.
     :type enforce_multipath: bool
     :param host: hostname.
     :param execute: execute helper.
