@@ -8,7 +8,6 @@
       - release-notes-jobs
     check:
       jobs:
-        - openstack-tox-lower-constraints
         - legacy-tempest-dsvm-full-ceph-plugin-src-os-brick:
             voting: false
             irrelevant-files:
@@ -20,7 +19,6 @@
               - ^setup.cfg$
     gate:
       jobs:
-        - openstack-tox-lower-constraints
         - legacy-tempest-dsvm-full-lio-src-os-brick:
             irrelevant-files:
               - ^(test-|)requirements.txt$
