@@ -1,0 +1,8 @@
+---
+fixes:
+  - |
+    `Bug #1924652 <https://bugs.launchpad.net/os-brick/+bug/1924652>`_: Fix
+    issue with newer multipathd implementations where path devices are kept
+    in multipathd even after volume detachment completes, preventing it from
+    creating a multipath device when a new device attachment is made shortly
+    with the same volume device or the same device path.
