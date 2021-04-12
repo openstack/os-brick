@@ -312,9 +312,21 @@ class LinuxSCSI(executor.Executor):
             with exc.context(force, 'Flushing %s failed', multipath_name):
                 self.flush_multipath_device(multipath_name)
                 multipath_name = None
+            multipath_running = True
+        else:
+            multipath_running = self.is_multipath_running(
+                enforce_multipath=False, root_helper=self._root_helper)
 
         for device_name in devices_names:
             dev_path = '/dev/' + device_name
+            if multipath_running:
+                # Recent multipathd doesn't remove path devices in time when
+                # it receives mutiple udev events in a short span, so here we
+                # tell multipathd to remove the path device immediately.
+                # Even if this step fails, later removing an iscsi device
+                # triggers a udev event and multipathd can remove the path
+                # device based on the udev event
+                self.multipath_del_path(dev_path)
             flush = self.requires_flush(dev_path, path_used, was_multipath)
             self.remove_scsi_device(dev_path, force, exc, flush)
 
@@ -719,6 +731,14 @@ class LinuxSCSI(executor.Executor):
         there's only 1 path.
         """
         stdout, stderr = self._execute('multipathd', 'add', 'path', realpath,
+                                       run_as_root=True, timeout=5,
+                                       check_exit_code=False,
+                                       root_helper=self._root_helper)
+        return stdout.strip() == 'ok'
+
+    def multipath_del_path(self, realpath):
+        """Remove a path from multipathd for monitoring."""
+        stdout, stderr = self._execute('multipathd', 'del', 'path', realpath,
                                        run_as_root=True, timeout=5,
                                        check_exit_code=False,
                                        root_helper=self._root_helper)
