@@ -12,6 +12,10 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+from __future__ import annotations
+
+from typing import Any, Callable  # noqa: H301
+
 from oslo_log import log as logging
 
 from os_brick import initiator
@@ -43,6 +47,7 @@ class RemoteFsConnector(base.BaseLinuxConnector):
             LOG.warning("Connection details not present."
                         " RemoteFsClient may not initialize properly.")
 
+        cls: Any
         if mount_type_lower == 'scality':
             cls = remotefs.ScalityRemoteFsClient
         elif mount_type_lower == 'vzstorage':
@@ -56,21 +61,21 @@ class RemoteFsConnector(base.BaseLinuxConnector):
             root_helper, driver=driver,
             execute=execute,
             device_scan_attempts=device_scan_attempts,
-            *args, **kwargs)
+            *args, **kwargs)  # type: ignore
 
     @staticmethod
     def get_connector_properties(root_helper, *args, **kwargs):
         """The RemoteFS connector properties."""
         return {}
 
-    def set_execute(self, execute):
+    def set_execute(self, execute: Callable) -> None:
         super(RemoteFsConnector, self).set_execute(execute)
         self._remotefsclient.set_execute(execute)
 
-    def get_search_path(self):
+    def get_search_path(self) -> str:
         return self._remotefsclient.get_mount_base()
 
-    def _get_volume_path(self, connection_properties):
+    def _get_volume_path(self, connection_properties: dict[str, Any]) -> str:
         mnt_flags = []
         if connection_properties.get('options'):
             mnt_flags = connection_properties['options'].split()
@@ -81,12 +86,15 @@ class RemoteFsConnector(base.BaseLinuxConnector):
         path = mount_point + '/' + connection_properties['name']
         return path
 
-    def get_volume_paths(self, connection_properties):
+    def get_volume_paths(self,
+                         connection_properties: dict[str, Any]) -> list[str]:
         path = self._get_volume_path(connection_properties)
         return [path]
 
     @utils.trace
-    def connect_volume(self, connection_properties):
+    def connect_volume(
+            self,
+            connection_properties: dict[str, Any]) -> dict[str, Any]:
         """Ensure that the filesystem containing the volume is mounted.
 
         :param connection_properties: The dictionary that describes all
@@ -105,8 +113,11 @@ class RemoteFsConnector(base.BaseLinuxConnector):
         return {'path': path}
 
     @utils.trace
-    def disconnect_volume(self, connection_properties, device_info,
-                          force=False, ignore_errors=False):
+    def disconnect_volume(self,
+                          connection_properties: dict[str, Any],
+                          device_info: dict,
+                          force: bool = False,
+                          ignore_errors: bool = False) -> None:
         """No need to do anything to disconnect a volume in a filesystem.
 
         :param connection_properties: The dictionary that describes all
@@ -116,6 +127,6 @@ class RemoteFsConnector(base.BaseLinuxConnector):
         :type device_info: dict
         """
 
-    def extend_volume(self, connection_properties):
+    def extend_volume(self, connection_properties: dict[str, Any]):
         # TODO(walter-boring): is this possible?
         raise NotImplementedError

@@ -19,7 +19,7 @@
 """
 
 import threading
-from typing import Tuple
+from typing import Callable, Tuple  # noqa: H301
 
 from oslo_concurrency import processutils as putils
 from oslo_context import context as context_utils
@@ -37,11 +37,11 @@ class Executor(object):
         self.set_root_helper(root_helper)
 
     @staticmethod
-    def safe_decode(string):
+    def safe_decode(string) -> str:
         return string and encodeutils.safe_decode(string, errors='ignore')
 
     @classmethod
-    def make_putils_error_safe(cls, exc):
+    def make_putils_error_safe(cls, exc: putils.ProcessExecutionError) -> None:
         """Converts ProcessExecutionError string attributes to unicode."""
         for field in ('stderr', 'stdout', 'cmd', 'description'):
             value = getattr(exc, field, None)
@@ -59,10 +59,10 @@ class Executor(object):
             self.make_putils_error_safe(e)
             raise
 
-    def set_execute(self, execute):
+    def set_execute(self, execute: Callable) -> None:
         self.__execute = execute
 
-    def set_root_helper(self, helper):
+    def set_root_helper(self, helper: str) -> None:
         self._root_helper = helper
 
 
@@ -78,7 +78,7 @@ class Thread(threading.Thread):
         self.__context__ = context_utils.get_current()
         super(Thread, self).__init__(*args, **kwargs)
 
-    def run(self):
+    def run(self) -> None:
         # Store the context in the current thread's request store
         if self.__context__:
             self.__context__.update_store()

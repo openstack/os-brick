@@ -132,7 +132,7 @@ class LinuxSCSI(executor.Executor):
         LOG.debug('dev_info=%s', str(dev_info))
         return dev_info
 
-    def get_sysfs_wwn(self, device_names, mpath=None) -> str:
+    def get_sysfs_wwn(self, device_names: List[str], mpath=None) -> str:
         """Return the wwid from sysfs in any of devices in udev format."""
         # If we have a multipath DM we know that it has found the WWN
         if mpath:
@@ -154,7 +154,7 @@ class LinuxSCSI(executor.Executor):
             return wwid
 
         # If we have multiple designators use symlinks to find out the wwn
-        device_names = set(device_names)
+        device_names_set = set(device_names)
         for wwn_path in wwn_paths:
             try:
                 if os.path.islink(wwn_path) and os.stat(wwn_path):
@@ -170,11 +170,11 @@ class LinuxSCSI(executor.Executor):
                             dm_devs = os.listdir(slaves_path)
                             # This is the right wwn_path if the devices we have
                             # attached belong to the dm we followed
-                            if device_names.intersection(dm_devs):
+                            if device_names_set.intersection(dm_devs):
                                 break
 
                         # This is the right wwn_path if  devices we have
-                        elif name in device_names:
+                        elif name in device_names_set:
                             break
             except OSError:
                 continue
@@ -197,7 +197,7 @@ class LinuxSCSI(executor.Executor):
             return udev_wwid
         return ''
 
-    def get_scsi_wwn(self, path):
+    def get_scsi_wwn(self, path: str) -> str:
         """Read the WWN from page 0x83 value for a SCSI device."""
 
         (out, _err) = self._execute('/lib/udev/scsi_id', '--page', '0x83',
@@ -601,7 +601,9 @@ class LinuxSCSI(executor.Executor):
                         ctx.reraise = False
                         time.sleep(1)
 
-    def extend_volume(self, volume_paths, use_multipath=False):
+    def extend_volume(self,
+                      volume_paths: list,
+                      use_multipath: bool = False) -> Optional[int]:
         """Signal the SCSI subsystem to test for volume resize.
 
         This function tries to signal the local system's kernel

@@ -15,11 +15,12 @@
 
 import errno
 import os
+from typing import List
 
 
 class HostDriver(object):
 
-    def get_all_block_devices(self):
+    def get_all_block_devices(self) -> List[str]:
         """Get the list of all block devices seen in /dev/disk/by-path/."""
         dir = "/dev/disk/by-path/"
         try:

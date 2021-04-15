@@ -12,6 +12,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+from __future__ import annotations
+
 from os_brick.i18n import _
 from os_brick.initiator.connectors import base
 from os_brick import utils
@@ -23,14 +25,14 @@ class LocalConnector(base.BaseLinuxConnector):
     def __init__(self, root_helper, driver=None,
                  *args, **kwargs):
         super(LocalConnector, self).__init__(root_helper, driver=driver,
-                                             *args, **kwargs)
+                                             *args, **kwargs)   # type: ignore
 
     @staticmethod
-    def get_connector_properties(root_helper, *args, **kwargs):
+    def get_connector_properties(root_helper: str, *args, **kwargs) -> dict:
         """The Local connector properties."""
         return {}
 
-    def get_volume_paths(self, connection_properties):
+    def get_volume_paths(self, connection_properties: dict) -> list[str]:
         path = connection_properties['device_path']
         return [path]
 
@@ -42,7 +44,7 @@ class LocalConnector(base.BaseLinuxConnector):
         return []
 
     @utils.trace
-    def connect_volume(self, connection_properties):
+    def connect_volume(self, connection_properties: dict) -> dict:
         """Connect to a volume.
 
         :param connection_properties: The dictionary that describes all of the

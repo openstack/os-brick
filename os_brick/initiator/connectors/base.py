@@ -16,6 +16,8 @@
 import functools
 import glob
 import os
+import typing
+from typing import Optional, Tuple  # noqa: H301
 
 from oslo_concurrency import lockutils
 from oslo_concurrency import processutils as putils
@@ -136,7 +138,9 @@ class BaseLinuxConnector(initiator_connector.InitiatorConnector):
             return False
         return True
 
-    def get_all_available_volumes(self, connection_properties=None):
+    def get_all_available_volumes(
+            self,
+            connection_properties: Optional[dict] = None) -> list:
         volumes = []
         path = self.get_search_path()
         if path:
@@ -151,7 +155,7 @@ class BaseLinuxConnector(initiator_connector.InitiatorConnector):
     def _discover_mpath_device(self,
                                device_wwn: str,
                                connection_properties: dict,
-                               device_name: str) -> tuple:
+                               device_name: str) -> Tuple[str, str]:
         """This method discovers a multipath device.
 
         Discover a multipath device based on a defined connection_property
@@ -189,4 +193,7 @@ class BaseLinuxConnector(initiator_connector.InitiatorConnector):
             except exception.BlockDeviceReadOnly:
                 LOG.warning('Block device %s is still read-only. '
                             'Continuing anyway.', device_path)
+
+        device_path = typing.cast(str, device_path)
+        multipath_id = typing.cast(str, multipath_id)
         return device_path, multipath_id

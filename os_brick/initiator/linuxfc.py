@@ -14,8 +14,11 @@
 
 """Generic linux Fibre Channel utilities."""
 
+from __future__ import annotations
+
 import glob
 import os
+from typing import Dict, Iterable, List  # noqa: H301
 
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
@@ -81,7 +84,9 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
                 luns_not_found.add(lun)
         return ctls, luns_not_found
 
-    def rescan_hosts(self, hbas, connection_properties):
+    def rescan_hosts(self,
+                     hbas: Iterable,
+                     connection_properties: dict) -> None:
         LOG.debug('Rescaning HBAs %(hbas)s with connection properties '
                   '%(conn_props)s', {'hbas': hbas,
                                      'conn_props': connection_properties})
@@ -145,7 +150,7 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
                                            'l': target_lun})
 
     @classmethod
-    def get_fc_hbas(cls):
+    def get_fc_hbas(cls) -> list[dict[str, str]]:
         """Get the Fibre Channel HBA information from sysfs."""
         hbas = []
         for hostpath in glob.glob(f'{cls.FC_HOST_SYSFS_PATH}/*'):
@@ -161,7 +166,7 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
                             {'hp': hostpath, 'exc': exc})
         return hbas
 
-    def get_fc_hbas_info(self):
+    def get_fc_hbas_info(self) -> List[Dict[str, str]]:
         """Get Fibre Channel WWNs and device paths from the system, if any."""
         hbas = self.get_fc_hbas()
 
@@ -177,7 +182,7 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
                               'device_path': device_path})
         return hbas_info
 
-    def get_fc_wwpns(self):
+    def get_fc_wwpns(self) -> List[str]:
         """Get Fibre Channel WWPNs from the system, if any."""
         hbas = self.get_fc_hbas()
 
@@ -189,7 +194,7 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
 
         return wwpns
 
-    def get_fc_wwnns(self):
+    def get_fc_wwnns(self) -> List[str]:
         """Get Fibre Channel WWNNs from the system, if any."""
         hbas = self.get_fc_hbas()
 

@@ -12,6 +12,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+from __future__ import annotations
 
 from collections import defaultdict
 import copy
@@ -19,7 +20,7 @@ import glob
 import os
 import re
 import time
-from typing import List, Tuple  # noqa: H301
+from typing import Any, Iterable, Optional, Union  # noqa: H301
 
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
@@ -49,7 +50,8 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
             self, root_helper: str, driver=None,
             execute=None, use_multipath: bool = False,
             device_scan_attempts: int = initiator.DEVICE_SCAN_ATTEMPTS_DEFAULT,
-            transport='default', *args, **kwargs):
+            transport: str = 'default',
+            *args, **kwargs):
         super(ISCSIConnector, self).__init__(
             root_helper, driver=driver,
             execute=execute,
@@ -105,7 +107,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
 
         return volume_paths
 
-    def _get_iscsi_sessions_full(self) -> List[tuple]:
+    def _get_iscsi_sessions_full(self) -> list[tuple[str, str, str, str, str]]:
         """Get iSCSI session information as a list of tuples.
 
         Uses iscsiadm -m session and from a command output like
@@ -123,7 +125,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
 
         # Parse and clean the output from iscsiadm, which is in the form of:
         # transport_name: [session_id] ip_address:port,tpgt iqn node_type
-        lines: List[tuple] = []
+        lines: list[tuple[str, str, str, str, str]] = []
         for line in out.splitlines():
             if line:
                 info = line.split()
@@ -132,7 +134,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                 lines.append((info[0], sid, portal, tpgt, info[3]))
         return lines
 
-    def _get_iscsi_nodes(self) -> List[tuple]:
+    def _get_iscsi_nodes(self) -> list[tuple]:
         """Get iSCSI node information (portal, iqn) as a list of tuples.
 
         Uses iscsiadm -m node and from a command output like
@@ -151,7 +153,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
 
         # Parse and clean the output from iscsiadm which is in the form of:
         # ip_address:port,tpgt iqn
-        lines: List[tuple] = []
+        lines: list[tuple] = []
         for line in out.splitlines():
             if line:
                 info = line.split()
@@ -166,10 +168,11 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         # entry: [tcp, [1], 192.168.121.250:3260,1 ...]
         return [entry[2] for entry in self._get_iscsi_sessions_full()]
 
-    def _get_ips_iqns_luns(self,
-                           connection_properties: dict,
-                           discover: bool = True,
-                           is_disconnect_call: bool = False):
+    def _get_ips_iqns_luns(
+            self,
+            connection_properties: dict,
+            discover: bool = True,
+            is_disconnect_call: bool = False) -> list[tuple[Any, Any, Any]]:
         """Build a list of ips, iqns, and luns.
 
         Used when doing singlepath and multipath, and we have 4 cases:
@@ -238,7 +241,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         return ips_iqns_luns
 
     def _get_potential_volume_paths(self,
-                                    connection_properties: dict) -> List[str]:
+                                    connection_properties: dict) -> list[str]:
         """Build a list of potential volume paths that exist.
 
         Given a list of target_portals in the connection_properties,
@@ -265,19 +268,19 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
             LOG.info("Multipath discovery for iSCSI not enabled.")
             iscsi_sessions = self._get_iscsi_sessions()
 
-            host_devices = set()
+            host_devices_set: set = set()
             for props in self._iterate_all_targets(connection_properties):
                 # If we aren't trying to connect to the portal, we
                 # want to find ALL possible paths from all of the
                 # alternate portals
                 if props['target_portal'] in iscsi_sessions:
                     paths = self._get_device_path(props)
-                    host_devices.update(paths)
-            host_devices = list(host_devices)
+                    host_devices_set.update(paths)
+            host_devices = list(host_devices_set)
 
         return host_devices
 
-    def set_execute(self, execute):
+    def set_execute(self, execute) -> None:
         super(ISCSIConnector, self).set_execute(execute)
         self._linuxscsi.set_execute(execute)
 
@@ -324,7 +327,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         return self.transport
 
     def _get_discoverydb_portals(self,
-                                 connection_properties: dict) -> List[tuple]:
+                                 connection_properties: dict) -> list[tuple]:
         """Retrieve iscsi portals information from the discoverydb.
 
         Example of discoverydb command output:
@@ -452,8 +455,10 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         luns = self._get_luns(connection_properties, iqns)
         return list(zip(ips, iqns, luns))
 
-    def _run_iscsiadm_update_discoverydb(self, connection_properties,
-                                         iscsi_transport='default'):
+    def _run_iscsiadm_update_discoverydb(
+            self,
+            connection_properties: dict,
+            iscsi_transport: str = 'default') -> tuple[str, str]:
         return self._execute(
             'iscsiadm',
             '-m', 'discoverydb',
@@ -473,7 +478,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
     @utils.trace
     @base.synchronized('extend_volume', external=True)
     @utils.connect_volume_undo_prepare_result
-    def extend_volume(self, connection_properties: dict):
+    def extend_volume(self, connection_properties: dict) -> Optional[int]:
         """Update the local kernel's size information.
 
         Try and update the local kernel's size information
@@ -497,7 +502,9 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
     @utils.trace
     @utils.connect_volume_prepare_result
     @base.synchronized('connect_volume', external=True)
-    def connect_volume(self, connection_properties: dict):
+    def connect_volume(
+            self,
+            connection_properties: dict) -> Optional[dict[str, str]]:
         """Attach the volume to instance_name.
 
         :param connection_properties: The valid dictionary that describes all
@@ -522,7 +529,13 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
             with excutils.save_and_reraise_exception():
                 self._cleanup_connection(connection_properties, force=True)
 
-    def _get_connect_result(self, con_props, wwn, devices_names, mpath=None):
+        return None
+
+    def _get_connect_result(self,
+                            con_props: dict,
+                            wwn: str,
+                            devices_names: list[str],
+                            mpath: Optional[str] = None) -> dict[str, str]:
         device = '/dev/' + (mpath or devices_names[0])
         result = {'type': 'block', 'scsi_wwn': wwn, 'path': device}
         if mpath:
@@ -530,11 +543,14 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         return result
 
     @utils.retry((exception.VolumeDeviceNotFound))
-    def _connect_single_volume(self, connection_properties):
+    def _connect_single_volume(
+            self,
+            connection_properties: dict) -> Optional[dict[str, str]]:
         """Connect to a volume using a single path."""
-        data = {'stop_connecting': False, 'num_logins': 0, 'failed_logins': 0,
-                'stopped_threads': 0, 'found_devices': [],
-                'just_added_devices': []}
+        data: dict[str, Any] = {'stop_connecting': False,
+                                'num_logins': 0, 'failed_logins': 0,
+                                'stopped_threads': 0, 'found_devices': [],
+                                'just_added_devices': []}
 
         for props in self._iterate_all_targets(connection_properties):
             self._connect_vol(self.device_scan_attempts, props, data)
@@ -547,14 +563,14 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                     time.sleep(1)
                 else:
                     LOG.debug('Could not find the WWN for %s.',
-                              found_devs[0])  # type: ignore
+                              found_devs[0])
                 return self._get_connect_result(connection_properties,
                                                 wwn, found_devs)
 
             # If we failed we must cleanup the connection, as we could be
             # leaving the node entry if it's not being used by another device.
-            ips_iqns_luns = ((props['target_portal'], props['target_iqn'],
-                              props['target_lun']), )
+            ips_iqns_luns = [(props['target_portal'], props['target_iqn'],
+                              props['target_lun']), ]
             self._cleanup_connection(props, ips_iqns_luns, force=True,
                                      ignore_errors=True)
             # Reset connection result values for next try
@@ -562,7 +578,8 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
 
         raise exception.VolumeDeviceNotFound(device='')
 
-    def _connect_vol(self, rescans, props, data):
+    def _connect_vol(self,
+                     rescans: int, props: dict, data: dict[str, Any]) -> None:
         """Make a connection to a volume, send scans and wait for the device.
 
         This method is specifically designed to support multithreading and
@@ -657,7 +674,9 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         data['stopped_threads'] += 1
 
     @utils.retry((exception.VolumeDeviceNotFound))
-    def _connect_multipath_volume(self, connection_properties):
+    def _connect_multipath_volume(
+            self,
+            connection_properties: dict) -> Optional[dict[str, str]]:
         """Connect to a multipathed volume launching parallel login requests.
 
         We will be doing parallel login requests, which will considerably speed
@@ -673,7 +692,8 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         it's already known by multipathd it would have been discarded if it
         was the first time this volume was seen here.
         """
-        wwn = mpath = None
+        wwn: Optional[str] = None
+        mpath = None
         wwn_added = False
         last_try_on = 0.0
         found: list = []
@@ -758,11 +778,16 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                         'bad and will perform poorly.')
         elif not wwn:
             wwn = self._linuxscsi.get_sysfs_wwn(found, mpath)
+
+        assert wwn is not None
         return self._get_connect_result(connection_properties, wwn, found,
                                         mpath)
 
-    def _get_connection_devices(self, connection_properties,
-                                ips_iqns_luns=None, is_disconnect_call=False):
+    def _get_connection_devices(
+            self,
+            connection_properties: dict,
+            ips_iqns_luns: Optional[list[tuple[str, str, str]]] = None,
+            is_disconnect_call: bool = False) -> dict[set, set]:
         """Get map of devices by sessions from our connection.
 
         For each of the TCP sessions that correspond to our connection
@@ -830,8 +855,11 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
     @utils.trace
     @base.synchronized('connect_volume', external=True)
     @utils.connect_volume_undo_prepare_result(unlink_after=True)
-    def disconnect_volume(self, connection_properties, device_info,
-                          force=False, ignore_errors=False):
+    def disconnect_volume(self,
+                          connection_properties: dict,
+                          device_info: dict,
+                          force: bool = False,
+                          ignore_errors: bool = False) -> None:
         """Detach the volume from instance_name.
 
         :param connection_properties: The dictionary that describes all
@@ -854,9 +882,14 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                                         device_info=device_info,
                                         is_disconnect_call=True)
 
-    def _cleanup_connection(self, connection_properties, ips_iqns_luns=None,
-                            force=False, ignore_errors=False,
-                            device_info=None, is_disconnect_call=False):
+    def _cleanup_connection(
+            self,
+            connection_properties: dict,
+            ips_iqns_luns: Optional[list[tuple[Any, Any, Any]]] = None,
+            force: bool = False,
+            ignore_errors: bool = False,
+            device_info: Optional[dict] = None,
+            is_disconnect_call: bool = False) -> None:
         """Cleans up connection flushing and removing devices and multipath.
 
         :param connection_properties: The dictionary that describes all
@@ -924,7 +957,9 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
             if not ignore_errors:
                 raise exc  # type: ignore
 
-    def _munge_portal(self, target):
+    def _munge_portal(
+            self,
+            target: tuple[str, str, Union[list, str]]) -> tuple[str, str, str]:
         """Remove brackets from portal.
 
         In case IPv6 address was used the udev path should not contain any
@@ -934,7 +969,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         return (portal.replace('[', '').replace(']', ''), iqn,
                 self._linuxscsi.process_lun_id(lun))
 
-    def _get_device_path(self, connection_properties):
+    def _get_device_path(self, connection_properties: dict) -> list:
         if self._get_transport() == "default":
             return ["/dev/disk/by-path/ip-%s-iscsi-%s-lun-%s" %
                     self._munge_portal(x) for x in
@@ -952,7 +987,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                     device_list.extend(look_for_device)
             return device_list
 
-    def get_initiator(self):
+    def get_initiator(self) -> Optional[str]:
         """Secure helper to read file as root."""
         file_path = '/etc/iscsi/initiatorname.iscsi'
         try:
@@ -967,7 +1002,12 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                         file_path)
             return None
 
-    def _run_iscsiadm(self, connection_properties, iscsi_command, **kwargs):
+        return None
+
+    def _run_iscsiadm(self,
+                      connection_properties: dict,
+                      iscsi_command: tuple[str, ...],
+                      **kwargs) -> tuple[str, str]:
         check_exit_code = kwargs.pop('check_exit_code', 0)
         attempts = kwargs.pop('attempts', 1)
         delay_on_retry = kwargs.pop('delay_on_retry', True)
@@ -987,14 +1027,15 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
 
         return (out, err)
 
-    def _iscsiadm_update(self, connection_properties, property_key,
-                         property_value, **kwargs):
+    def _iscsiadm_update(self, connection_properties: dict, property_key: str,
+                         property_value, **kwargs) -> tuple[str, str]:
         iscsi_command = ('--op', 'update', '-n', property_key,
                          '-v', property_value)
         return self._run_iscsiadm(connection_properties, iscsi_command,
                                   **kwargs)
 
-    def _get_target_portals_from_iscsiadm_output(self, output):
+    def _get_target_portals_from_iscsiadm_output(
+            self, output: str) -> tuple[list[str], list[str]]:
         # return both portals and iqns as 2 lists
         #
         # as we are parsing a command line utility, allow for the
@@ -1008,7 +1049,10 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                 iqns.append(data[1])
         return ips, iqns
 
-    def _connect_to_iscsi_portal(self, connection_properties):
+    def _connect_to_iscsi_portal(
+            self,
+            connection_properties: dict) -> tuple[Optional[str],
+                                                  Optional[bool]]:
         """Safely connect to iSCSI portal-target and return the session id."""
         portal = connection_properties['target_portal'].split(",")[0]
         target_iqn = connection_properties['target_iqn']
@@ -1019,7 +1063,10 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         return method(connection_properties)
 
     @utils.retry((exception.BrickException))
-    def _connect_to_iscsi_portal_unsafe(self, connection_properties):
+    def _connect_to_iscsi_portal_unsafe(
+            self,
+            connection_properties: dict) -> tuple[Optional[str],
+                                                  Optional[bool]]:
         """Connect to an iSCSI portal-target an return the session id."""
         portal = connection_properties['target_portal'].split(",")[0]
         target_iqn = connection_properties['target_iqn']
@@ -1077,24 +1124,25 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                 # Found our session, return session_id
                 if (s[0] in self.VALID_SESSIONS_PREFIX and
                         portal.lower() == s[2].lower() and s[4] == target_iqn):
-                    return s[1], manual_scan
+                    return str(s[1]), manual_scan
 
             try:
                 # exit_code=15 means the session already exists, so it should
                 # be regarded as successful login.
                 self._run_iscsiadm(connection_properties, ("--login",),
                                    check_exit_code=(0, 15, 255))
-            except putils.ProcessExecutionError as err:
+            except putils.ProcessExecutionError as p_err:
                 LOG.warning('Failed to login iSCSI target %(iqn)s on portal '
                             '%(portal)s (exit code %(err)s).',
                             {'iqn': target_iqn, 'portal': portal,
-                             'err': err.exit_code})
+                             'err': p_err.exit_code})
                 return None, None
             self._iscsiadm_update(connection_properties,
                                   "node.startup",
                                   "automatic")
 
-    def _disconnect_from_iscsi_portal(self, connection_properties):
+    def _disconnect_from_iscsi_portal(self,
+                                      connection_properties: dict) -> None:
         self._iscsiadm_update(connection_properties, "node.startup", "manual",
                               check_exit_code=[0, 21, 255])
         self._run_iscsiadm(connection_properties, ("--logout",),
@@ -1104,8 +1152,11 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                            attempts=5,
                            delay_on_retry=True)
 
-    def _disconnect_connection(self, connection_properties, connections, force,
-                               exc):
+    def _disconnect_connection(self,
+                               connection_properties: dict,
+                               connections: Iterable,
+                               force: bool,
+                               exc) -> None:
         LOG.debug('Disconnecting from: %s', connections)
         props = connection_properties.copy()
         for ip, iqn in connections:
@@ -1114,14 +1165,14 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
             with exc.context(force, 'Disconnect from %s %s failed', ip, iqn):
                 self._disconnect_from_iscsi_portal(props)
 
-    def _run_iscsi_session(self):
+    def _run_iscsi_session(self) -> tuple[str, str]:
         (out, err) = self._run_iscsiadm_bare(('-m', 'session'),
                                              check_exit_code=[0, 21, 255])
         LOG.debug("iscsi session list stdout=%(out)s stderr=%(err)s",
                   {'out': out, 'err': err})
         return (out, err)
 
-    def _run_iscsiadm_bare(self, iscsi_command, **kwargs) -> Tuple[str, str]:
+    def _run_iscsiadm_bare(self, iscsi_command, **kwargs) -> tuple[str, str]:
         check_exit_code = kwargs.pop('check_exit_code', 0)
         (out, err) = self._execute('iscsiadm',
                                    *iscsi_command,

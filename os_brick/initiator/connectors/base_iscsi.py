@@ -12,14 +12,19 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+from __future__ import annotations
 
 import copy
+from typing import Any, Dict, Generator  # noqa: H301
 
 from os_brick.initiator import initiator_connector
 
 
 class BaseISCSIConnector(initiator_connector.InitiatorConnector):
-    def _iterate_all_targets(self, connection_properties):
+    def _iterate_all_targets(
+            self,
+            connection_properties: dict) -> Generator[Dict[str, Any],
+                                                      None, None]:
         for portal, iqn, lun in self._get_all_targets(connection_properties):
             props = copy.deepcopy(connection_properties)
             props['target_portal'] = portal
@@ -30,12 +35,14 @@ class BaseISCSIConnector(initiator_connector.InitiatorConnector):
             yield props
 
     @staticmethod
-    def _get_luns(con_props, iqns=None):
+    def _get_luns(con_props: dict, iqns=None) -> list:
         luns = con_props.get('target_luns')
         num_luns = len(con_props['target_iqns']) if iqns is None else len(iqns)
         return luns or [con_props['target_lun']] * num_luns
 
-    def _get_all_targets(self, connection_properties):
+    def _get_all_targets(
+            self,
+            connection_properties: dict) -> list[tuple[str, str, list]]:
         if all(key in connection_properties for key in ('target_portals',
                                                         'target_iqns')):
             return list(zip(connection_properties['target_portals'],

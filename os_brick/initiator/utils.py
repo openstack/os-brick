@@ -13,14 +13,16 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+
 import contextlib
 import os
+from typing import Generator
 
 from oslo_concurrency import lockutils
 from oslo_concurrency import processutils as putils
 
 
-def check_manual_scan():
+def check_manual_scan() -> bool:
     if os.name == 'nt':
         return False
 
@@ -35,7 +37,7 @@ ISCSI_SUPPORTS_MANUAL_SCAN = check_manual_scan()
 
 
 @contextlib.contextmanager
-def guard_connection(device):
+def guard_connection(device: dict) -> Generator:
     """Context Manager handling locks for attach/detach operations.
 
     In Cinder microversion 3.69 the shared_targets field for volumes are

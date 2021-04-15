@@ -1172,7 +1172,7 @@ Setting up iSCSI targets: unused
         cleanup_mock.assert_called_once_with(
             {'target_lun': 4, 'volume_id': 'vol_id',
              'target_portal': 'ip1:port1', 'target_iqn': 'tgt1'},
-            (('ip1:port1', 'tgt1', 4),),
+            [('ip1:port1', 'tgt1', 4), ],
             force=True, ignore_errors=True)
 
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_sysfs_wwn', return_value='')
@@ -1223,7 +1223,7 @@ Setting up iSCSI targets: unused
         calls_per_try = [
             mock.call({'target_portal': prop[0], 'target_iqn': prop[1],
                        'target_lun': prop[2], 'volume_id': 'vol_id'},
-                      (prop,), force=True, ignore_errors=True)
+                      [prop, ], force=True, ignore_errors=True)
             for prop in props
         ]
         cleanup_mock.assert_has_calls(calls_per_try * 3)

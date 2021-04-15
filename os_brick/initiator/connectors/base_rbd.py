@@ -13,6 +13,10 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+from __future__ import annotations
+
+from typing import Any
+
 from oslo_log import log as logging
 from oslo_utils import netutils
 
@@ -23,20 +27,22 @@ class RBDConnectorMixin(object):
     """Mixin covering cross platform RBD connector functionality"""
 
     @staticmethod
-    def _sanitize_mon_hosts(hosts):
-        def _sanitize_host(host):
+    def _sanitize_mon_hosts(hosts: list[str]) -> list[str]:
+        def _sanitize_host(host: str) -> str:
             if netutils.is_valid_ipv6(host):
                 host = '[%s]' % host
             return host
         return list(map(_sanitize_host, hosts))
 
     @classmethod
-    def _get_rbd_args(cls, connection_properties, conf=None):
+    def _get_rbd_args(cls,
+                      connection_properties: dict[str, Any],
+                      conf: str = None) -> list[str]:
         user = connection_properties.get('auth_username')
         monitor_ips = connection_properties.get('hosts')
         monitor_ports = connection_properties.get('ports')
 
-        args = []
+        args: list[str] = []
         if user:
             args = ['--id', user]
         if monitor_ips and monitor_ports:

@@ -12,7 +12,11 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+from __future__ import annotations
+
 import os
+import typing
+from typing import Any, Optional  # noqa: H301
 
 from oslo_log import log as logging
 from oslo_service import loopingcall
@@ -30,25 +34,33 @@ LOG = logging.getLogger(__name__)
 class FibreChannelConnector(base.BaseLinuxConnector):
     """Connector class to attach/detach Fibre Channel volumes."""
 
-    def __init__(self, root_helper, driver=None,
-                 execute=None, use_multipath=False,
-                 device_scan_attempts=initiator.DEVICE_SCAN_ATTEMPTS_DEFAULT,
-                 *args, **kwargs):
+    def __init__(
+            self,
+            root_helper: str,
+            driver=None,
+            execute: Optional[str] = None,
+            use_multipath: bool = False,
+            device_scan_attempts: int = initiator.DEVICE_SCAN_ATTEMPTS_DEFAULT,
+            *args, **kwargs):
         self._linuxfc = linuxfc.LinuxFibreChannel(root_helper, execute)
         super(FibreChannelConnector, self).__init__(
             root_helper, driver=driver,
             execute=execute,
             device_scan_attempts=device_scan_attempts,
-            *args, **kwargs)
+            *args, **kwargs)  # type: ignore
         self.use_multipath = use_multipath
+        self.device_name: Optional[str]
+        self.host_device: Optional[str]
+        self.tries: int
 
-    def set_execute(self, execute):
+    def set_execute(self, execute) -> None:
         super(FibreChannelConnector, self).set_execute(execute)
         self._linuxscsi.set_execute(execute)
         self._linuxfc.set_execute(execute)
 
     @staticmethod
-    def get_connector_properties(root_helper, *args, **kwargs):
+    def get_connector_properties(
+            root_helper: str, *args, **kwargs) -> dict[str, Any]:
         """The Fibre Channel connector properties."""
         props = {}
         fc = linuxfc.LinuxFibreChannel(root_helper,
@@ -63,11 +75,12 @@ class FibreChannelConnector(base.BaseLinuxConnector):
 
         return props
 
-    def get_search_path(self):
+    def get_search_path(self) -> str:
         """Where do we look for FC based volumes."""
         return '/dev/disk/by-path'
 
-    def _add_targets_to_connection_properties(self, connection_properties):
+    def _add_targets_to_connection_properties(
+            self, connection_properties: dict) -> dict:
         LOG.debug('Adding targets to connection properties receives: %s',
                   connection_properties)
         target_wwn = connection_properties.get('target_wwn')
@@ -144,13 +157,15 @@ class FibreChannelConnector(base.BaseLinuxConnector):
                   connection_properties)
         return connection_properties
 
-    def _get_possible_volume_paths(self, connection_properties, hbas):
+    def _get_possible_volume_paths(
+            self,
+            connection_properties: dict, hbas) -> list[str]:
         targets = connection_properties['targets']
         possible_devs = self._get_possible_devices(hbas, targets)
         host_paths = self._get_host_devices(possible_devs)
         return host_paths
 
-    def get_volume_paths(self, connection_properties):
+    def get_volume_paths(self, connection_properties: dict) -> list:
         volume_paths = []
         # first fetch all of the potential paths that might exist
         # how the FC fabric is zoned may alter the actual list
@@ -167,7 +182,7 @@ class FibreChannelConnector(base.BaseLinuxConnector):
     @utils.trace
     @base.synchronized('extend_volume', external=True)
     @utils.connect_volume_undo_prepare_result
-    def extend_volume(self, connection_properties):
+    def extend_volume(self, connection_properties: dict) -> Optional[int]:
         """Update the local kernel's size information.
 
         Try and update the local kernel's size information
@@ -189,7 +204,7 @@ class FibreChannelConnector(base.BaseLinuxConnector):
     @utils.trace
     @utils.connect_volume_prepare_result
     @base.synchronized('connect_volume', external=True)
-    def connect_volume(self, connection_properties):
+    def connect_volume(self, connection_properties: dict) -> dict:
         """Attach the volume to instance_name.
 
         :param connection_properties: The dictionary that describes all
@@ -217,7 +232,7 @@ class FibreChannelConnector(base.BaseLinuxConnector):
         # The /dev/disk/by-path/... node is not always present immediately
         # We only need to find the first device.  Once we see the first device
         # multipath will have any others.
-        def _wait_for_device_discovery(host_devices):
+        def _wait_for_device_discovery(host_devices: list[str]) -> None:
             for device in host_devices:
                 LOG.debug("Looking for Fibre Channel dev %(device)s",
                           {'device': device})
@@ -246,6 +261,8 @@ class FibreChannelConnector(base.BaseLinuxConnector):
             _wait_for_device_discovery, host_devices)
         timer.start(interval=2).wait()
 
+        self.host_device = typing.cast(str, self.host_device)
+
         LOG.debug("Found Fibre Channel volume %(name)s "
                   "(after %(tries)s rescans.)",
                   {'name': self.device_name, 'tries': self.tries})
@@ -261,6 +278,7 @@ class FibreChannelConnector(base.BaseLinuxConnector):
             # Pass a symlink, not a real path, otherwise we'll get a real path
             # back if we don't find a multipath and we'll return that to the
             # caller, breaking Nova's encryption which requires a symlink.
+            assert self.host_device is not None
             (device_path, multipath_id) = self._discover_mpath_device(
                 device_wwn, connection_properties, self.host_device)
             if multipath_id:
@@ -270,10 +288,12 @@ class FibreChannelConnector(base.BaseLinuxConnector):
         else:
             device_path = self.host_device
 
+        device_path = typing.cast(str, device_path)
+
         device_info['path'] = device_path
         return device_info
 
-    def _get_host_devices(self, possible_devs):
+    def _get_host_devices(self, possible_devs: list) -> list:
         """Compute the device paths on the system with an id, wwn, and lun
 
         :param possible_devs: list of (platform, pci_id, wwn, lun) tuples
@@ -289,7 +309,7 @@ class FibreChannelConnector(base.BaseLinuxConnector):
             host_devices.append(host_device)
         return host_devices
 
-    def _get_possible_devices(self, hbas, targets):
+    def _get_possible_devices(self, hbas: list, targets: list) -> list:
         """Compute the possible fibre channel device options.
 
         :param hbas: available hba devices.
@@ -315,8 +335,11 @@ class FibreChannelConnector(base.BaseLinuxConnector):
     @utils.trace
     @base.synchronized('connect_volume', external=True)
     @utils.connect_volume_undo_prepare_result(unlink_after=True)
-    def disconnect_volume(self, connection_properties, device_info,
-                          force=False, ignore_errors=False):
+    def disconnect_volume(self,
+                          connection_properties: dict,
+                          device_info: dict,
+                          force: bool = False,
+                          ignore_errors: bool = False) -> None:
         """Detach the volume from instance_name.
 
         :param connection_properties: The dictionary that describes all
@@ -346,13 +369,17 @@ class FibreChannelConnector(base.BaseLinuxConnector):
                 mpath_path = self._linuxscsi.find_multipath_device_path(wwn)
                 if mpath_path:
                     self._linuxscsi.flush_multipath_device(mpath_path)
+            real_path = typing.cast(str, real_path)
             dev_info = self._linuxscsi.get_device_info(real_path)
             devices.append(dev_info)
 
         LOG.debug("devices to remove = %s", devices)
         self._remove_devices(connection_properties, devices, device_info)
 
-    def _remove_devices(self, connection_properties, devices, device_info):
+    def _remove_devices(self,
+                        connection_properties: dict,
+                        devices: list,
+                        device_info: dict) -> None:
         # There may have been more than 1 device mounted
         # by the kernel for this volume.  We have to remove
         # all of them
@@ -373,7 +400,7 @@ class FibreChannelConnector(base.BaseLinuxConnector):
                                                    was_multipath)
             self._linuxscsi.remove_scsi_device(device_path, flush=flush)
 
-    def _get_pci_num(self, hba):
+    def _get_pci_num(self, hba: Optional[dict]) -> tuple:
         # NOTE(walter-boring)
         # device path is in format of (FC and FCoE) :
         # /sys/devices/pci0000:00/0000:00:03.0/0000:05:00.3/host2/fc_host/host2
