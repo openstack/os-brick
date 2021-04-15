@@ -19,6 +19,7 @@ os_brick/initiator/host_driver.py
 os_brick/initiator/linuxfc.py
 os_brick/initiator/linuxrbd.py
 os_brick/initiator/utils.py
+os_brick/local_dev/lvm.py
 os_brick/privileged/nvmeof.py
 os_brick/privileged/rbd.py
 os_brick/remotefs/remotefs.py
