@@ -16,6 +16,7 @@ import functools
 import inspect
 import logging as py_logging
 import time
+from typing import Callable, Tuple, Type, Union   # noqa: H301
 
 from oslo_concurrency import processutils
 from oslo_log import log as logging
@@ -26,7 +27,7 @@ from os_brick.i18n import _
 _time_sleep = time.sleep
 
 
-def _sleep(duration):
+def _sleep(secs: float) -> None:
     """Helper class to make it easier to work around tenacity's sleep calls.
 
     Apparently we are all idiots for wanting to test our code here [0], so this
@@ -34,7 +35,7 @@ def _sleep(duration):
 
     [0] https://github.com/jd/tenacity/issues/25
     """
-    _time_sleep(duration)
+    _time_sleep(secs)
 
 
 time.sleep = _sleep
@@ -47,17 +48,25 @@ LOG = logging.getLogger(__name__)
 
 class retry_if_exit_code(tenacity.retry_if_exception):
     """Retry on ProcessExecutionError specific exit codes."""
-    def __init__(self, codes):
+    def __init__(self, codes: Union[int, Tuple[int, ...]]):
         self.codes = (codes,) if isinstance(codes, int) else codes
         super(retry_if_exit_code, self).__init__(self._check_exit_code)
 
-    def _check_exit_code(self, exc):
-        return (exc and isinstance(exc, processutils.ProcessExecutionError) and
+    def _check_exit_code(self, exc: Type[Exception]) -> bool:
+        return (bool(exc) and
+                isinstance(exc, processutils.ProcessExecutionError) and
                 exc.exit_code in self.codes)
 
 
-def retry(retry_param, interval=1, retries=3, backoff_rate=2,
-          retry=tenacity.retry_if_exception_type):
+def retry(retry_param: Union[None,
+                             Type[Exception],
+                             Tuple[Type[Exception], ...],
+                             int,
+                             Tuple[int, ...]],
+          interval: float = 1,
+          retries: int = 3,
+          backoff_rate: float = 2,
+          retry: Callable = tenacity.retry_if_exception_type) -> Callable:
 
     if retries < 1:
         raise ValueError(_('Retries must be greater than or '
@@ -82,7 +91,7 @@ def retry(retry_param, interval=1, retries=3, backoff_rate=2,
     return _decorator
 
 
-def platform_matches(current_platform, connector_platform):
+def platform_matches(current_platform: str, connector_platform: str) -> bool:
     curr_p = current_platform.upper()
     conn_p = connector_platform.upper()
     if conn_p == 'ALL':
@@ -95,7 +104,7 @@ def platform_matches(current_platform, connector_platform):
     return False
 
 
-def os_matches(current_os, connector_os):
+def os_matches(current_os: str, connector_os: str) -> bool:
     curr_os = current_os.upper()
     conn_os = connector_os.upper()
     if conn_os == 'ALL':
@@ -109,7 +118,7 @@ def os_matches(current_os, connector_os):
     return False
 
 
-def merge_dict(dict1, dict2):
+def merge_dict(dict1: dict, dict2: dict) -> dict:
     """Try to safely merge 2 dictionaries."""
     if type(dict1) is not dict:
         raise Exception("dict1 is not a dictionary")
@@ -121,7 +130,7 @@ def merge_dict(dict1, dict2):
     return dict3
 
 
-def trace(f):
+def trace(f: Callable) -> Callable:
     """Trace calls to the decorated function.
 
     This decorator should always be defined as the outermost decorator so it
@@ -189,7 +198,7 @@ def trace(f):
     return trace_logging_wrapper
 
 
-def convert_str(text):
+def convert_str(text: Union[bytes, str]) -> str:
     """Convert to native string.
 
     Convert bytes and Unicode strings to native strings:
