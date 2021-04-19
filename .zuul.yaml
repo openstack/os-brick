@@ -21,6 +21,7 @@
     experimental:
       jobs:
         - openstack-tox-pylint
+        - os-brick-mypy
 
 - job:
     name: os-brick-code-coverage
@@ -62,3 +63,9 @@
     parent: devstack-plugin-nfs-tempest-full
     required-projects:
       - opendev.org/openstack/os-brick
+
+- job:
+    name: os-brick-mypy
+    parent: openstack-tox
+    vars:
+      tox_envlist: mypy
