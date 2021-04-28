@@ -261,7 +261,7 @@ class VmdkConnector(initiator_connector.InitiatorConnector):
         with open(tmp_file_path, "rb") as tmp_file:
             dc_name = session.invoke_api(
                 vim_util, 'get_object_property', session.vim, dc_ref, 'name')
-            cookies = session.vim.client.options.transport.cookiejar
+            cookies = session.vim.client.cookiejar
             cacerts = self._ca_file if self._ca_file else not self._insecure
             self._upload_vmdk(
                 tmp_file, self._ip, self._port, dc_name, dstore.name, cookies,
