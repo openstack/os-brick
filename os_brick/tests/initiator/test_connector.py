@@ -106,20 +106,28 @@ class ConnectorUtilsTestCase(test_base.TestCase):
     def test_brick_get_connector_properties(self):
         self._test_brick_get_connector_properties(False, False, False)
 
+    @mock.patch.object(priv_rootwrap, 'custom_execute',
+                       side_effect=OSError(2))
     @mock.patch.object(priv_rootwrap, 'execute', return_value=('', ''))
-    def test_brick_get_connector_properties_multipath(self, mock_execute):
+    def test_brick_get_connector_properties_multipath(self, mock_execute,
+                                                      mock_custom_execute):
         self._test_brick_get_connector_properties(True, True, True)
         mock_execute.assert_called_once_with('multipathd', 'show', 'status',
                                              run_as_root=True,
                                              root_helper='sudo')
+        mock_custom_execute.assert_called_once_with('nvme', 'version')
 
+    @mock.patch.object(priv_rootwrap, 'custom_execute',
+                       side_effect=OSError(2))
     @mock.patch.object(priv_rootwrap, 'execute',
                        side_effect=putils.ProcessExecutionError)
-    def test_brick_get_connector_properties_fallback(self, mock_execute):
+    def test_brick_get_connector_properties_fallback(self, mock_execute,
+                                                     mock_custom_execute):
         self._test_brick_get_connector_properties(True, False, False)
         mock_execute.assert_called_once_with('multipathd', 'show', 'status',
                                              run_as_root=True,
                                              root_helper='sudo')
+        mock_custom_execute.assert_called_once_with('nvme', 'version')
 
     @mock.patch.object(priv_rootwrap, 'execute',
                        side_effect=putils.ProcessExecutionError)

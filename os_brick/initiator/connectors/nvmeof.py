@@ -10,6 +10,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import errno
 import glob
 import json
 import os.path
@@ -27,6 +28,7 @@ try:
     from os_brick.initiator.connectors import nvmeof_agent
 except ImportError:
     nvmeof_agent = None
+from os_brick.privileged import rootwrap as priv_rootwrap
 from os_brick import utils
 
 DEV_SEARCH_PATH = '/dev/'
@@ -77,15 +79,31 @@ class NVMeOFConnector(base.BaseLinuxConnector):
         except exception.VolumeDeviceNotFound:
             return []
 
-    @staticmethod
-    def get_connector_properties(root_helper, *args, **kwargs):
+    @classmethod
+    def nvme_present(cls):
+        try:
+            priv_rootwrap.custom_execute('nvme', 'version')
+            return True
+        except Exception as exc:
+            if isinstance(exc, OSError) and exc.errno == errno.ENOENT:
+                LOG.debug('nvme not present on system')
+            else:
+                LOG.warning('Unknown error when checking presence of nvme: %s',
+                            exc)
+        return False
+
+    @classmethod
+    def get_connector_properties(cls, root_helper, *args, **kwargs):
         """The NVMe-oF connector properties (initiator uuid and nqn.)"""
-        nvmf = NVMeOFConnector(root_helper=root_helper,
-                               execute=kwargs.get('execute'))
+        execute = kwargs.get('execute') or priv_rootwrap.execute
+        nvmf = NVMeOFConnector(root_helper=root_helper, execute=execute)
         ret = {}
+
+        nqn = None
         uuid = nvmf._get_host_uuid()
         suuid = nvmf._get_system_uuid()
-        nqn = nvmf._get_host_nqn()
+        if cls.nvme_present():
+            nqn = nvmf._get_host_nqn()
         if uuid:
             ret['uuid'] = uuid
         if suuid:

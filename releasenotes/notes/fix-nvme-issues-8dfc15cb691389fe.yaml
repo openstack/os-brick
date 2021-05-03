@@ -1,0 +1,10 @@
+---
+fixes:
+  - |
+    NVMe-oF connector `bug #1929074
+    <https://bugs.launchpad.net/os-brick/+bug/1929074>`_: Fixed issue with
+    nvme logging error trace when not present.
+  - |
+    NVMe-oF connector `bug #1929075
+    <https://bugs.launchpad.net/os-brick/+bug/1929075>`_: Fixed issue with
+    nvme connector creating /etc/nvme directory when not present.
