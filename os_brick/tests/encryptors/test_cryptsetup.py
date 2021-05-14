@@ -20,7 +20,6 @@ from unittest import mock
 
 from castellan.common.objects import symmetric_key as key
 from castellan.tests.unit.key_manager import fake
-from oslo_concurrency import processutils as putils
 
 from os_brick.encryptors import cryptsetup
 from os_brick import exception
@@ -154,34 +153,3 @@ class CryptsetupEncryptorTestCase(test_base.VolumeEncryptorTestCase):
             mock.call('/dev/mapper/%s' % wwn)])
         mock_execute.assert_called_once_with(
             'cryptsetup', 'status', wwn, run_as_root=True)
-
-    @mock.patch('os_brick.executor.Executor._execute')
-    def test_attach_volume_unmangle_passphrase(self, mock_execute):
-        fake_key = '0725230b'
-        fake_key_mangled = '72523b'
-        self.encryptor._get_key = mock.MagicMock()
-        self.encryptor._get_key.return_value = fake__get_key(None, fake_key)
-
-        mock_execute.side_effect = [
-            putils.ProcessExecutionError(exit_code=2),  # luksOpen
-            mock.DEFAULT,
-            mock.DEFAULT,
-        ]
-
-        self.encryptor.attach_volume(None)
-
-        mock_execute.assert_has_calls([
-            mock.call('cryptsetup', 'create', '--key-file=-', self.dev_name,
-                      self.dev_path, process_input=fake_key,
-                      root_helper=self.root_helper, run_as_root=True,
-                      check_exit_code=True),
-            mock.call('cryptsetup', 'create', '--key-file=-', self.dev_name,
-                      self.dev_path, process_input=fake_key_mangled,
-                      root_helper=self.root_helper, run_as_root=True,
-                      check_exit_code=True),
-            mock.call('ln', '--symbolic', '--force',
-                      '/dev/mapper/%s' % self.dev_name, self.symlink_path,
-                      root_helper=self.root_helper, run_as_root=True,
-                      check_exit_code=True),
-        ])
-        self.assertEqual(3, mock_execute.call_count)
