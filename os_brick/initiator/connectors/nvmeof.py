@@ -370,6 +370,10 @@ class NVMeOFConnector(base.BaseLinuxConnector):
                         {'device_path': device_path, 'conn_nqn': conn_nqn})
             return
 
+        exc = exception.ExceptionChainer()
+        with exc.context(force, 'Flushing %s failed', device_path):
+            self._linuxscsi.flush_device_io(device_path)
+
         LOG.debug(
             "Trying to disconnect from device %(device_path)s with "
             "subnqn %(conn_nqn)s",
@@ -379,19 +383,19 @@ class NVMeOFConnector(base.BaseLinuxConnector):
             'disconnect',
             '-n',
             conn_nqn]
-        try:
+        with exc.context(force, "Failed to disconnect from NVMe nqn "
+                         "%(conn_nqn)s with device_path %(device_path)s",
+                         {'conn_nqn': conn_nqn, 'device_path': device_path}):
             self._execute(
                 *cmd,
                 root_helper=self._root_helper,
                 run_as_root=True)
 
-        except putils.ProcessExecutionError:
-            LOG.error(
-                "Failed to disconnect from NVMe nqn "
-                "%(conn_nqn)s with device_path %(device_path)s",
-                {'conn_nqn': conn_nqn, 'device_path': device_path})
+        if exc:
+            LOG.warning('There were errors removing %s, leftovers may remain '
+                        'in the system', device_path)
             if not ignore_errors:
-                raise
+                raise exc
 
     @utils.trace
     @synchronized('extend_volume')

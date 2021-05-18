@@ -1,0 +1,6 @@
+---
+fixes:
+  - |
+    NVMe-oF connector `bug #1903032
+    <https://bugs.launchpad.net/os-brick/+bug/1903032>`_: Fixed not flushing
+    device on disconnect.
