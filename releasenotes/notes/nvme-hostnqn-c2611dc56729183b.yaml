@@ -1,0 +1,7 @@
+---
+fixes:
+  - |
+    NVMe-oF connector `bug #1928944
+    <https://bugs.launchpad.net/os-brick/+bug/1928944>`_: Fixed not returning
+    the right nqn value on ``get_connector_properties`` when
+    ``/etc/nvme/hostnqn`` doesn't exist.

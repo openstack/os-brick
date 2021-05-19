@@ -27,6 +27,7 @@ try:
     from os_brick.initiator.connectors import nvmeof_agent
 except ImportError:
     nvmeof_agent = None
+from os_brick.privileged import nvmeof as priv_nvme
 from os_brick import utils
 
 DEV_SEARCH_PATH = '/dev/'
@@ -110,26 +111,13 @@ class NVMeOFConnector(base.BaseLinuxConnector):
             return None
 
     def _get_host_nqn(self):
-        host_nqn = None
         try:
             with open('/etc/nvme/hostnqn', 'r') as f:
                 host_nqn = f.read().strip()
-                f.close()
         except IOError:
-            try:
-                self._execute(
-                    'mkdir', '-m', '755', '-p', '/etc/nvme',
-                    root_helper=self._root_helper, run_as_root=True)
-                out, err = self._execute(
-                    'nvme', 'gen-hostnqn', '|', 'tee', '/etc/nvme/hostnqn',
-                    root_helper=self._root_helper, run_as_root=True)
-                if out.strip():
-                    host_nqn = out.strip()
-                self._execute(
-                    'chmod', '644', '/etc/nvme/hostnqn',
-                    root_helper=self._root_helper, run_as_root=True)
-            except Exception as e:
-                LOG.warning("Could not generate host nqn: %s" % str(e))
+            host_nqn = priv_nvme.create_hostnqn()
+        except Exception:
+            host_nqn = None
         return host_nqn
 
     def _get_system_uuid(self):
