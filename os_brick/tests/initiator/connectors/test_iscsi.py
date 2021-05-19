@@ -1533,6 +1533,18 @@ Setting up iSCSI targets: unused
         expected.update(failed_logins=1, stopped_threads=1)
         self.assertDictEqual(expected, data)
 
+    @mock.patch.object(iscsi.ISCSIConnector, '_connect_to_iscsi_portal')
+    def test_connect_vol_with_connection_failure(self, connect_mock):
+        data = self._get_connect_vol_data()
+
+        connect_mock.side_effect = Exception()
+
+        self.connector._connect_vol(3, self.CON_PROPS, data)
+
+        expected = self._get_connect_vol_data()
+        expected.update(failed_logins=1, stopped_threads=1)
+        self.assertDictEqual(expected, data)
+
     @mock.patch('os_brick.utils._time_sleep', mock.Mock())
     @mock.patch.object(linuxscsi.LinuxSCSI, 'scan_iscsi')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'device_name_by_hctl',
