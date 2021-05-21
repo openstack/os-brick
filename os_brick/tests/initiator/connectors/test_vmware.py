@@ -270,7 +270,7 @@ class VmdkConnectorTestCase(test_connector.ConnectorTestCase):
         exp_rel_path = '%s/foo.vmdk' % tmp_folder_path
         upload_vmdk.assert_called_once_with(
             tmp_file, self._connector._ip, self._connector._port, dc_name,
-            ds_name, session.vim.client.options.transport.cookiejar,
+            ds_name, session.vim.client.cookiejar,
             exp_rel_path, units.Gi, self._connector._ca_file,
             self._connector._timeout)
 
