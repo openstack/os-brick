@@ -29,7 +29,7 @@ class BrickException(Exception):
     """Base Brick Exception
 
     To correctly use this class, inherit from it and define
-    a 'msg_fmt' property. That msg_fmt will get printf'd
+    a 'message' property. That message will get printf'd
     with the keyword arguments provided to the constructor.
     """
     message = _("An unknown exception occurred.")
