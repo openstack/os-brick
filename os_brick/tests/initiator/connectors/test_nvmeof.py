@@ -22,6 +22,7 @@ from os_brick import exception
 from os_brick import executor
 from os_brick.initiator.connectors import nvmeof
 from os_brick.initiator import linuxscsi
+from os_brick.privileged import rootwrap as priv_rootwrap
 from os_brick.tests.initiator import test_connector
 
 
@@ -59,6 +60,21 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
                                                 execute=self.fake_execute,
                                                 use_multipath=False)
 
+    @mock.patch.object(priv_rootwrap, 'custom_execute', autospec=True)
+    def test_nvme_present(self, mock_execute):
+        nvme_present = self.connector.nvme_present()
+        self.assertTrue(nvme_present)
+
+    @ddt.data(OSError(2, 'FileNotFoundError'), Exception())
+    @mock.patch('os_brick.initiator.connectors.nvmeof.LOG')
+    @mock.patch.object(priv_rootwrap, 'custom_execute', autospec=True)
+    def test_nvme_present_exception(self, exc, mock_execute, mock_log):
+        mock_execute.side_effect = exc
+        nvme_present = self.connector.nvme_present()
+        log = mock_log.debug if isinstance(exc, OSError) else mock_log.warning
+        log.assert_called_once()
+        self.assertFalse(nvme_present)
+
     @mock.patch.object(nvmeof.NVMeOFConnector, '_execute', autospec=True)
     def test_get_sysuuid_without_newline(self, mock_execute):
         mock_execute.return_value = (
@@ -73,6 +89,8 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         uuid = self.connector._get_host_uuid()
         self.assertIsNone(uuid)
 
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'nvme_present',
+                       return_value=True)
     @mock.patch.object(nvmeof.NVMeOFConnector, '_get_host_nqn',
                        return_value='fakenqn')
     @mock.patch.object(nvmeof.NVMeOFConnector, '_get_system_uuid',
@@ -80,20 +98,24 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(nvmeof.NVMeOFConnector, '_get_host_uuid',
                        return_value=None)
     def test_get_connector_properties_without_sysuuid(self, mock_host_uuid,
-                                                      mock_sysuuid, mock_nqn):
+                                                      mock_sysuuid, mock_nqn,
+                                                      mock_nvme_present):
         props = self.connector.get_connector_properties('sudo')
         expected_props = {'nqn': 'fakenqn'}
         self.assertEqual(expected_props, props)
 
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'nvme_present')
     @mock.patch.object(nvmeof.NVMeOFConnector, '_get_host_nqn', autospec=True)
     @mock.patch.object(nvmeof.NVMeOFConnector, '_get_system_uuid',
                        autospec=True)
     @mock.patch.object(nvmeof.NVMeOFConnector, '_get_host_uuid', autospec=True)
     def test_get_connector_properties_with_sysuuid(self, mock_host_uuid,
-                                                   mock_sysuuid, mock_nqn):
+                                                   mock_sysuuid, mock_nqn,
+                                                   mock_nvme_present):
         mock_host_uuid.return_value = HOST_UUID
         mock_sysuuid.return_value = SYS_UUID
         mock_nqn.return_value = HOST_NQN
+        mock_nvme_present.return_value = True
         props = self.connector.get_connector_properties('sudo')
         expected_props = {"system uuid": SYS_UUID, "nqn": HOST_NQN,
                           "uuid": HOST_UUID}
