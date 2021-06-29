@@ -31,7 +31,7 @@ class TestRetryDecorator(base.TestCase):
         self.counter = 0
 
         with mock.patch.object(utils, '_time_sleep') as mock_sleep:
-            @utils.retry(exceptions=exception.VolumeDeviceNotFound,
+            @utils.retry(exception.VolumeDeviceNotFound,
                          interval=2,
                          retries=3,
                          backoff_rate=2)
@@ -100,12 +100,34 @@ class TestRetryDecorator(base.TestCase):
     def test_wrong_exception_no_retry(self):
 
         with mock.patch.object(utils, '_time_sleep') as mock_sleep:
-            @utils.retry(exceptions=exception.VolumeDeviceNotFound)
+            @utils.retry(exception.VolumeDeviceNotFound)
             def raise_unexpected_error():
                 raise WrongException("wrong exception")
 
             self.assertRaises(WrongException, raise_unexpected_error)
             self.assertFalse(mock_sleep.called)
+
+    @mock.patch('tenacity.nap.sleep')
+    def test_retry_exit_code(self, sleep_mock):
+        exit_code = 5
+        exception = utils.processutils.ProcessExecutionError
+
+        @utils.retry(retry=utils.retry_if_exit_code, retry_param=exit_code)
+        def raise_retriable_exit_code():
+            raise exception(exit_code=exit_code)
+        self.assertRaises(exception, raise_retriable_exit_code)
+        self.assertEqual(0, sleep_mock.call_count)
+
+    @mock.patch('tenacity.nap.sleep')
+    def test_retry_exit_code_non_retriable(self, sleep_mock):
+        exit_code = 5
+        exception = utils.processutils.ProcessExecutionError
+
+        @utils.retry(retry=utils.retry_if_exit_code, retry_param=exit_code)
+        def raise_non_retriable_exit_code():
+            raise exception(exit_code=exit_code + 1)
+        self.assertRaises(exception, raise_non_retriable_exit_code)
+        sleep_mock.assert_not_called()
 
 
 class LogTracingTestCase(base.TestCase):

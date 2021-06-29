@@ -143,6 +143,24 @@ class LVM(executor.Executor):
         cmd = ['vgcreate', self.vg_name, ','.join(pv_list)]
         self._execute(*cmd, root_helper=self._root_helper, run_as_root=True)
 
+    @utils.retry(retry=utils.retry_if_exit_code, retry_param=139, interval=0.5,
+                 backoff_rate=0.5)
+    def _run_lvm_command(self,
+                         cmd_arg_list: list,
+                         root_helper: str = None,
+                         run_as_root: bool = True) -> tuple:
+        """Run LVM commands with a retry on code 139 to work around LVM bugs.
+
+        Refer to LP bug 1901783, LP bug 1932188.
+        """
+        if not root_helper:
+            root_helper = self._root_helper
+
+        (out, err) = self._execute(*cmd_arg_list,
+                                   root_helper=root_helper,
+                                   run_as_root=run_as_root)
+        return (out, err)
+
     def _get_vg_uuid(self):
         cmd = LVM.LVM_CMD_PREFIX + ['vgs', '--noheadings',
                                     '-o', 'uuid', self.vg_name]
@@ -172,9 +190,8 @@ class LVM(executor.Executor):
         free_space = 0.0
 
         try:
-            (out, err) = self._execute(*cmd,
-                                       root_helper=self._root_helper,
-                                       run_as_root=True)
+            (out, err) = self._run_lvm_command(cmd)
+
             if out is not None:
                 out = out.strip()
                 data = out.split(':')
@@ -279,6 +296,8 @@ class LVM(executor.Executor):
             return False
 
     @staticmethod
+    @utils.retry(retry=utils.retry_if_exit_code, retry_param=139, interval=0.5,
+                 backoff_rate=0.5)  # Bug#1901783
     def get_lv_info(root_helper, vg_name=None, lv_name=None):
         """Retrieve info about LVs (all, in a VG, or a single LV).
 
@@ -537,9 +556,7 @@ class LVM(executor.Executor):
                                       'size': size_args,
                                       'free': self.vg_free_space})
 
-        self._execute(*cmd,
-                      root_helper=self._root_helper,
-                      run_as_root=True)
+        self._run_lvm_command(cmd)
 
         self.vg_thin_pool = name
 
@@ -574,9 +591,7 @@ class LVM(executor.Executor):
                 cmd.extend(['-R', str(rsize)])
 
         try:
-            self._execute(*cmd,
-                          root_helper=self._root_helper,
-                          run_as_root=True)
+            self._run_lvm_command(cmd)
         except putils.ProcessExecutionError as err:
             LOG.exception('Error creating Volume')
             LOG.error('Cmd     :%s', err.cmd)
@@ -606,9 +621,7 @@ class LVM(executor.Executor):
             cmd.extend(['-L', '%sg' % (size)])
 
         try:
-            self._execute(*cmd,
-                          root_helper=self._root_helper,
-                          run_as_root=True)
+            self._run_lvm_command(cmd)
         except putils.ProcessExecutionError as err:
             LOG.exception('Error creating snapshot')
             LOG.error('Cmd     :%s', err.cmd)
@@ -626,9 +639,7 @@ class LVM(executor.Executor):
     def _lv_is_active(self, name):
         cmd = LVM.LVM_CMD_PREFIX + ['lvdisplay', '--noheading', '-C', '-o',
                                     'Attr', '%s/%s' % (self.vg_name, name)]
-        out, _err = self._execute(*cmd,
-                                  root_helper=self._root_helper,
-                                  run_as_root=True)
+        out, _err = self._run_lvm_command(cmd)
         if out:
             out = out.strip()
             # An example output might be '-wi-a----'; the 4th index specifies
@@ -656,8 +667,8 @@ class LVM(executor.Executor):
         # order to prevent a race condition.
         self._wait_for_volume_deactivation(name)
 
-    @utils.retry(exceptions=exception.VolumeNotDeactivated, retries=3,
-                 backoff_rate=1)
+    @utils.retry(retry_param=exception.VolumeNotDeactivated, retries=5,
+                 backoff_rate=2)
     def _wait_for_volume_deactivation(self, name):
         LOG.debug("Checking to see if volume %s has been deactivated.",
                   name)
@@ -768,10 +779,9 @@ class LVM(executor.Executor):
 
     def lv_has_snapshot(self, name):
         cmd = LVM.LVM_CMD_PREFIX + ['lvdisplay', '--noheading', '-C', '-o',
-                                    'Attr', '%s/%s' % (self.vg_name, name)]
-        out, _err = self._execute(*cmd,
-                                  root_helper=self._root_helper,
-                                  run_as_root=True)
+                                    'Attr', '--readonly',
+                                    '%s/%s' % (self.vg_name, name)]
+        out, _err = self._run_lvm_command(cmd)
         if out:
             out = out.strip()
             if (out[0] == 'o') or (out[0] == 'O'):

@@ -387,7 +387,7 @@ class LinuxSCSI(executor.Executor):
                       attempts=3, timeout=300, interval=10,
                       root_helper=self._root_helper)
 
-    @utils.retry(exceptions=exception.VolumeDeviceNotFound)
+    @utils.retry(exception.VolumeDeviceNotFound)
     def wait_for_path(self, volume_path):
         """Wait for a path to show up."""
         LOG.debug("Checking to see if %s exists yet.",
@@ -399,7 +399,7 @@ class LinuxSCSI(executor.Executor):
         else:
             LOG.debug("%s has shown up.", volume_path)
 
-    @utils.retry(exceptions=exception.BlockDeviceReadOnly, retries=5)
+    @utils.retry(exception.BlockDeviceReadOnly, retries=5)
     def wait_for_rw(self, wwn, device_path):
         """Wait for block device to be Read-Write."""
         LOG.debug("Checking to see if %s is read-only.",

@@ -17,6 +17,7 @@ from unittest import mock
 from oslo_concurrency import processutils
 
 from os_brick import exception
+from os_brick import executor as os_brick_executor
 from os_brick.local_dev import lvm as brick
 from os_brick.privileged import rootwrap as priv_rootwrap
 from os_brick.tests import base
@@ -227,6 +228,39 @@ class BrickLvmTestCase(base.TestCase):
                 'sudo', vg_name='fake-vg')
         )
 
+    @mock.patch('tenacity.nap.sleep', mock.Mock())
+    @mock.patch.object(brick.putils, 'execute')
+    def test_get_lv_info_retry(self, exec_mock):
+        exec_mock.side_effect = (
+            processutils.ProcessExecutionError('', '', exit_code=139),
+            ('vg name size', ''),
+        )
+        self.assertEqual(
+            [{'name': 'fake-1', 'size': '1.00g', 'vg': 'fake-vg'},
+             {'name': 'fake-2', 'size': '1.00g', 'vg': 'fake-vg'}],
+            self.vg.get_lv_info('sudo', vg_name='vg', lv_name='name')
+        )
+
+    @mock.patch('tenacity.nap.sleep', mock.Mock())
+    @mock.patch.object(os_brick_executor.Executor, '_execute')
+    def test_get_thin_pool_free_space_retry(self, exec_mock):
+        exec_mock.side_effect = (
+            processutils.ProcessExecutionError('', '', exit_code=139),
+            ('15.84:50', ''),
+        )
+        self.assertEqual(
+            7.92,
+            self.vg._get_thin_pool_free_space('vg', 'thinpool')
+        )
+        self.assertEqual(2, exec_mock.call_count)
+        args = ['env', 'LC_ALL=C', 'lvs', '--noheadings', '--unit=g', '-o',
+                'size,data_percent', '--separator', ':', '--nosuffix',
+                '/dev/vg/thinpool']
+        if self.configuration.lvm_suppress_fd_warnings:
+            args.insert(2, 'LVM_SUPPRESS_FD_WARNINGS=1')
+        lvs_call = mock.call(*args, root_helper='sudo', run_as_root=True)
+        exec_mock.assert_has_calls([lvs_call, lvs_call])
+
     def test_get_all_physical_volumes(self):
         # Filtered VG version
         pvs = self.vg.get_all_physical_volumes('sudo', 'fake-vg')
@@ -373,7 +407,7 @@ class BrickLvmTestCase(base.TestCase):
         self.assertFalse(self.vg.deactivate_lv.called)
 
     def test_lv_deactivate(self):
-        with mock.patch.object(self.vg, '_execute'):
+        with mock.patch.object(self.vg, '_execute', return_value=(0, 0)):
             is_active_mock = mock.Mock()
             is_active_mock.return_value = False
             self.vg._lv_is_active = is_active_mock
@@ -382,7 +416,7 @@ class BrickLvmTestCase(base.TestCase):
 
     @mock.patch('os_brick.utils._time_sleep')
     def test_lv_deactivate_timeout(self, mock_sleep):
-        with mock.patch.object(self.vg, '_execute'):
+        with mock.patch.object(self.vg, '_execute', return_value=(0, 0)):
             is_active_mock = mock.Mock()
             is_active_mock.return_value = True
             self.vg._lv_is_active = is_active_mock

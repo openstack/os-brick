@@ -17,6 +17,7 @@ import inspect
 import logging as py_logging
 import time
 
+from oslo_concurrency import processutils
 from oslo_log import log as logging
 from oslo_utils import strutils
 
@@ -44,7 +45,19 @@ import tenacity  # noqa
 LOG = logging.getLogger(__name__)
 
 
-def retry(exceptions, interval=1, retries=3, backoff_rate=2):
+class retry_if_exit_code(tenacity.retry_if_exception):
+    """Retry on ProcessExecutionError specific exit codes."""
+    def __init__(self, codes):
+        self.codes = (codes,) if isinstance(codes, int) else codes
+        super(retry_if_exit_code, self).__init__(self._check_exit_code)
+
+    def _check_exit_code(self, exc):
+        return (exc and isinstance(exc, processutils.ProcessExecutionError) and
+                exc.exit_code in self.codes)
+
+
+def retry(retry_param, interval=1, retries=3, backoff_rate=2,
+          retry=tenacity.retry_if_exception_type):
 
     if retries < 1:
         raise ValueError(_('Retries must be greater than or '
@@ -59,7 +72,7 @@ def retry(exceptions, interval=1, retries=3, backoff_rate=2):
                 after=tenacity.after_log(LOG, logging.DEBUG),
                 stop=tenacity.stop_after_attempt(retries),
                 reraise=True,
-                retry=tenacity.retry_if_exception_type(exceptions),
+                retry=retry(retry_param),
                 wait=tenacity.wait_exponential(
                     multiplier=interval, min=0, exp_base=backoff_rate))
             return r.call(f, *args, **kwargs)
