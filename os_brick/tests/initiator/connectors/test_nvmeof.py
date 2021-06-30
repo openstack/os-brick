@@ -882,14 +882,26 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         mock_open.return_value.__enter__.return_value.read = (
             lambda: HOST_NQN + "\n")
         host_nqn = self._get_host_nqn()
-        self.assertEqual(host_nqn, HOST_NQN)
+        mock_open.assert_called_once_with('/etc/nvme/hostnqn', 'r')
+        self.assertEqual(HOST_NQN, host_nqn)
 
-    @mock.patch.object(executor.Executor, '_execute')
+    @mock.patch.object(nvmeof.priv_nvme, 'create_hostnqn')
     @mock.patch.object(builtins, 'open')
-    def test_get_host_nqn_err(self, mock_open, mock_execute):
-        mock_execute.side_effect = Exception()
+    def test_get_host_nqn_io_err(self, mock_open, mock_create):
+        mock_create.return_value = mock.sentinel.nqn
         mock_open.side_effect = IOError()
         result = self.connector._get_host_nqn()
+        mock_open.assert_called_once_with('/etc/nvme/hostnqn', 'r')
+        mock_create.assert_called_once_with()
+        self.assertEqual(mock.sentinel.nqn, result)
+
+    @mock.patch.object(nvmeof.priv_nvme, 'create_hostnqn')
+    @mock.patch.object(builtins, 'open')
+    def test_get_host_nqn_err(self, mock_open, mock_create):
+        mock_open.side_effect = Exception()
+        result = self.connector._get_host_nqn()
+        mock_open.assert_called_once_with('/etc/nvme/hostnqn', 'r')
+        mock_create.assert_not_called()
         self.assertIsNone(result)
 
     @mock.patch.object(executor.Executor, '_execute')
