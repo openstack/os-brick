@@ -62,7 +62,7 @@ def retry(exceptions, interval=1, retries=3, backoff_rate=2):
                 retry=tenacity.retry_if_exception_type(exceptions),
                 wait=tenacity.wait_exponential(
                     multiplier=interval, min=0, exp_base=backoff_rate))
-            return r.call(f, *args, **kwargs)
+            return r(f, *args, **kwargs)
 
         return _wrapper
 
