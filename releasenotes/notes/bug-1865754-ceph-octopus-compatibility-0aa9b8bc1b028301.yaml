@@ -1,0 +1,12 @@
+---
+fixes:
+  - |
+    `Bug #1865754 <https://bugs.launchpad.net/cinder/+bug/1865754>`_:
+    the ``RBDConnector`` class generates a temporary configuration file
+    to connect to Ceph.  Previously, os-brick did not include a
+    ``[global]`` section to contain the options it sets, but with the
+    Octopus release (15.2.0+), Ceph has begun enforcing the presence
+    of this section marker, which dates back at least to the Hammer
+    release of Ceph.  With this release, os-brick includes the
+    ``[global]`` section in the generated configuration file, which
+    should be backward-compatible at least to Ceph Hammer.
