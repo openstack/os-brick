@@ -91,6 +91,11 @@ class WindowsRBDConnector(base_rbd.RBDConnectorMixin,
         mapping = self._show_rbd_mapping(connection_properties)
         if mapping:
             dev_num = mapping['disk_number']
+            LOG.debug(
+                "Located RBD mapping: %(image)s. "
+                "Disk number: %(disk_number)s.",
+                dict(image=connection_properties['name'],
+                     disk_number=dev_num))
             return self._diskutils.get_device_name_by_device_number(dev_num)
         elif expect:
             msg = _("The specified RBD image is not mounted: %s")
