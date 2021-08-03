@@ -13,8 +13,6 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-
-import array
 import binascii
 import os
 
@@ -128,18 +126,6 @@ class CryptsetupEncryptor(base.VolumeEncryptor):
                       check_exit_code=True, run_as_root=True,
                       root_helper=self._root_helper)
 
-    def _get_mangled_passphrase(self, key):
-        """Convert the raw key into a list of unsigned int's and then a string
-
-        """
-        # NOTE(lyarwood): This replicates the methods used prior to Newton to
-        # first encode the passphrase as a list of unsigned int's before
-        # decoding back into a string. This method strips any leading 0's
-        # of the resulting hex digit pairs, resulting in a different
-        # passphrase being returned.
-        encoded_key = array.array('B', key).tolist()
-        return ''.join(hex(x).replace('0x', '') for x in encoded_key)
-
     def attach_volume(self, context, **kwargs):
         """Shadow the device and pass an unencrypted version to the instance.
 
@@ -160,16 +146,7 @@ class CryptsetupEncryptor(base.VolumeEncryptor):
         key = self._get_key(context).get_encoded()
         passphrase = self._get_passphrase(key)
 
-        try:
-            self._open_volume(passphrase, **kwargs)
-        except processutils.ProcessExecutionError as e:
-            if e.exit_code == 2:
-                # NOTE(lyarwood): Workaround bug#1633518 by attempting to use
-                # a mangled passphrase to open the device..
-                LOG.info("Unable to open %s with the current passphrase, "
-                         "attempting to use a mangled passphrase to open "
-                         "the volume.", self.dev_path)
-                self._open_volume(self._get_mangled_passphrase(key), **kwargs)
+        self._open_volume(passphrase, **kwargs)
 
         # modify the original symbolic link to refer to the decrypted device
         self._execute('ln', '--symbolic', '--force',

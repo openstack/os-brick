@@ -1,0 +1,8 @@
+---
+upgrade:
+  - |
+    A workaround for
+    `Bug #1633518 <https://bugs.launchpad.net/cinder/+bug/1633518>`_,
+    where mangled passwords were used for various encryptors, has been
+    removed. This was first introduced way back in the 1.9.0 Ocata-era release
+    and has had more than enough time to bed in.
