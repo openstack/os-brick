@@ -531,7 +531,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
             with excutils.save_and_reraise_exception():
                 self._cleanup_connection(connection_properties, force=True)
 
-    @utils.retry(exceptions=(exception.VolumeDeviceNotFound))
+    @utils.retry((exception.VolumeDeviceNotFound))
     def _get_device_link(self, wwn, device, mpath):
         # These are the default symlinks that should always be there
         if mpath:
@@ -571,7 +571,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
             result['multipath_id'] = wwn
         return result
 
-    @utils.retry(exceptions=(exception.VolumeDeviceNotFound))
+    @utils.retry((exception.VolumeDeviceNotFound))
     def _connect_single_volume(self, connection_properties):
         """Connect to a volume using a single path."""
         data = {'stop_connecting': False, 'num_logins': 0, 'failed_logins': 0,
@@ -698,7 +698,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
             data['just_added_devices'].append(device)
         data['stopped_threads'] += 1
 
-    @utils.retry(exceptions=(exception.VolumeDeviceNotFound))
+    @utils.retry((exception.VolumeDeviceNotFound))
     def _connect_multipath_volume(self, connection_properties):
         """Connect to a multipathed volume launching parallel login requests.
 

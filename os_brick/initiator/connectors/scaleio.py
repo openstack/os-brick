@@ -153,7 +153,7 @@ class ScaleIOConnector(base.BaseLinuxConnector):
     # NOTE: Usually 3 retries is enough to find the volume.
     # If there are network issues, it could take much longer. Set
     # the max retries to 15 to make sure we can find the volume.
-    @utils.retry(exceptions=exception.BrickException,
+    @utils.retry(exception.BrickException,
                  retries=15,
                  backoff_rate=1)
     def _wait_for_volume_path(self, path):
