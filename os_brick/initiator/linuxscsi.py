@@ -218,13 +218,13 @@ class LinuxSCSI(executor.Executor):
             # code and just printed the error message in stdout.
             if out and out.startswith('error receiving packet'):
                 raise putils.ProcessExecutionError('', out, 1, cmd, None)
+
         except putils.ProcessExecutionError as err:
-            LOG.error('multipathd is not running: exit code %(err)s',
-                      {'err': err.exit_code})
             if enforce_multipath:
+                LOG.error('multipathd is not running: exit code %(err)s',
+                          {'err': err.exit_code})
                 raise
             return False
-
         return True
 
     def get_dm_name(self, dm):
