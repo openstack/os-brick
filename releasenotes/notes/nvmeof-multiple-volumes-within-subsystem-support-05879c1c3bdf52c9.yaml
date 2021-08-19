@@ -1,0 +1,6 @@
+---
+features:
+  - |
+    NVMe-OF connector: Added support for storage systems presenting
+    multiple volumes within one NVMe subsystem.
+

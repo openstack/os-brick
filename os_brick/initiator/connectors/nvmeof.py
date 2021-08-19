@@ -196,10 +196,38 @@ class NVMeOFConnector(base.BaseLinuxConnector):
             raise exception.VolumePathsNotFound()
         return list(path)
 
+    @utils.retry(exception.VolumeDeviceNotFound)
+    def _get_device_path_by_nguid(self, nguid):
+        device_path = os.path.join(DEV_SEARCH_PATH,
+                                   'disk',
+                                   'by-id',
+                                   'nvme-eui.%s' % nguid)
+        LOG.debug("Try to retrieve symlink to %(device_path)s.",
+                  {"device_path": device_path})
+        try:
+            paths, _err = self._execute('readlink',
+                                        '-e',
+                                        device_path,
+                                        run_as_root=True,
+                                        root_helper=self._root_helper)
+            if not paths:
+                raise exception.VolumePathsNotFound()
+            return paths.split()[0]
+        except putils.ProcessExecutionError as e:
+            LOG.exception(e)
+            raise exception.VolumeDeviceNotFound(device=device_path)
+
     @utils.retry(putils.ProcessExecutionError)
     def _try_connect_nvme(self, cmd):
-        self._execute(*cmd, root_helper=self._root_helper,
-                      run_as_root=True)
+        try:
+            self._execute(*cmd, root_helper=self._root_helper,
+                          run_as_root=True)
+        except putils.ProcessExecutionError as e:
+            # Idempotent connection to target.
+            # Exit code 70 means that target is already connected.
+            if e.exit_code == 70:
+                return
+            raise
 
     def _get_nvme_subsys(self):
         # Example output:
@@ -228,12 +256,25 @@ class NVMeOFConnector(base.BaseLinuxConnector):
 
         return ret_val
 
+    @staticmethod
+    def _filter_nvme_devices(current_nvme_devices, nvme_controller):
+        LOG.debug("Filter NVMe devices belonging to controller "
+                  "%(nvme_controller)s.",
+                  {"nvme_controller": nvme_controller})
+        nvme_name_pattern = "/dev/%sn[0-9]+" % nvme_controller
+        nvme_devices_filtered = list(
+            filter(
+                lambda device: re.match(nvme_name_pattern, device),
+                current_nvme_devices
+            )
+        )
+        return nvme_devices_filtered
+
     @utils.retry(exception.NotFound, retries=5)
     def _is_nvme_available(self, nvme_name):
-        nvme_name_pattern = "/dev/%sn[0-9]+" % nvme_name
-        for nvme_dev_name in self._get_nvme_devices():
-            if re.match(nvme_name_pattern, nvme_dev_name):
-                return True
+        current_nvme_devices = self._get_nvme_devices()
+        if self._filter_nvme_devices(current_nvme_devices, nvme_name):
+            return True
         else:
             LOG.error("Failed to find nvme device")
             raise exception.NotFound()
@@ -275,25 +316,6 @@ class NVMeOFConnector(base.BaseLinuxConnector):
         # Wait until nvme will be available in kernel
         return self._is_nvme_available(nvme_name)
 
-    def _try_disconnect_volume(self, conn_nqn, ignore_errors=False):
-        cmd = [
-            'nvme',
-            'disconnect',
-            '-n',
-            conn_nqn]
-        try:
-            self._execute(
-                *cmd,
-                root_helper=self._root_helper,
-                run_as_root=True)
-
-        except putils.ProcessExecutionError:
-            LOG.error(
-                "Failed to disconnect from NVMe nqn "
-                "%(conn_nqn)s", {'conn_nqn': conn_nqn})
-            if not ignore_errors:
-                raise
-
     @utils.trace
     @synchronized('connect_volume')
     def connect_volume(self, connection_properties):
@@ -312,13 +334,13 @@ class NVMeOFConnector(base.BaseLinuxConnector):
             return self._connect_volume_replicated(connection_properties)
 
         current_nvme_devices = self._get_nvme_devices()
-
         device_info = {'type': 'block'}
         conn_nqn = connection_properties['nqn']
         target_portal = connection_properties['target_portal']
         port = connection_properties['target_port']
         nvme_transport_type = connection_properties['transport_type']
         host_nqn = connection_properties.get('host_nqn')
+        device_nguid = connection_properties.get('volume_nguid')
         cmd = [
             'nvme', 'connect',
             '-t', nvme_transport_type,
@@ -334,20 +356,27 @@ class NVMeOFConnector(base.BaseLinuxConnector):
                                target_portal, port)
         except exception.NotFound:
             LOG.error("Waiting for nvme failed")
-            self._try_disconnect_volume(conn_nqn, True)
             raise exception.NotFound(message="nvme connect: NVMe device "
                                              "not found")
-        path = self._get_device_path(current_nvme_devices)
-        device_info['path'] = path[0]
+        if device_nguid:
+            path = self._get_device_path_by_nguid(device_nguid)
+        else:
+            path = self._get_device_path(current_nvme_devices)
+        device_info['path'] = path
         LOG.debug("NVMe device to be connected to is %(path)s",
-                  {'path': path[0]})
+                  {'path': path})
         return device_info
 
     @utils.trace
     @synchronized('connect_volume')
     def disconnect_volume(self, connection_properties, device_info,
                           force=False, ignore_errors=False):
-        """Detach and flush the volume.
+        """Flush the volume.
+
+        Disconnect of volumes happens on storage system side. Here we could
+        remove connections to subsystems if no volumes are left. But new
+        volumes can pop up asynchronously in the meantime. So the only thing
+        left is flushing or disassembly of a correspondng RAID device.
 
         :param connection_properties: The dictionary that describes all
                                       of the target volume attributes.
@@ -376,32 +405,11 @@ class NVMeOFConnector(base.BaseLinuxConnector):
                         {'device_path': device_path, 'conn_nqn': conn_nqn})
             return
 
-        exc = exception.ExceptionChainer()
-        with exc.context(force, 'Flushing %s failed', device_path):
+        try:
             self._linuxscsi.flush_device_io(device_path)
-
-        LOG.debug(
-            "Trying to disconnect from device %(device_path)s with "
-            "subnqn %(conn_nqn)s",
-            {'device_path': device_path, 'conn_nqn': conn_nqn})
-        cmd = [
-            'nvme',
-            'disconnect',
-            '-n',
-            conn_nqn]
-        with exc.context(force, "Failed to disconnect from NVMe nqn "
-                         "%(conn_nqn)s with device_path %(device_path)s",
-                         {'conn_nqn': conn_nqn, 'device_path': device_path}):
-            self._execute(
-                *cmd,
-                root_helper=self._root_helper,
-                run_as_root=True)
-
-        if exc:
-            LOG.warning('There were errors removing %s, leftovers may remain '
-                        'in the system', device_path)
+        except putils.ProcessExecutionError:
             if not ignore_errors:
-                raise exc
+                raise
 
     @utils.trace
     @synchronized('extend_volume')
@@ -413,9 +421,11 @@ class NVMeOFConnector(base.BaseLinuxConnector):
         """
         if connection_properties.get('vol_uuid'):  # compatibility
             return self._extend_volume_replicated(connection_properties)
-
         volume_paths = self.get_volume_paths(connection_properties)
         if volume_paths:
+            if connection_properties.get('volume_nguid'):
+                for path in volume_paths:
+                    return self._linuxscsi.get_device_size(path)
             return self._linuxscsi.extend_volume(
                 volume_paths, use_multipath=self.use_multipath)
         else:
