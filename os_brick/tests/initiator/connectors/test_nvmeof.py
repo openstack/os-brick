@@ -866,10 +866,10 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
     def test_get_nvme_device_path(self, mock_get_nvme_controller, mock_glob,
                                   mock_execute):
         mock_get_nvme_controller.return_value = 'nvme1'
-        block_dev_path = '/sys/class/nvme-fabrics/ctl/nvme1/nvme1n*'
-        mock_glob.side_effect = [['/sys/class/nvme-fabrics/ctl/nvme1/nvme1n1']]
+        block_dev_path = '/sys/class/block/nvme1n*/uuid'
+        mock_glob.return_value = ['/sys/class/block/nvme1n1/uuid']
         mock_execute.return_value = (VOL_UUID + "\n", "")
-        cmd = ['cat', '/sys/class/nvme-fabrics/ctl/nvme1/nvme1n1/uuid']
+        cmd = ['cat', '/sys/class/block/nvme1n1/uuid']
         result = self.connector.get_nvme_device_path(EXECUTOR, TARGET_NQN,
                                                      VOL_UUID)
         mock_get_nvme_controller.assert_called_with(EXECUTOR, TARGET_NQN)

@@ -1,0 +1,7 @@
+---
+fixes:
+  - |
+    NVMe-oF connector `bug #1943615
+    <https://bugs.launchpad.net/os-brick/+bug/1943615>`_: Fixed get nvme
+    device failing on kernels with multipath enabled by using the generic
+    form ``/sys/class/block/<ctrl>n*`` for finding nvme devices.
