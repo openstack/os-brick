@@ -1113,6 +1113,38 @@ Setting up iSCSI targets: unused
         self.assertListEqual(expected_cmds, actual_cmds)
         get_sessions_mock.assert_called_once_with()
 
+    @mock.patch.object(iscsi.ISCSIConnector, '_iscsiadm_update')
+    @mock.patch.object(iscsi.ISCSIConnector, '_get_transport',
+                       return_value='default')
+    @mock.patch.object(iscsi.ISCSIConnector, '_get_iscsi_sessions_full')
+    @mock.patch('os_brick.utils._time_sleep')
+    def test_connect_to_iscsi_portal_fail_op_new(self, sleep_mock,
+                                                 get_sessions_mock,
+                                                 get_transport_mock,
+                                                 iscsiadm_update_mock):
+        get_sessions_mock.return_value = []
+        with mock.patch.object(self.connector, '_execute') as exec_mock:
+            exec_mock.side_effect = [('', 21), ('', 6), ('', 21), ('', 6),
+                                     ('', 21), ('', 6)]
+            self.assertRaises(exception.BrickException,
+                              self.connector._connect_to_iscsi_portal,
+                              self.CON_PROPS)
+        expected_cmds = ['iscsiadm -m node -T tgt1 -p ip1:port1',
+                         'iscsiadm -m node -T tgt1 -p ip1:port1 '
+                         '--interface default --op new',
+                         'iscsiadm -m node -T tgt1 -p ip1:port1',
+                         'iscsiadm -m node -T tgt1 -p ip1:port1 '
+                         '--interface default --op new',
+                         'iscsiadm -m node -T tgt1 -p ip1:port1',
+                         'iscsiadm -m node -T tgt1 -p ip1:port1 '
+                         '--interface default --op new']
+        actual_cmds = [' '.join(args[0]) for args in exec_mock.call_args_list]
+        self.assertListEqual(expected_cmds, actual_cmds)
+        iscsiadm_update_mock.assert_not_called()
+
+        # Called twice by the retry mechanism
+        self.assertEqual(2, sleep_mock.call_count)
+
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_sysfs_wwn',
                        side_effect=(None, 'tgt2'))
     @mock.patch.object(iscsi.ISCSIConnector, '_connect_vol')

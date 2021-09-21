@@ -1,0 +1,6 @@
+---
+fixes:
+  - |
+    `Bug #1944474 <https://bugs.launchpad.net/os-brick/+bug/1944474>`_: Fixed
+    missing retries to reinitiate iSCSI connections with high concurrency of
+    connections and with multipath enabled.
