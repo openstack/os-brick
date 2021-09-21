@@ -1040,6 +1040,16 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         return ips, iqns
 
     def _connect_to_iscsi_portal(self, connection_properties):
+        """Safely connect to iSCSI portal-target and return the session id."""
+        portal = connection_properties['target_portal'].split(",")[0]
+        target_iqn = connection_properties['target_iqn']
+
+        lock_name = 'connect_to_iscsi_portal-{}-{}'.format(portal, target_iqn)
+        method = synchronized(lock_name)(self._connect_to_iscsi_portal_unsafe)
+        return method(connection_properties)
+
+    @utils.retry((exception.BrickException))
+    def _connect_to_iscsi_portal_unsafe(self, connection_properties):
         """Connect to an iSCSI portal-target an return the session id."""
         portal = connection_properties['target_portal'].split(",")[0]
         target_iqn = connection_properties['target_iqn']
@@ -1055,9 +1065,17 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         out, err = self._run_iscsiadm(connection_properties, (),
                                       check_exit_code=(0, 21, 255))
         if err:
-            self._run_iscsiadm(connection_properties,
-                               ('--interface', self._get_transport(),
-                                '--op', 'new'))
+            out_new, err_new = self._run_iscsiadm(connection_properties,
+                                                  ('--interface',
+                                                   self._get_transport(),
+                                                   '--op', 'new'),
+                                                  check_exit_code=(0, 6))
+            if err_new:
+                # retry if iscsiadm returns 6 for "database failure"
+                LOG.debug("Retrying to connect to iSCSI portal %s", portal)
+                msg = (_("Encountered database failure for %s.") % (portal))
+                raise exception.BrickException(msg=msg)
+
         # Try to set the scan mode to manual
         res = self._iscsiadm_update(connection_properties,
                                     'node.session.scan', 'manual',
