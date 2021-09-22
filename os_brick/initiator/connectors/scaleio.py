@@ -75,6 +75,8 @@ class ScaleIOConnector(base.BaseLinuxConnector):
         self.volume_path = None
         self.iops_limit = None
         self.bandwidth_limit = None
+        self.verify_certificate = None
+        self.certificate_path = None
 
     def _get_guid(self):
         try:
@@ -204,7 +206,7 @@ class ScaleIOConnector(base.BaseLinuxConnector):
         r = requests.get(
             request,
             auth=(self.server_username, self.server_token),
-            verify=False
+            verify=self._verify_cert()
         )
 
         r = self._check_response(r, request)
@@ -250,7 +252,7 @@ class ScaleIOConnector(base.BaseLinuxConnector):
 
         r = requests.get(request,
                          auth=(self.server_username, self.server_token),
-                         verify=False)
+                         verify=self._verify_cert())
 
         r = self._check_response(r, request)
 
@@ -290,7 +292,7 @@ class ScaleIOConnector(base.BaseLinuxConnector):
             r = requests.get(
                 login_request,
                 auth=(self.server_username, self.server_password),
-                verify=False
+                verify=self._verify_cert()
             )
 
             token = r.json()
@@ -301,7 +303,7 @@ class ScaleIOConnector(base.BaseLinuxConnector):
             if is_get_request:
                 res = requests.get(request,
                                    auth=(self.server_username, token),
-                                   verify=False)
+                                   verify=self._verify_cert())
             else:
                 headers = {'content-type': 'application/json'}
                 res = requests.post(
@@ -309,13 +311,19 @@ class ScaleIOConnector(base.BaseLinuxConnector):
                     data=json.dumps(params),
                     headers=headers,
                     auth=(self.server_username, token),
-                    verify=False
+                    verify=self._verify_cert()
                 )
 
             self.server_token = token
             return res
 
         return response
+
+    def _verify_cert(self):
+        verify_cert = self.verify_certificate
+        if self.verify_certificate and self.certificate_path:
+            verify_cert = self.certificate_path
+        return verify_cert
 
     def get_config(self, connection_properties):
         self.local_sdc_ip = connection_properties['hostIP']
@@ -331,6 +339,10 @@ class ScaleIOConnector(base.BaseLinuxConnector):
             connection_properties)
         self.iops_limit = connection_properties['iopsLimit']
         self.bandwidth_limit = connection_properties['bandwidthLimit']
+        self.verify_certificate = (
+            connection_properties.get('verify_certificate')
+        )
+        self.certificate_path = connection_properties.get('certificate_path')
         device_info = {'type': 'block',
                        'path': self.volume_path}
         return device_info
@@ -382,7 +394,7 @@ class ScaleIOConnector(base.BaseLinuxConnector):
             data=json.dumps(params),
             headers=headers,
             auth=(self.server_username, self.server_token),
-            verify=False
+            verify=self._verify_cert()
         )
 
         r = self._check_response(r, request, False, params)
@@ -431,7 +443,7 @@ class ScaleIOConnector(base.BaseLinuxConnector):
                 data=json.dumps(params),
                 headers=headers,
                 auth=(self.server_username, self.server_token),
-                verify=False
+                verify=self._verify_cert()
             )
             r = self._check_response(r, request, False, params)
             if r.status_code != self.OK_STATUS_CODE:
@@ -495,7 +507,7 @@ class ScaleIOConnector(base.BaseLinuxConnector):
             data=json.dumps(params),
             headers=headers,
             auth=(self.server_username, self.server_token),
-            verify=False
+            verify=self._verify_cert()
         )
 
         r = self._check_response(r, request, False, params)
