@@ -1,0 +1,5 @@
+---
+fixes:
+  - |
+    `Bug #1938870 <https://bugs.launchpad.net/cinder/+bug/1938870>`_: Fixed
+    KumoScale Driver replicated volume missing portals attaches without raid.

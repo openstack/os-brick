@@ -45,7 +45,8 @@ volume_replicas = [{'target_nqn': 'fakenqn1', 'vol_uuid': 'fakeuuid1',
 connection_properties = {
     'alias': 'fakealias',
     'vol_uuid': 'fakevoluuid',
-    'volume_replicas': volume_replicas
+    'volume_replicas': volume_replicas,
+    'replica_count': 3
 }
 fake_portal = ('fake', 'portal', 'tcp')
 
@@ -177,7 +178,8 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         mock_get_device_path.return_value = '/dev/nvme1n1'
         connection_properties = {
             'alias': 'fakealias',
-            'volume_replicas': [volume_replicas[0]]
+            'volume_replicas': [volume_replicas[0]],
+            'replica_count': 1
         }
         self.assertEqual(self.connector.get_volume_paths(
             connection_properties),
@@ -257,7 +259,8 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         connection_properties1 = {
             'target_nqn': 'fakenqn',
             'vol_uuid': 'fakeuuid',
-            'volume_replicas': [volume_replicas[0]]
+            'volume_replicas': [volume_replicas[0]],
+            'replica_count': 1
         }
         mock_connect_target_volume.return_value = '/dev/nvme0n1'
         self.assertEqual(
@@ -401,6 +404,7 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         connection_properties = {
             'vol_uuid': 'fakeuuid',
             'volume_replicas': volume_replicas,
+            'replica_count': 3,
             'device_path': '/dev/md/md1'
         }
         self.connector.disconnect_volume(connection_properties, None)
@@ -431,7 +435,8 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         connection_properties = {
             'target_nqn': 'fakenqn',
             'vol_uuid': 'fakeuuid',
-            'volume_replicas': [volume_replicas[0]]
+            'volume_replicas': [volume_replicas[0]],
+            'replica_count': 1
         }
         mock_device_path.return_value = '/dev/nvme0n1'
         mock_device_size.return_value = 100
