@@ -512,33 +512,19 @@ class NVMeOFConnector(base.BaseLinuxConnector):
 
     def _connect_target_volume(self, target_nqn, vol_uuid, portals):
         try:
-            host_device_path = NVMeOFConnector.get_nvme_device_path(
-                self, target_nqn, vol_uuid)
-        except exception.VolumeDeviceNotFound:
-            host_device_path = None
-
-        if not host_device_path:
-            any_connect = NVMeOFConnector.connect_to_portals(
-                self, target_nqn, portals)
-            if not any_connect:
-                LOG.error(
-                    "No successful connections: %(host_devices)s",
-                    {'host_devices': target_nqn})
-                raise exception.VolumeDeviceNotFound(device=target_nqn)
-
-            host_device_path = NVMeOFConnector.get_nvme_device_path(
-                self, target_nqn, vol_uuid)
-            if not host_device_path:
-                LOG.error(
-                    "No accessible volume device: %(host_devices)s",
-                    {'host_devices': target_nqn})
-                raise exception.VolumeDeviceNotFound(device=target_nqn)
-        else:
+            NVMeOFConnector._get_nvme_controller(self, target_nqn)
             NVMeOFConnector.rescan(self, target_nqn, vol_uuid)
-            host_device_path = NVMeOFConnector.get_nvme_device_path(
-                self, target_nqn, vol_uuid)
-
-        return host_device_path
+        except exception.VolumeDeviceNotFound:
+            if not NVMeOFConnector.connect_to_portals(
+                    self, target_nqn, portals):
+                LOG.error("No successful connections to: %s", target_nqn)
+                raise exception.VolumeDeviceNotFound(device=target_nqn)
+        dev_path = NVMeOFConnector.get_nvme_device_path(
+            self, target_nqn, vol_uuid)
+        if not dev_path:
+            LOG.error("Target %s volume %s not found", target_nqn, vol_uuid)
+            raise exception.VolumeDeviceNotFound(device=vol_uuid)
+        return dev_path
 
     @staticmethod
     def connect_to_portals(executor, target_nqn, target_portals):

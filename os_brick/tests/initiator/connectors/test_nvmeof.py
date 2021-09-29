@@ -493,15 +493,18 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         )
         mock_device_size.assert_called_with(device_path)
 
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_controller')
     @mock.patch.object(nvmeof.NVMeOFConnector, 'rescan')
     @mock.patch.object(nvmeof.NVMeOFConnector, 'get_nvme_device_path')
     def test__connect_target_volume_with_connected_device(
-            self, mock_device_path, mock_rescan):
+            self, mock_device_path, mock_rescan, mock_controller):
         mock_device_path.return_value = '/dev/nvme0n1'
         self.assertEqual(
             self.connector._connect_target_volume(
                 'fakenqn', 'fakeuuid', [('fake', 'portal', 'tcp')]),
             '/dev/nvme0n1')
+        mock_controller.assert_called_with(self.connector, 'fakenqn')
+        mock_rescan.assert_called_with(self.connector, 'fakenqn', 'fakeuuid')
         mock_device_path.assert_called_with(
             self.connector, 'fakenqn', 'fakeuuid')
 
@@ -517,23 +520,23 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         mock_device_path.assert_called_with(
             self.connector, TARGET_NQN, VOL_UUID)
 
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_controller')
     @mock.patch.object(nvmeof.NVMeOFConnector, 'connect_to_portals')
-    @mock.patch.object(nvmeof.NVMeOFConnector, 'get_nvme_device_path')
     def test__connect_target_volume_no_portals_con(
-            self, mock_device_path, mock_portals):
-        mock_device_path.return_value = None
+            self, mock_portals, mock_controller):
+        mock_controller.side_effect = exception.VolumeDeviceNotFound()
         mock_portals.return_value = None
         self.assertRaises(exception.VolumeDeviceNotFound,
                           self.connector._connect_target_volume, 'fakenqn',
                           'fakeuuid', [fake_portal])
-        mock_device_path.assert_called_with(
-            self.connector, 'fakenqn', 'fakeuuid')
 
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_controller')
     @mock.patch.object(nvmeof.NVMeOFConnector, 'connect_to_portals')
     @mock.patch.object(nvmeof.NVMeOFConnector, 'get_nvme_device_path')
     def test__connect_target_volume_new_device_path(
-            self, mock_device_path, mock_connect_portal):
-        mock_device_path.side_effect = (None, '/dev/nvme0n1')
+            self, mock_device_path, mock_connect_portal, mock_controller):
+        mock_controller.side_effect = exception.VolumeDeviceNotFound()
+        mock_device_path.return_value = '/dev/nvme0n1'
         self.assertEqual(
             self.connector._connect_target_volume(
                 'fakenqn', 'fakeuuid', [('fake', 'portal', 'tcp')]),
