@@ -194,7 +194,7 @@ class NVMeOFConnector(base.BaseLinuxConnector):
         path = set(all_nvme_devices) - set(current_nvme_devices)
         if not path:
             raise exception.VolumePathsNotFound()
-        return list(path)
+        return list(path)[0]
 
     @utils.retry(exception.VolumeDeviceNotFound)
     def _get_device_path_by_nguid(self, nguid):
@@ -205,14 +205,14 @@ class NVMeOFConnector(base.BaseLinuxConnector):
         LOG.debug("Try to retrieve symlink to %(device_path)s.",
                   {"device_path": device_path})
         try:
-            paths, _err = self._execute('readlink',
-                                        '-e',
-                                        device_path,
-                                        run_as_root=True,
-                                        root_helper=self._root_helper)
-            if not paths:
+            path, _err = self._execute('readlink',
+                                       '-e',
+                                       device_path,
+                                       run_as_root=True,
+                                       root_helper=self._root_helper)
+            if not path:
                 raise exception.VolumePathsNotFound()
-            return paths.split()[0]
+            return path.rstrip()
         except putils.ProcessExecutionError as e:
             LOG.exception(e)
             raise exception.VolumeDeviceNotFound(device=device_path)

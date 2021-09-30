@@ -214,6 +214,23 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
                                              root_helper=None,
                                              run_as_root=True)
 
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_devices')
+    def test__get_device_path(self, mock_nvme_devices):
+        mock_nvme_devices.return_value = ['/dev/nvme0n1',
+                                          '/dev/nvme1n1',
+                                          '/dev/nvme0n2']
+        current_devices = ['/dev/nvme0n1', '/dev/nvme0n2']
+        self.assertEqual(self.connector._get_device_path(current_devices),
+                         '/dev/nvme1n1')
+
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_devices')
+    def test__get_device_path_no_new_device(self, mock_nvme_devices):
+        current_devices = ['/dev/nvme0n1', '/dev/nvme0n2']
+        mock_nvme_devices.return_value = current_devices
+        self.assertRaises(exception.VolumePathsNotFound,
+                          self.connector._get_device_path,
+                          current_devices)
+
     @mock.patch.object(nvmeof.NVMeOFConnector, '_execute', autospec=True)
     def test__get_device_path_by_nguid(self, mock_execute):
         mock_execute.return_value = '/dev/nvme0n1\n', None
