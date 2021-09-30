@@ -1,0 +1,6 @@
+---
+fixes:
+  - |
+    NVMe-oF connector `bug #1945323
+    <https://bugs.launchpad.net/os-brick/+bug/1945323>`_ [bugs.launchpad.net]: Fixed a regression
+    where connect_volume returned a list with a single path instead of just the path
