@@ -164,7 +164,7 @@ class FibreChannelConnector(base.BaseLinuxConnector):
         return volume_paths
 
     @utils.trace
-    @synchronized('extend_volume')
+    @synchronized('extend_volume', external=True)
     def extend_volume(self, connection_properties):
         """Update the local kernel's size information.
 
@@ -185,7 +185,7 @@ class FibreChannelConnector(base.BaseLinuxConnector):
             raise exception.VolumePathsNotFound()
 
     @utils.trace
-    @synchronized('connect_volume')
+    @synchronized('connect_volume', external=True)
     def connect_volume(self, connection_properties):
         """Attach the volume to instance_name.
 
@@ -310,7 +310,7 @@ class FibreChannelConnector(base.BaseLinuxConnector):
         return raw_devices
 
     @utils.trace
-    @synchronized('connect_volume')
+    @synchronized('connect_volume', external=True)
     def disconnect_volume(self, connection_properties, device_info,
                           force=False, ignore_errors=False):
         """Detach the volume from instance_name.
