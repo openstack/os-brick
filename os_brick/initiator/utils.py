@@ -42,5 +42,6 @@ def guard_connection(device):
     else:
         # Cinder passes an OVO, but Nova passes a dictionary, so we use dict
         # key access that works with both.
-        with lockutils.lock(device['service_uuid'], 'os-brick-'):
+        with lockutils.lock(device['service_uuid'], 'os-brick-',
+                            external=True):
             yield
