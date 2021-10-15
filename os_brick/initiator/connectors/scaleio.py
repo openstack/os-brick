@@ -336,7 +336,7 @@ class ScaleIOConnector(base.BaseLinuxConnector):
         return device_info
 
     @utils.trace
-    @lockutils.synchronized('scaleio', 'scaleio-')
+    @lockutils.synchronized('scaleio', 'scaleio-', external=True)
     def connect_volume(self, connection_properties):
         """Connect the volume.
 
@@ -450,7 +450,7 @@ class ScaleIOConnector(base.BaseLinuxConnector):
         return device_info
 
     @utils.trace
-    @lockutils.synchronized('scaleio', 'scaleio-')
+    @lockutils.synchronized('scaleio', 'scaleio-', external=True)
     def disconnect_volume(self, connection_properties, device_info,
                           force=False, ignore_errors=False):
         """Disconnect the ScaleIO volume.

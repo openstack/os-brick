@@ -85,7 +85,7 @@ class HuaweiStorHyperConnector(base.BaseLinuxConnector):
         return out['dev_addr']
 
     @utils.trace
-    @synchronized('connect_volume')
+    @synchronized('connect_volume', external=True)
     def connect_volume(self, connection_properties):
         """Connect to a volume.
 
@@ -116,7 +116,7 @@ class HuaweiStorHyperConnector(base.BaseLinuxConnector):
         return device_info
 
     @utils.trace
-    @synchronized('connect_volume')
+    @synchronized('connect_volume', external=True)
     def disconnect_volume(self, connection_properties, device_info,
                           force=False, ignore_errors=False):
         """Disconnect a volume from the local host.
