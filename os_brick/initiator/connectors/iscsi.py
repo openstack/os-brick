@@ -474,7 +474,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
             root_helper=self._root_helper)
 
     @utils.trace
-    @synchronized('extend_volume')
+    @synchronized('extend_volume', external=True)
     def extend_volume(self, connection_properties: dict):
         """Update the local kernel's size information.
 
@@ -497,17 +497,9 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
             raise exception.VolumePathsNotFound()
 
     @utils.trace
-    @synchronized('connect_volume')
+    @synchronized('connect_volume', external=True)
     def connect_volume(self, connection_properties: dict):
         """Attach the volume to instance_name.
-
-        NOTE: Will retry up to three times to handle the case where c-vol
-        and n-cpu are both using os-brick to manage iSCSI sessions but they
-        are on the same node and using different locking directories. In this
-        case, even though this call is synchronized, they will be separate
-        locks and can still overlap with connect and disconnect. Since a
-        disconnect during an initial attach can't cause IO failure (the device
-        has not been made available yet), we just try the connection again.
 
         :param connection_properties: The valid dictionary that describes all
                                       of the target volume attributes.
@@ -870,7 +862,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         return device_map
 
     @utils.trace
-    @synchronized('connect_volume')
+    @synchronized('connect_volume', external=True)
     def disconnect_volume(self, connection_properties, device_info,
                           force=False, ignore_errors=False):
         """Detach the volume from instance_name.
@@ -1056,7 +1048,8 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         target_iqn = connection_properties['target_iqn']
 
         lock_name = f'connect_to_iscsi_portal-{portal}-{target_iqn}'
-        method = synchronized(lock_name)(self._connect_to_iscsi_portal_unsafe)
+        method = synchronized(
+            lock_name, external=True)(self._connect_to_iscsi_portal_unsafe)
         return method(connection_properties)
 
     @utils.retry((exception.BrickException))
