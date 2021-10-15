@@ -19,6 +19,8 @@ import testtools
 from unittest import mock
 
 import fixtures
+from oslo_concurrency import lockutils
+from oslo_config import fixture as config_fixture
 from oslo_utils import strutils
 
 
@@ -64,6 +66,13 @@ class TestCase(testtools.TestCase):
         patcher = mock.patch('os_brick.utils._time_sleep')
         patcher.start()
         self.addCleanup(patcher.stop)
+
+        # At runtime this would be set by the library user: Cinder, Nova, etc.
+        self.useFixture(fixtures.NestedTempfile())
+        lock_path = self.useFixture(fixtures.TempDir()).path
+        self.fixture = self.useFixture(config_fixture.Config(lockutils.CONF))
+        self.fixture.config(lock_path=lock_path, group='oslo_concurrency')
+        lockutils.set_defaults(lock_path)
 
     def _common_cleanup(self):
         """Runs after each test method to tear down test environment."""
