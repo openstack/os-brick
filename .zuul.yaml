@@ -26,14 +26,12 @@
     name: os-brick-code-coverage
     parent: openstack-tox-cover
     timeout: 2400
-    irrelevant-files:
+    irrelevant-files: &non-code-files
       - ^(test-|)requirements.txt$
       - ^.*\.rst$
       - ^doc/.*$
       - ^releasenotes/.*$
-      - ^setup.cfg$
       - ^tools/.*$
-      - ^tox.ini$
 
 - job:
     name: os-brick-src-devstack-plugin-ceph
@@ -44,6 +42,10 @@
     parent: cinder-plugin-ceph-tempest
     required-projects:
       - opendev.org/openstack/os-brick
+    irrelevant-files: &doc-files
+      - ^.*\.rst$
+      - ^doc/.*$
+      - ^releasenotes/.*$
 
 - job:
     name: os-brick-src-tempest-lvm-lio-barbican
@@ -55,15 +57,18 @@
         * legacy-tempest-dsvm-full-lio-src-os-brick
     required-projects:
       - opendev.org/openstack/os-brick
+    irrelevant-files: *doc-files
 
 - job:
     name: os-brick-src-tempest-nfs
     parent: devstack-plugin-nfs-tempest-full
     required-projects:
       - opendev.org/openstack/os-brick
+    irrelevant-files: *doc-files
 
 - job:
     name: os-brick-mypy
     parent: openstack-tox
     vars:
       tox_envlist: mypy
+    irrelevant-files: *non-code-files
