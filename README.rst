@@ -31,9 +31,8 @@ Features
 Hacking
 -------
 
-Hacking on brick requires python-gdbm (for Debian derived distributions),
-Python 2.7 and Python 3.4. A recent tox is required, as is a recent virtualenv
-(13.1.0 or newer).
+Hacking on brick requires Python 3.6+. A recent tox is required, as is a recent
+virtualenv (20.2.2 or newer).
 
 If "tox -e py34" fails with the error "db type could not be determined", remove
 the .testrepository/ directory and then run "tox -e py34".
