@@ -1,0 +1,12 @@
+---
+upgrade:
+  - |
+    Services using os-brick need to set the ``lock_path`` configuration option
+    in their ``[oslo_concurrency]`` section since it doesn't have a valid
+    default (related `bug #1947370
+    <https://bugs.launchpad.net/cinder/+bug/1947370>`_).
+fixes:
+  - |
+    `Bug #1947370 <https://bugs.launchpad.net/cinder/+bug/1947370>`_: Fixed
+    race conditions on iSCSI with shared targets and NVMe ``connect_volume``
+    and ``disconnect_volume`` calls.
