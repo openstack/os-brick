@@ -24,6 +24,7 @@ from os_brick.initiator import connector
 from os_brick.initiator.connectors import base
 from os_brick.initiator.connectors import fake
 from os_brick.initiator.connectors import iscsi
+from os_brick.initiator.connectors import lightos
 from os_brick.initiator.connectors import nvmeof
 from os_brick.initiator import linuxfc
 from os_brick.privileged import rootwrap as priv_rootwrap
@@ -41,6 +42,8 @@ class ZeroIntervalLoopingCall(loopingcall.FixedIntervalLoopingCall):
 
 class ConnectorUtilsTestCase(test_base.TestCase):
 
+    @mock.patch.object(lightos.LightOSConnector, 'get_hostnqn',
+                       return_value=None)
     @mock.patch.object(nvmeof.NVMeOFConnector, '_get_system_uuid',
                        return_value=None)
     @mock.patch.object(nvmeof.NVMeOFConnector, '_get_host_uuid',
@@ -63,6 +66,7 @@ class ConnectorUtilsTestCase(test_base.TestCase):
                                              mock_nqn,
                                              mock_hostuuid,
                                              mock_sysuuid,
+                                             mock_lightos_hostnqn,
                                              host='fakehost'):
         props_actual = connector.get_connector_properties('sudo',
                                                           MY_IP,
