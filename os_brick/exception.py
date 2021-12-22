@@ -15,6 +15,7 @@
 """Exceptions for the Brick library."""
 
 import traceback
+from typing import Iterable, List, Optional  # noqa: H301
 
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
@@ -34,7 +35,7 @@ class BrickException(Exception):
     """
     message = _("An unknown exception occurred.")
     code = 500
-    headers = {}
+    headers: dict = {}
     safe = False
 
     def __init__(self, message=None, **kwargs):
@@ -183,8 +184,9 @@ class ExceptionChainer(BrickException):
     logged with warning level.
     """
     def __init__(self, *args, **kwargs):
-        self._exceptions = []
-        self._repr = None
+        self._exceptions: List[tuple] = []
+        self._repr: Optional[str] = None
+        self._exc_msg_args = []
         super(ExceptionChainer, self).__init__(*args, **kwargs)
 
     def __repr__(self):
@@ -199,21 +201,24 @@ class ExceptionChainer(BrickException):
 
     __str__ = __repr__
 
-    def __nonzero__(self):
+    def __nonzero__(self) -> bool:
         # We want to be able to do boolean checks on the exception
         return bool(self._exceptions)
 
     __bool__ = __nonzero__  # For Python 3
 
-    def add_exception(self, exc_type, exc_val, exc_tb):
+    def add_exception(self, exc_type, exc_val, exc_tb) -> None:
         # Clear the representation cache
         self._repr = None
         self._exceptions.append((exc_type, exc_val, exc_tb))
 
-    def context(self, catch_exception, msg='', *msg_args):
+    def context(self,
+                catch_exception: bool,
+                msg: str = '',
+                *msg_args: Iterable):
         self._catch_exception = catch_exception
         self._exc_msg = msg
-        self._exc_msg_args = msg_args
+        self._exc_msg_args = list(msg_args)
         return self
 
     def __enter__(self):

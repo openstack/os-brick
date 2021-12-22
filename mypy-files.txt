@@ -1,4 +1,7 @@
+os_brick/exception.py
 os_brick/executor.py
+os_brick/i18n.py
+os_brick/utils.py
 os_brick/initiator/linuxscsi.py
 os_brick/initiator/connectors/base.py
 os_brick/initiator/connectors/base_iscsi.py
