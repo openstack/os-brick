@@ -661,8 +661,10 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
             ['mdadm', '--assemble', '--run', '/dev/md/md1', '-o', '/dev/sda'],
             True)
 
+    @mock.patch.object(os.path, 'exists')
     @mock.patch.object(nvmeof.NVMeOFConnector, 'run_mdadm')
-    def test_create_raid_cmd_simple(self, mock_run_mdadm):
+    def test_create_raid_cmd_simple(self, mock_run_mdadm, mock_os):
+        mock_os.return_value = True
         self.assertIsNone(self.connector.create_raid(
             self.connector, ['/dev/sda'], '1', 'md1', 'name', True))
         mock_run_mdadm.assert_called_with(
@@ -670,6 +672,7 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
             ['mdadm', '-C', '-o', 'md1', '-R', '-N', 'name', '--level', '1',
              '--raid-devices=1', '--bitmap=internal', '--homehost=any',
              '--failfast', '--assume-clean', '/dev/sda'])
+        mock_os.assert_called_with('/dev/md/name')
 
     @mock.patch.object(nvmeof.NVMeOFConnector, 'stop_raid')
     @mock.patch.object(nvmeof.NVMeOFConnector, 'is_raid_exists')
@@ -679,7 +682,7 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         self.assertIsNone(self.connector.end_raid(
             self.connector, '/dev/md/md1'))
         mock_raid_exists.assert_called_with(self.connector, '/dev/md/md1')
-        mock_stop_raid.assert_called_with(self.connector, '/dev/md/md1')
+        mock_stop_raid.assert_called_with(self.connector, '/dev/md/md1', True)
 
     @mock.patch.object(os.path, 'exists')
     @mock.patch.object(nvmeof.NVMeOFConnector, 'stop_raid')
@@ -691,7 +694,7 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         self.assertIsNone(self.connector.end_raid(
             self.connector, '/dev/md/md1'))
         mock_raid_exists.assert_called_with(self.connector, '/dev/md/md1')
-        mock_stop_raid.assert_called_with(self.connector, '/dev/md/md1')
+        mock_stop_raid.assert_called_with(self.connector, '/dev/md/md1', True)
         mock_os.assert_called_with('/dev/md/md1')
 
     @mock.patch.object(os.path, 'exists')
@@ -704,16 +707,16 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         self.assertIsNone(self.connector.end_raid(
             self.connector, '/dev/md/md1'))
         mock_raid_exists.assert_called_with(self.connector, '/dev/md/md1')
-        mock_stop_raid.assert_called_with(self.connector, '/dev/md/md1')
+        mock_stop_raid.assert_called_with(self.connector, '/dev/md/md1', True)
         mock_os.assert_called_with('/dev/md/md1')
 
     @mock.patch.object(nvmeof.NVMeOFConnector, 'run_mdadm')
     def test_stop_raid_simple(self, mock_run_mdadm):
         mock_run_mdadm.return_value = 'mdadm output'
         self.assertEqual(self.connector.stop_raid(
-            self.connector, '/dev/md/md1'), 'mdadm output')
+            self.connector, '/dev/md/md1', True), 'mdadm output')
         mock_run_mdadm.assert_called_with(
-            self.connector, ['mdadm', '--stop', '/dev/md/md1'])
+            self.connector, ['mdadm', '--stop', '/dev/md/md1'], True)
 
     @mock.patch.object(nvmeof.NVMeOFConnector, 'run_mdadm')
     def test_remove_raid_simple(self, mock_run_mdadm):
