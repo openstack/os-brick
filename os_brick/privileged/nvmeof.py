@@ -47,9 +47,16 @@ def create_hostnqn():
         # This is different from OSError's ENOENT, which is missing nvme
         # command.  This ENOENT is when nvme says there isn't an nqn.
         except putils.ProcessExecutionError as e:
-            if e.exit_code != errno.ENOENT:
+            err_msg = e.stdout[:e.stdout.find('\n')]
+            show_hostnqn_subcmd_missing = (
+                "ERROR: Invalid sub-command".casefold() in err_msg.casefold())
+            if show_hostnqn_subcmd_missing:
+                LOG.debug('Version too old cannot check current hostnqn.')
+            elif e.exit_code == errno.ENOENT:
+                LOG.debug('No nqn could be formed from dmi or systemd.')
+            else:
+                LOG.debug('Unknown error from nvme show-hostnqn: %s', err_msg)
                 raise
-            LOG.debug('No nqn could be formed from dmi or systemd.')
 
         if not host_nqn:
             LOG.debug('Generating nqn')
