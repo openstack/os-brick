@@ -45,6 +45,8 @@ nvmec_match = re.compile(nvmec_pattern)
 class LightOSConnector(base.BaseLinuxConnector):
     """Connector class to attach/detach LightOS volumes using NVMe/TCP."""
 
+    WAIT_DEVICE_TIMEOUT = 60
+
     def __init__(self,
                  root_helper,
                  message_queue=None,
@@ -132,7 +134,7 @@ class LightOSConnector(base.BaseLinuxConnector):
     def dsc_disconnect_volume(self, connection_info):
         uuid = connection_info['uuid']
         try:
-            cmd = shlex.split('mv -f {} /tmp'.format(self.dsc_file_name(uuid)))
+            cmd = shlex.split('rm -f {}'.format(self.dsc_file_name(uuid)))
             (out, err) = self._execute(*cmd, root_helper=self._root_helper,
                                        run_as_root=True)
         except putils.ProcessExecutionError as e:
@@ -191,7 +193,7 @@ class LightOSConnector(base.BaseLinuxConnector):
         file_path = "/sys/class/block/*/wwid"
         wwid = "uuid." + uuid
         start = time.time()
-        while time.time() < start + 60:
+        while time.time() < start + self.WAIT_DEVICE_TIMEOUT:
 
             try:
                 devname, err = self._execute('readlink', '-eq', lnk_path,
