@@ -13,8 +13,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from unittest import mock
 import queue
+from unittest import mock
 
 from os_brick.initiator.connectors import lightos
 from os_brick.tests.initiator import test_connector
@@ -22,14 +22,15 @@ from os_brick.tests.initiator import test_connector
 
 FAKE_NQN = "nqn.fake.qnq"
 
+
 class LightosConnectorTestCase(test_connector.ConnectorTestCase):
 
     """Test cases for NVMe initiator class."""
-    
+
     def setUp(self):
         super(LightosConnectorTestCase, self).setUp()
         self.connector = lightos.LightOSConnector(None,
-                                                execute=self.fake_execute)
+                                                  execute=self.fake_execute)
 
     @mock.patch.object(lightos.LightOSConnector, 'get_hostnqn',
                        return_value=FAKE_NQN)
@@ -42,7 +43,7 @@ class LightosConnectorTestCase(test_connector.ConnectorTestCase):
 
     def test_find_dsc(self):
         pass
-    
+
     def test_dsc_do_connect_volume(self):
         pass
 
@@ -51,7 +52,7 @@ class LightosConnectorTestCase(test_connector.ConnectorTestCase):
 
     def test_get_device_by_uuid(self):
         pass
-    
+
     @mock.patch.object(lightos.LightOSConnector, '_get_device_by_uuid',
                        return_value="/dev/nvme/nvme0n1")
     @mock.patch.object(lightos.LightOSConnector,
@@ -60,18 +61,20 @@ class LightosConnectorTestCase(test_connector.ConnectorTestCase):
     def test_get_size_by_uuid(self, mock_uuid, mock_execute):
         size = self.connector._get_size_by_uuid("123")
         self.assertEqual(size, 10 * 512)
+
     @mock.patch.object(lightos.LightOSConnector, 'dsc_connect_volume',
                        return_value=None)
     @mock.patch.object(lightos.LightOSConnector, '_get_device_by_uuid',
-                       return_value="/dev/nvme0n1")              
+                       return_value="/dev/nvme0n1")
     def test_connect_volume(self, dsc_connect, path):
         connection_properties = {"hostnqn": FAKE_NQN, "found_dsc": True,
                                  "uuid": "123"}
         expected_device_info = {'type': 'block', "path": "/dev/nvme0n1"}
         device_info = self.connector.connect_volume(connection_properties)
-        
+
         self.assertEqual(expected_device_info, device_info)
-    @mock.patch.object(lightos.LightOSConnector, 'dsc_disconnect_volume') 
+
+    @mock.patch.object(lightos.LightOSConnector, 'dsc_disconnect_volume')
     def test_disconnect_volume(self, mock_disconnect):
         connection_properties = {"hostnqn": FAKE_NQN, "found_dsc": True,
                                  "uuid": "123"}
@@ -88,7 +91,7 @@ class LightosConnectorTestCase(test_connector.ConnectorTestCase):
         lightos_db = {"123": "fake_connection"}
         self.connector.monitor_message_queue(message_queue, lightos_db)
         self.assertEqual(len(lightos_db), 0)
-    
+
     def test_monitor_message_queue_add(self):
         message_queue = queue.Queue()
         connection = {"uuid": "123"}
