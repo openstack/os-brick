@@ -24,8 +24,8 @@ from os_brick.initiator import connector
 from os_brick.initiator.connectors import base
 from os_brick.initiator.connectors import fake
 from os_brick.initiator.connectors import iscsi
-from os_brick.initiator.connectors import nvmeof
 from os_brick.initiator.connectors import lightos
+from os_brick.initiator.connectors import nvmeof
 from os_brick.initiator import linuxfc
 from os_brick.privileged import rootwrap as priv_rootwrap
 from os_brick.tests import base as test_base
