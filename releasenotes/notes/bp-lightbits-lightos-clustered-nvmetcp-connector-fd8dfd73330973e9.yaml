@@ -1,0 +1,10 @@
+---
+features:
+  - |
+    Lightbits LightOS connector: new os-brick connector for
+    Lightbits(TM) LightOS(R). Lightbits Labs
+    (https://www.lightbitslabs.com) LightOS is software-defined, cloud
+    native, high-performance, clustered scale-out and redundant
+    NVMe/TCP storage that performs like local NVMe flash. This
+    connector requires the Lightbits discovery-client, available from
+    Lightbits Labs.
