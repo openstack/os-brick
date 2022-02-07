@@ -24,6 +24,7 @@ from os_brick.initiator.connectors import nvmeof
 from os_brick.initiator import linuxscsi
 from os_brick.privileged import rootwrap as priv_rootwrap
 from os_brick.tests.initiator import test_connector
+from os_brick import utils
 
 
 TARGET_NQN = 'target.nqn'
@@ -137,7 +138,7 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
 
     @mock.patch.object(nvmeof.NVMeOFConnector, 'nvme_present',
                        return_value=True)
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_host_nqn',
+    @mock.patch.object(utils, 'get_host_nqn',
                        return_value='fakenqn')
     @mock.patch.object(nvmeof.NVMeOFConnector, '_get_system_uuid',
                        return_value=None)
@@ -151,7 +152,7 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         self.assertEqual(expected_props, props)
 
     @mock.patch.object(nvmeof.NVMeOFConnector, 'nvme_present')
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_host_nqn', autospec=True)
+    @mock.patch.object(utils, 'get_host_nqn', autospec=True)
     @mock.patch.object(nvmeof.NVMeOFConnector, '_get_system_uuid',
                        autospec=True)
     @mock.patch.object(nvmeof.NVMeOFConnector, '_get_host_uuid', autospec=True)
@@ -948,21 +949,21 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         mock_open.assert_called_once_with('/etc/nvme/hostnqn', 'r')
         self.assertEqual(HOST_NQN, host_nqn)
 
-    @mock.patch.object(nvmeof.priv_nvme, 'create_hostnqn')
+    @mock.patch.object(utils.priv_nvme, 'create_hostnqn')
     @mock.patch.object(builtins, 'open')
     def test_get_host_nqn_io_err(self, mock_open, mock_create):
         mock_create.return_value = mock.sentinel.nqn
         mock_open.side_effect = IOError()
-        result = self.connector._get_host_nqn()
+        result = utils.get_host_nqn()
         mock_open.assert_called_once_with('/etc/nvme/hostnqn', 'r')
         mock_create.assert_called_once_with()
         self.assertEqual(mock.sentinel.nqn, result)
 
-    @mock.patch.object(nvmeof.priv_nvme, 'create_hostnqn')
+    @mock.patch.object(utils.priv_nvme, 'create_hostnqn')
     @mock.patch.object(builtins, 'open')
     def test_get_host_nqn_err(self, mock_open, mock_create):
         mock_open.side_effect = Exception()
-        result = self.connector._get_host_nqn()
+        result = utils.get_host_nqn()
         mock_open.assert_called_once_with('/etc/nvme/hostnqn', 'r')
         mock_create.assert_not_called()
         self.assertIsNone(result)

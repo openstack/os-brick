@@ -23,6 +23,7 @@ from os_brick.initiator.connectors import lightos
 from os_brick.initiator import linuxscsi
 from os_brick.privileged import lightos as priv_lightos
 from os_brick.tests.initiator import test_connector
+from os_brick import utils
 
 FAKE_NQN = "nqn.fake.qnq"
 
@@ -74,18 +75,18 @@ class LightosConnectorTestCase(test_connector.ConnectorTestCase):
                 target_port=8009
             )
         return dict(
-            nqn=FAKE_LIGHTOS_CLUSTER_INFO['subsystemNQN'],
+            subsysnqn=FAKE_LIGHTOS_CLUSTER_INFO['subsystemNQN'],
             uuid=FAKE_LIGHTOS_CLUSTER_INFO['UUID'],
             lightos_nodes=lightos_nodes
         )
 
-    @mock.patch.object(lightos.LightOSConnector, 'get_hostnqn',
+    @mock.patch.object(utils, 'get_host_nqn',
                        return_value=FAKE_NQN)
     @mock.patch.object(lightos.LightOSConnector, 'find_dsc',
                        return_value=True)
     def test_get_connector_properties(self, mock_nqn, mock_dsc):
         props = self.connector.get_connector_properties(None)
-        expected_props = {"hostnqn": FAKE_NQN, "found_dsc": True}
+        expected_props = {"nqn": FAKE_NQN, "found_dsc": True}
         self.assertEqual(expected_props, props)
 
     @mock.patch.object(lightos.http.client.HTTPConnection, "request",
@@ -109,7 +110,7 @@ class LightosConnectorTestCase(test_connector.ConnectorTestCase):
             http.client.OK)
         self.assertEqual(self.connector.find_dsc(), '')
 
-    @mock.patch.object(lightos.LightOSConnector, 'get_hostnqn',
+    @mock.patch.object(utils, 'get_host_nqn',
                        return_value=FAKE_NQN)
     @mock.patch.object(lightos.priv_lightos, 'move_dsc_file',
                        return_value="/etc/discovery_client/discovery.d/v0")
@@ -120,7 +121,7 @@ class LightosConnectorTestCase(test_connector.ConnectorTestCase):
                                     mock_check_device):
         self.connector.connect_volume(self._get_connection_info())
 
-    @mock.patch.object(lightos.LightOSConnector, 'get_hostnqn',
+    @mock.patch.object(utils, 'get_host_nqn',
                        return_value=FAKE_NQN)
     @mock.patch.object(lightos.priv_lightos, 'move_dsc_file',
                        return_value="/etc/discovery_client/discovery.d/v0")
@@ -174,7 +175,7 @@ class LightosConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(lightos.LightOSConnector, '_get_device_by_uuid',
                        return_value="/dev/nvme0n1")
     def test_connect_volume(self, dsc_connect, path):
-        connection_properties = {"hostnqn": FAKE_NQN, "found_dsc": True,
+        connection_properties = {"nqn": FAKE_NQN, "found_dsc": True,
                                  "uuid": "123"}
         expected_device_info = {'type': 'block', "path": "/dev/nvme0n1"}
         device_info = self.connector.connect_volume(connection_properties)
@@ -186,7 +187,7 @@ class LightosConnectorTestCase(test_connector.ConnectorTestCase):
                        return_value="/dev/nvme0n1")
     @mock.patch.object(lightos.LightOSConnector, 'dsc_disconnect_volume')
     def test_disconnect_volume(self, mock_disconnect, mock_uuid, mock_flush):
-        connection_properties = {"hostnqn": FAKE_NQN, "found_dsc": True,
+        connection_properties = {"nqn": FAKE_NQN, "found_dsc": True,
                                  "uuid": "123"}
         self.connector.disconnect_volume(connection_properties, None)
         mock_disconnect.assert_called_once_with(connection_properties)

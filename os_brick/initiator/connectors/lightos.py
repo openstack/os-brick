@@ -29,7 +29,6 @@ from os_brick import exception
 from os_brick.i18n import _
 from os_brick.initiator.connectors import base
 from os_brick.privileged import lightos as priv_lightos
-from os_brick.privileged import nvmeof as priv_nvme
 from os_brick import utils
 
 
@@ -71,7 +70,7 @@ class LightOSConnector(base.BaseLinuxConnector):
         lightos_connector = LightOSConnector(root_helper=root_helper,
                                              message_queue=None,
                                              execute=kwargs.get('execute'))
-        hostnqn = lightos_connector.get_hostnqn()
+        hostnqn = utils.get_host_nqn()
         found_dsc = lightos_connector.find_dsc()
 
         if not found_dsc:
@@ -80,7 +79,7 @@ class LightOSConnector(base.BaseLinuxConnector):
         if hostnqn:
             LOG.debug("LIGHTOS: finally hostnqn: %s dsc: %s",
                       hostnqn, found_dsc)
-            props['hostnqn'] = hostnqn
+            props['nqn'] = hostnqn
             props['found_dsc'] = found_dsc
         else:
             LOG.debug('LIGHTOS: no hostnqn found.')
@@ -108,9 +107,9 @@ class LightOSConnector(base.BaseLinuxConnector):
         if not self.dsc_need_connect(connection_info):
             return
 
-        subsysnqn = connection_info['nqn']
+        subsysnqn = connection_info['subsysnqn']
         uuid = connection_info['uuid']
-        hostnqn = self.get_hostnqn()
+        hostnqn = utils.get_host_nqn()
         with tempfile.NamedTemporaryFile(mode='w', delete=False) as dscfile:
             dscfile.write('# os_brick connector dsc file for LightOS'
                           ' volume: {}\n'.format(uuid))
@@ -334,13 +333,3 @@ class LightOSConnector(base.BaseLinuxConnector):
         uuid = connection_properties['uuid']
         new_size = self._get_size_by_uuid(uuid)
         return new_size
-
-    def get_hostnqn(self):
-        try:
-            with open('/etc/nvme/hostnqn', 'r') as f:
-                host_nqn = f.read().strip()
-        except IOError:
-            host_nqn = priv_nvme.create_hostnqn()
-        except Exception:
-            host_nqn = None
-        return host_nqn
