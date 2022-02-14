@@ -783,6 +783,19 @@ class NVMeOFConnector(base.BaseLinuxConnector):
 
         LOG.debug('[!] cmd = ' + str(cmd))
         NVMeOFConnector.run_mdadm(executor, cmd)
+        # sometimes under load, md is not created right away so we wait
+        for i in range(60):
+            try:
+                is_exist = os.path.exists("/dev/md/" + name)
+                LOG.debug("[!] md is_exist = %s", is_exist)
+                if is_exist:
+                    return
+                time.sleep(1)
+            except Exception:
+                LOG.debug('[!] Exception_wait_raid!')
+        msg = _("md: /dev/md/%s not found.") % name
+        LOG.error(msg)
+        raise exception.NotFound(message=msg)
 
     @staticmethod
     def end_raid(executor, device_path):
@@ -791,12 +804,11 @@ class NVMeOFConnector(base.BaseLinuxConnector):
             for i in range(10):
                 try:
                     cmd_out = NVMeOFConnector.stop_raid(
-                        executor, device_path)
+                        executor, device_path, True)
                     if not cmd_out:
                         break
                 except Exception:
-                    break
-                time.sleep(1)
+                    time.sleep(1)
             try:
                 is_exist = os.path.exists(device_path)
                 LOG.debug("[!] is_exist = %s", is_exist)
@@ -807,10 +819,10 @@ class NVMeOFConnector(base.BaseLinuxConnector):
                 LOG.debug('[!] Exception_stop_raid!')
 
     @staticmethod
-    def stop_raid(executor, md_path):
+    def stop_raid(executor, md_path, raise_exception=False):
         cmd = ['mdadm', '--stop', md_path]
         LOG.debug("[!] cmd = " + str(cmd))
-        cmd_out = NVMeOFConnector.run_mdadm(executor, cmd)
+        cmd_out = NVMeOFConnector.run_mdadm(executor, cmd, raise_exception)
         return cmd_out
 
     @staticmethod
