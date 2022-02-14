@@ -20,6 +20,7 @@ import os
 import re
 import tempfile
 import time
+import traceback
 
 from oslo_concurrency import lockutils
 from oslo_concurrency import processutils as putils
@@ -310,23 +311,27 @@ class LightOSConnector(base.BaseLinuxConnector):
                               the operation.  Default is False.
         :type ignore_errors: bool
         """
-        if force:
-            # if operator want to force detach - we just return and cinder
-            # driver will terminate the connection by updating the ACL
-            return
-        uuid = connection_properties['uuid']
-        LOG.debug('LIGHTOS: disconnect_volume called for volume %s', uuid)
-        device_path = self._get_device_by_uuid(uuid)
-        try:
-            if device_path:
-                self._linuxscsi.flush_device_io(device_path)
-        except putils.ProcessExecutionError:
-            if not ignore_errors:
-                raise
-        self.dsc_disconnect_volume(connection_properties)
         # bookkeeping lightos connections - delete connection
         if self.message_queue:
             self.message_queue.put(('delete', connection_properties))
+        uuid = connection_properties['uuid']
+        LOG.debug('LIGHTOS: disconnect_volume called for volume %s', uuid)
+        device_path = self._get_device_by_uuid(uuid)
+        exc = exception.ExceptionChainer()
+        try:
+            if device_path:
+                self._linuxscsi.flush_device_io(device_path)
+        except putils.ProcessExecutionError as e:
+            exc.add_exception(type(e), e, traceback.format_exc())
+            if not (force or ignore_errors):
+                raise
+        try:
+            self.dsc_disconnect_volume(connection_properties)
+        except Exception as e:
+            exc.add_exception(type(e), e, traceback.format_exc())
+        if exc:
+            if not ignore_errors:
+                raise exc
 
     @utils.trace
     @synchronized('volume_op')
