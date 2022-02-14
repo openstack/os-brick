@@ -65,11 +65,12 @@ class NVMeOFConnector(base.BaseLinuxConnector):
         volume_replicas = connection_properties.get('volume_replicas')
         if not volume_replicas:  # compatibility
             return []
+        replica_count = connection_properties.get('replica_count')
 
         try:
-            if volume_replicas and len(volume_replicas) > 1:
+            if volume_replicas and replica_count > 1:
                 return ['/dev/md/' + connection_properties.get('alias')]
-            if volume_replicas and len(volume_replicas) == 1:
+            if volume_replicas and replica_count == 1:
                 return [NVMeOFConnector.get_nvme_device_path(
                     self, volume_replicas[0]['target_nqn'],
                     volume_replicas[0]['vol_uuid'])]
@@ -445,6 +446,7 @@ class NVMeOFConnector(base.BaseLinuxConnector):
         """
 
         volume_replicas = connection_properties.get('volume_replicas')
+        replica_count = connection_properties.get('replica_count')
         volume_alias = connection_properties.get('alias')
 
         if volume_replicas:
@@ -463,9 +465,9 @@ class NVMeOFConnector(base.BaseLinuxConnector):
                 raise exception.VolumeDeviceNotFound(
                     device=volume_replicas)
 
-            if len(volume_replicas) > 1:
+            if replica_count > 1:
                 device_path = self._handle_replicated_volume(
-                    host_device_paths, volume_alias, len(volume_replicas))
+                    host_device_paths, volume_alias, replica_count)
             else:
                 device_path = self._handle_single_replica(
                     host_device_paths, volume_alias)
@@ -485,14 +487,15 @@ class NVMeOFConnector(base.BaseLinuxConnector):
                                       force=False, ignore_errors=False):
         device_path = None
         volume_replicas = connection_properties.get('volume_replicas')
+        replica_count = connection_properties.get('replica_count')
         if device_info and device_info.get('path'):
             device_path = device_info['path']
         elif connection_properties.get('device_path'):
             device_path = connection_properties['device_path']
-        elif volume_replicas and len(volume_replicas) > 1:
+        elif volume_replicas and replica_count > 1:
             device_path = '/dev/md/' + connection_properties['alias']
 
-        if volume_replicas and len(volume_replicas) > 1:
+        if volume_replicas and replica_count > 1:
             NVMeOFConnector.end_raid(self, device_path)
         else:
             if self._get_fs_type(device_path) == 'linux_raid_member':
@@ -500,8 +503,9 @@ class NVMeOFConnector(base.BaseLinuxConnector):
 
     def _extend_volume_replicated(self, connection_properties):
         volume_replicas = connection_properties.get('volume_replicas')
+        replica_count = connection_properties.get('replica_count')
 
-        if volume_replicas and len(volume_replicas) > 1:
+        if volume_replicas and replica_count > 1:
             device_path = '/dev/md/' + connection_properties['alias']
             NVMeOFConnector.run_mdadm(
                 self, ['mdadm', '--grow', '--size', 'max', device_path])
