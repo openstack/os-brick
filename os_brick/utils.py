@@ -23,6 +23,7 @@ from oslo_log import log as logging
 from oslo_utils import strutils
 
 from os_brick.i18n import _
+from os_brick.privileged import nvmeof as priv_nvme
 
 _time_sleep = time.sleep
 
@@ -209,3 +210,14 @@ def convert_str(text: Union[bytes, str]) -> str:
         return text.decode('utf-8')
     else:
         return text
+
+
+def get_host_nqn():
+    try:
+        with open('/etc/nvme/hostnqn', 'r') as f:
+            host_nqn = f.read().strip()
+    except IOError:
+        host_nqn = priv_nvme.create_hostnqn()
+    except Exception:
+        host_nqn = None
+    return host_nqn

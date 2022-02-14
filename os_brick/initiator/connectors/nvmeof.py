@@ -28,7 +28,6 @@ try:
     from os_brick.initiator.connectors import nvmeof_agent
 except ImportError:
     nvmeof_agent = None
-from os_brick.privileged import nvmeof as priv_nvme
 from os_brick.privileged import rootwrap as priv_rootwrap
 from os_brick import utils
 
@@ -105,7 +104,7 @@ class NVMeOFConnector(base.BaseLinuxConnector):
         uuid = nvmf._get_host_uuid()
         suuid = nvmf._get_system_uuid()
         if cls.nvme_present():
-            nqn = nvmf._get_host_nqn()
+            nqn = utils.get_host_nqn()
         if uuid:
             ret['uuid'] = uuid
         if suuid:
@@ -128,16 +127,6 @@ class NVMeOFConnector(base.BaseLinuxConnector):
             LOG.warning(
                 "Process execution error in _get_host_uuid: %s" % str(e))
             return None
-
-    def _get_host_nqn(self):
-        try:
-            with open('/etc/nvme/hostnqn', 'r') as f:
-                host_nqn = f.read().strip()
-        except IOError:
-            host_nqn = priv_nvme.create_hostnqn()
-        except Exception:
-            host_nqn = None
-        return host_nqn
 
     def _get_system_uuid(self):
         # RSD requires system_uuid to let Cinder RSD Driver identify
