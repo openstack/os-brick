@@ -592,22 +592,21 @@ class NVMeOFConnector(base.BaseLinuxConnector):
         raise exception.VolumeDeviceNotFound(device=target_nqn)
 
     @staticmethod
-    @utils.retry(exception.VolumeDeviceNotFound)
+    @utils.retry(exception.VolumeDeviceNotFound, retries=5)
     def get_nvme_device_path(executor, target_nqn, vol_uuid):
         nvme_ctrl = NVMeOFConnector._get_nvme_controller(executor, target_nqn)
-        try:
-            blocks = glob.glob(
-                '/sys/class/nvme-fabrics/ctl/' + nvme_ctrl +
-                '/' + nvme_ctrl + 'n*')
-            for block in blocks:
+        uuid_paths = glob.glob('/sys/class/block/' + nvme_ctrl + 'n*/uuid')
+        for uuid_path in uuid_paths:
+            try:
                 uuid_lines, _err = executor._execute(
-                    'cat', block + '/uuid', run_as_root=True,
+                    'cat', uuid_path, run_as_root=True,
                     root_helper=executor._root_helper)
                 if uuid_lines.split('\n')[0] == vol_uuid:
-                    return '/dev/' + block[block.rfind('/') + 1:]
-        except putils.ProcessExecutionError as e:
-            LOG.exception(e)
-
+                    ignore = len('/uuid')
+                    return '/dev/' + uuid_path[
+                        uuid_path.rfind('/', 0, -ignore) + 1: -ignore]
+            except putils.ProcessExecutionError as e:
+                LOG.exception(e)
         raise exception.VolumeDeviceNotFound(device=vol_uuid)
 
     def _handle_replicated_volume(self, host_device_paths,
