@@ -1,0 +1,10 @@
+---
+prelude: >
+    Welcome to the Yoga release of the os-brick library.
+issues:
+  - |
+    At release time, we became aware that recent changes to the
+    nvmeof connector were tested only in configurations where the
+    NVMe storage backend supports namespace AER.  One issue arising
+    from this is being tracked by `Bug #1961102
+    <https://bugs.launchpad.net/os-brick/+bug/1961102>`_.
