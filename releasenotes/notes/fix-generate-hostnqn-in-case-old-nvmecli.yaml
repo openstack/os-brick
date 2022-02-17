@@ -1,0 +1,8 @@
+---
+fixes:
+  - |
+    The nvmeof connector relies on nvme-cli to query the host-nqn.
+    Versions of nvme-cli < 1.10 do not have the 'show-hostnqn' command,
+    which could cause the connector to fail to generate the hostnqn.
+    Fixed the connector to either get or generate the hostnqn with versions
+    of nvme-cli<1.10 that do not have 'show-hostnqn'.
