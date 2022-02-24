@@ -43,6 +43,8 @@ LOG = logging.getLogger(__name__)
 class NVMeOFConnector(base.BaseLinuxConnector):
     """Connector class to attach/detach NVMe-oF volumes."""
 
+    native_multipath_supported = None
+
     def __init__(self, root_helper, driver=None, use_multipath=False,
                  device_scan_attempts=DEVICE_SCAN_ATTEMPTS_DEFAULT,
                  *args, **kwargs):
@@ -52,6 +54,10 @@ class NVMeOFConnector(base.BaseLinuxConnector):
             device_scan_attempts=device_scan_attempts,
             *args, **kwargs)
         self.use_multipath = use_multipath
+        self._set_native_multipath_supported()
+        if self.use_multipath and not \
+                NVMeOFConnector.native_multipath_supported:
+            LOG.warning('native multipath is not enabled')
 
     @staticmethod
     def get_search_path():
@@ -99,7 +105,6 @@ class NVMeOFConnector(base.BaseLinuxConnector):
         execute = kwargs.get('execute') or priv_rootwrap.execute
         nvmf = NVMeOFConnector(root_helper=root_helper, execute=execute)
         ret = {}
-
         nqn = None
         uuid = nvmf._get_host_uuid()
         suuid = nvmf._get_system_uuid()
@@ -111,6 +116,7 @@ class NVMeOFConnector(base.BaseLinuxConnector):
             ret['system uuid'] = suuid  # compatibility
         if nqn:
             ret['nqn'] = nqn
+        ret['nvme_native_multipath'] = cls._set_native_multipath_supported()
         return ret
 
     def _get_host_uuid(self):
@@ -147,6 +153,22 @@ class NVMeOFConnector(base.BaseLinuxConnector):
                           " please make sure it is installed: %s", e)
                 out = ""
         return out.strip()
+
+    @classmethod
+    def _set_native_multipath_supported(cls):
+        if cls.native_multipath_supported is None:
+            cls.native_multipath_supported = \
+                cls._is_native_multipath_supported()
+        return cls.native_multipath_supported
+
+    @staticmethod
+    def _is_native_multipath_supported():
+        try:
+            with open('/sys/module/nvme_core/parameters/multipath', 'rt') as f:
+                return f.read().strip() == 'Y'
+        except Exception:
+            LOG.warning("Could not find nvme_core/parameters/multipath")
+        return False
 
     def _get_nvme_devices(self):
         nvme_devices = []
@@ -321,7 +343,7 @@ class NVMeOFConnector(base.BaseLinuxConnector):
         :returns: dict
         """
         if connection_properties.get('vol_uuid'):  # compatibility
-            return self._connect_volume_replicated(connection_properties)
+            return self._connect_volume_by_uuid(connection_properties)
 
         current_nvme_devices = self._get_nvme_devices()
         device_info = {'type': 'block'}
@@ -425,7 +447,7 @@ class NVMeOFConnector(base.BaseLinuxConnector):
             raise exception.VolumePathsNotFound()
 
     @utils.trace
-    def _connect_volume_replicated(self, connection_properties):
+    def _connect_volume_by_uuid(self, connection_properties):
         """connect to volume on host
 
         connection_properties for NVMe-oF must include:
@@ -433,7 +455,6 @@ class NVMeOFConnector(base.BaseLinuxConnector):
         target_nqn - NVMe-oF Qualified Name
         vol_uuid - UUID for volume/replica
         """
-
         volume_replicas = connection_properties.get('volume_replicas')
         replica_count = connection_properties.get('replica_count')
         volume_alias = connection_properties.get('alias')
@@ -499,6 +520,8 @@ class NVMeOFConnector(base.BaseLinuxConnector):
             NVMeOFConnector.run_mdadm(
                 self, ['mdadm', '--grow', '--size', 'max', device_path])
         else:
+            target_nqn = None
+            vol_uuid = None
             if not volume_replicas:
                 target_nqn = connection_properties['target_nqn']
                 vol_uuid = connection_properties['vol_uuid']
@@ -511,28 +534,43 @@ class NVMeOFConnector(base.BaseLinuxConnector):
         return self._linuxscsi.get_device_size(device_path)
 
     def _connect_target_volume(self, target_nqn, vol_uuid, portals):
-        try:
-            NVMeOFConnector._get_nvme_controller(self, target_nqn)
-            NVMeOFConnector.rescan(self, target_nqn, vol_uuid)
-        except exception.VolumeDeviceNotFound:
-            if not NVMeOFConnector.connect_to_portals(
-                    self, target_nqn, portals):
-                LOG.error("No successful connections to: %s", target_nqn)
-                raise exception.VolumeDeviceNotFound(device=target_nqn)
-        dev_path = NVMeOFConnector.get_nvme_device_path(
-            self, target_nqn, vol_uuid)
+        nvme_ctrls = NVMeOFConnector.rescan(self, target_nqn)
+        any_new_connect = NVMeOFConnector.connect_to_portals(self, target_nqn,
+                                                             portals,
+                                                             nvme_ctrls)
+        if not any_new_connect and len(nvme_ctrls) == 0:
+            # no new connections and any pre-exists controllers
+            LOG.error("No successful connections to: %s", target_nqn)
+            raise exception.VolumeDeviceNotFound(device=target_nqn)
+        if any_new_connect:
+            # new connections - refresh controllers map
+            nvme_ctrls = \
+                NVMeOFConnector.get_live_nvme_controllers_map(self, target_nqn)
+        nvme_ctrls_values = list(nvme_ctrls.values())
+        dev_path = NVMeOFConnector.get_nvme_device_path(self, target_nqn,
+                                                        vol_uuid,
+                                                        nvme_ctrls_values)
         if not dev_path:
             LOG.error("Target %s volume %s not found", target_nqn, vol_uuid)
             raise exception.VolumeDeviceNotFound(device=vol_uuid)
         return dev_path
 
     @staticmethod
-    def connect_to_portals(executor, target_nqn, target_portals):
-        """connect to any of NVMe-oF target portals"""
-        any_connect = False
+    def connect_to_portals(executor, target_nqn, target_portals, nvme_ctrls):
+        # connect to any of NVMe-oF target portals -
+        # check if the controller exist before trying to connect
+        # in multipath connect all given target portals
+        any_new_connect = False
+        no_multipath = (not executor.use_multipath
+                        or not NVMeOFConnector.native_multipath_supported)
         for portal in target_portals:
             portal_address = portal[0]
             portal_port = portal[1]
+            if NVMeOFConnector.is_portal_connected(portal_address, portal_port,
+                                                   nvme_ctrls):
+                if no_multipath:
+                    break
+                continue
             if portal[2] == 'RoCEv2':
                 portal_transport = 'rdma'
             else:
@@ -542,14 +580,30 @@ class NVMeOFConnector(base.BaseLinuxConnector):
                 portal_transport, '-n', target_nqn, '-Q', '128', '-l', '-1')
             try:
                 NVMeOFConnector.run_nvme_cli(executor, nvme_command)
-                any_connect = True
-                break
+                any_new_connect = True
+                if no_multipath:
+                    break
             except Exception:
                 LOG.exception("Could not connect to portal %s", portal)
-        return any_connect
+        return any_new_connect
 
     @staticmethod
-    def _get_nvme_controller(executor, target_nqn):
+    def is_portal_connected(portal_address, portal_port, nvme_ctrls):
+        address = f"traddr={portal_address},trsvcid={portal_port}"
+        return address in nvme_ctrls
+
+    @staticmethod
+    def get_nvme_controllers(executor, target_nqn):
+        nvme_controllers = \
+            NVMeOFConnector.get_live_nvme_controllers_map(executor, target_nqn)
+        if len(nvme_controllers) > 0:
+            return nvme_controllers.values()
+        raise exception.VolumeDeviceNotFound(device=target_nqn)
+
+    @staticmethod
+    def get_live_nvme_controllers_map(executor, target_nqn):
+        """returns map of all live controllers and their addresses """
+        nvme_controllers = dict()
         ctrls = glob.glob('/sys/class/nvme-fabrics/ctl/nvme*')
         for ctrl in ctrls:
             try:
@@ -561,31 +615,45 @@ class NVMeOFConnector(base.BaseLinuxConnector):
                         state, _err = executor._execute(
                             'cat', ctrl + '/state', run_as_root=True,
                             root_helper=executor._root_helper)
-                        if 'live' not in state:
+                        if 'live' in state:
+                            address_file = ctrl + '/address'
+                            try:
+                                with open(address_file, 'rt') as f:
+                                    address = f.read().strip()
+                            except Exception:
+                                LOG.warning("Failed to read file %s",
+                                            address_file)
+                                continue
+                            ctrl_name = os.path.basename(ctrl)
+                            LOG.debug("[!] address: %s|%s", address, ctrl_name)
+                            nvme_controllers[address] = ctrl_name
+                        else:
                             LOG.debug("nvmeof ctrl device not live: %s", ctrl)
-                            raise exception.VolumeDeviceNotFound(device=ctrl)
-                        return ctrl[ctrl.rfind('/') + 1:]
             except putils.ProcessExecutionError as e:
                 LOG.exception(e)
-
-        raise exception.VolumeDeviceNotFound(device=target_nqn)
+        return nvme_controllers
 
     @staticmethod
     @utils.retry(exception.VolumeDeviceNotFound, retries=5)
-    def get_nvme_device_path(executor, target_nqn, vol_uuid):
-        nvme_ctrl = NVMeOFConnector._get_nvme_controller(executor, target_nqn)
-        uuid_paths = glob.glob('/sys/class/block/' + nvme_ctrl + 'n*/uuid')
-        for uuid_path in uuid_paths:
-            try:
-                uuid_lines, _err = executor._execute(
-                    'cat', uuid_path, run_as_root=True,
-                    root_helper=executor._root_helper)
-                if uuid_lines.split('\n')[0] == vol_uuid:
-                    ignore = len('/uuid')
-                    return '/dev/' + uuid_path[
-                        uuid_path.rfind('/', 0, -ignore) + 1: -ignore]
-            except putils.ProcessExecutionError as e:
-                LOG.exception(e)
+    def get_nvme_device_path(executor, target_nqn, vol_uuid, nvme_ctrls=None):
+        if not nvme_ctrls:
+            nvme_ctrls = NVMeOFConnector.get_nvme_controllers(executor,
+                                                              target_nqn)
+        LOG.debug("[!] nvme_ctrls: %s", nvme_ctrls)
+        for nvme_ctrl in nvme_ctrls:
+            uuid_paths = glob.glob('/sys/class/block/' + nvme_ctrl + 'n*/uuid')
+            for uuid_path in uuid_paths:
+                try:
+                    uuid_lines, _err = executor._execute(
+                        'cat', uuid_path, run_as_root=True,
+                        root_helper=executor._root_helper)
+                    if uuid_lines.split('\n')[0] == vol_uuid:
+                        ignore = len('/uuid')
+                        ns_ind = uuid_path.rfind('/', 0, -ignore)
+                        nvme_device = uuid_path[ns_ind + 1: -ignore]
+                        return '/dev/' + nvme_device
+                except putils.ProcessExecutionError as e:
+                    LOG.exception(e)
         raise exception.VolumeDeviceNotFound(device=vol_uuid)
 
     def _handle_replicated_volume(self, host_device_paths,
@@ -758,7 +826,7 @@ class NVMeOFConnector(base.BaseLinuxConnector):
 
         LOG.debug('[!] cmd = ' + str(cmd))
         NVMeOFConnector.run_mdadm(executor, cmd)
-        # sometimes under load, md is not created right away so we wait
+        # sometimes under load, md is not created right away, so we wait
         for i in range(60):
             try:
                 is_exist = os.path.exists("/dev/md/" + name)
@@ -836,15 +904,17 @@ class NVMeOFConnector(base.BaseLinuxConnector):
         return out, err
 
     @staticmethod
-    def rescan(executor, target_nqn, vol_uuid):
-        ctr_device = (
-            NVMeOFConnector.get_search_path() +
-            NVMeOFConnector._get_nvme_controller(executor, target_nqn))
-        nvme_command = ('ns-rescan', ctr_device)
-        try:
-            NVMeOFConnector.run_nvme_cli(executor, nvme_command)
-        except Exception as e:
-            raise exception.CommandExecutionFailed(e, cmd=nvme_command)
+    def rescan(executor, target_nqn):
+        nvme_ctrls = NVMeOFConnector.get_live_nvme_controllers_map(executor,
+                                                                   target_nqn)
+        for nvme_ctrl in nvme_ctrls.values():
+            ctr_device = (NVMeOFConnector.get_search_path() + nvme_ctrl)
+            nvme_command = ('ns-rescan', ctr_device)
+            try:
+                NVMeOFConnector.run_nvme_cli(executor, nvme_command)
+            except Exception as e:
+                LOG.exception(e)
+        return nvme_ctrls
 
     def _get_fs_type(self, device_path):
         cmd = ['blkid', device_path, '-s', 'TYPE', '-o', 'value']

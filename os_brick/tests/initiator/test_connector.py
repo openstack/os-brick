@@ -42,6 +42,9 @@ class ZeroIntervalLoopingCall(loopingcall.FixedIntervalLoopingCall):
 
 class ConnectorUtilsTestCase(test_base.TestCase):
 
+    @mock.patch.object(nvmeof.NVMeOFConnector,
+                       '_is_native_multipath_supported',
+                       return_value=False)
     @mock.patch.object(nvmeof.NVMeOFConnector, '_get_system_uuid',
                        return_value=None)
     @mock.patch.object(nvmeof.NVMeOFConnector, '_get_host_uuid',
@@ -64,6 +67,7 @@ class ConnectorUtilsTestCase(test_base.TestCase):
                                              mock_nqn,
                                              mock_hostuuid,
                                              mock_sysuuid,
+                                             mock_native_multipath_supported,
                                              host='fakehost'):
         props_actual = connector.get_connector_properties('sudo',
                                                           MY_IP,
@@ -76,6 +80,7 @@ class ConnectorUtilsTestCase(test_base.TestCase):
                  'host': host,
                  'ip': MY_IP,
                  'multipath': multipath_result,
+                 'nvme_native_multipath': False,
                  'os_type': os_type,
                  'platform': platform,
                  'do_local_attach': False}
