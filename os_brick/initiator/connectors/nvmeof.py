@@ -847,16 +847,13 @@ class NVMeOFConnector(base.BaseLinuxConnector):
             raise exception.CommandExecutionFailed(e, cmd=nvme_command)
 
     def _get_fs_type(self, device_path):
-        cmd = ['blkid', device_path, '-s', 'TYPE', '-o', 'value']
+        cmd = ('blkid', device_path, '-s', 'TYPE', '-o', 'value')
         LOG.debug("[!] cmd = " + str(cmd))
         fs_type = None
 
-        try:
-            lines, err = self._execute(
-                *cmd, run_as_root=True, root_helper=self._root_helper)
-
-            fs_type = lines.split('\n')[0]
-        except putils.ProcessExecutionError:
-            return None
-
-        return fs_type
+        # We don't care about errors, on error lines will be '' so it's ok
+        lines, err = self._execute(
+            *cmd, run_as_root=True, root_helper=self._root_helper,
+            check_exit_code=False)
+        fs_type = lines.split('\n')[0]
+        return fs_type or None
