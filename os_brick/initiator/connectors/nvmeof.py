@@ -1260,29 +1260,20 @@ class NVMeOFConnector(base.BaseLinuxConnector):
         except Exception:
             return ''
 
-    def get_md_name(self, device_name: str) -> Optional[str]:
-        get_md_cmd = (
-            'cat /proc/mdstat | grep ' + device_name +
-            ' | awk \'{print $1;}\'')
-        cmd = ['bash', '-c', get_md_cmd]
-        LOG.debug("[!] cmd = %s", cmd)
-        cmd_output = None
-
+    @staticmethod
+    def get_md_name(device_name: str) -> Optional[str]:
         try:
-            lines, err = self._execute(
-                *cmd, run_as_root=True, root_helper=self._root_helper)
+            with open('/proc/mdstat', 'r') as f:
+                lines = [line.split(' ')[0]
+                         for line in f
+                         if device_name in line]
 
-            for line in lines.split('\n'):
-                cmd_output = line
-                break
+                if lines:
+                    return lines[0]
+        except Exception as exc:
+            LOG.debug("[!] Could not find md name for %s in mdstat: %s",
+                      device_name, exc)
 
-            LOG.debug("[!] cmd_output = %s", cmd_output)
-            if err:
-                return None
-
-            return cmd_output
-        except putils.ProcessExecutionError as ex:
-            LOG.warning("[!] Could not run cmd: %s", ex)
         return None
 
     def stop_and_assemble_raid(self,
