@@ -26,6 +26,7 @@ from os_brick.initiator.connectors import fake
 from os_brick.initiator.connectors import iscsi
 from os_brick.initiator.connectors import nvmeof
 from os_brick.initiator import linuxfc
+from os_brick.privileged import nvmeof as priv_nvmeof
 from os_brick.privileged import rootwrap as priv_rootwrap
 from os_brick.tests import base as test_base
 from os_brick import utils
@@ -45,7 +46,7 @@ class ConnectorUtilsTestCase(test_base.TestCase):
     @mock.patch.object(nvmeof.NVMeOFConnector,
                        '_is_native_multipath_supported',
                        return_value=False)
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_system_uuid',
+    @mock.patch.object(priv_nvmeof, 'get_system_uuid',
                        return_value=None)
     @mock.patch.object(nvmeof.NVMeOFConnector, '_get_host_uuid',
                        return_value=None)

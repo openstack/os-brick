@@ -21,6 +21,7 @@ from oslo_concurrency import processutils as putils
 from os_brick import exception
 from os_brick import executor
 from os_brick.initiator.connectors import nvmeof
+from os_brick.privileged import nvmeof as priv_nvmeof
 from os_brick.privileged import rootwrap as priv_rootwrap
 from os_brick.tests import base as test_base
 from os_brick.tests.initiator import test_connector
@@ -920,7 +921,7 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
                        return_value=True)
     @mock.patch.object(utils, 'get_host_nqn',
                        return_value='fakenqn')
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_system_uuid',
+    @mock.patch.object(priv_nvmeof, 'get_system_uuid',
                        return_value=None)
     @mock.patch.object(nvmeof.NVMeOFConnector, '_get_host_uuid',
                        return_value=None)
@@ -937,7 +938,7 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
                        return_value=True)
     @mock.patch.object(nvmeof.NVMeOFConnector, 'nvme_present')
     @mock.patch.object(utils, 'get_host_nqn', autospec=True)
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_system_uuid',
+    @mock.patch.object(priv_nvmeof, 'get_system_uuid',
                        autospec=True)
     @mock.patch.object(nvmeof.NVMeOFConnector, '_get_host_uuid', autospec=True)
     def test_get_connector_properties_with_sysuuid(self, mock_host_uuid,

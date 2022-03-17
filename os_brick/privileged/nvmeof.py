@@ -71,3 +71,25 @@ def create_hostnqn():
         LOG.warning("Could not generate host nqn: %s", e)
 
     return host_nqn
+
+
+@os_brick.privileged.default.entrypoint
+def get_system_uuid() -> str:
+    # RSD requires system_uuid to let Cinder RSD Driver identify
+    # Nova node for later RSD volume attachment.
+    try:
+        with open('/sys/class/dmi/id/product_uuid', 'r') as f:
+            return f.read().strip()
+    except Exception:
+        LOG.debug("Could not read dmi's 'product_uuid' on sysfs")
+
+    try:
+        out, err = rootwrap.custom_execute('dmidecode', '-ssystem-uuid')
+        if not out:
+            LOG.warning('dmidecode returned empty system-uuid')
+    except putils.ProcessExecutionError as e:
+        LOG.debug("Unable to locate dmidecode. For Cinder RSD Backend,"
+                  " please make sure it is installed: %s", e)
+        out = ""
+
+    return out.strip()
