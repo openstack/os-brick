@@ -17,6 +17,7 @@ from unittest import mock
 
 from oslo_concurrency import processutils as putils
 
+from os_brick.encryptors import cryptsetup
 from os_brick.encryptors import luks
 from os_brick.tests.encryptors import test_cryptsetup
 
@@ -181,6 +182,25 @@ class LuksEncryptorTestCase(test_cryptsetup.CryptsetupEncryptorTestCase):
                       root_helper=self.root_helper,
                       attempts=3, run_as_root=True, check_exit_code=[0, 4]),
         ])
+
+    @mock.patch('os_brick.utils.get_device_size')
+    @mock.patch.object(cryptsetup.CryptsetupEncryptor, '_execute')
+    @mock.patch.object(cryptsetup.CryptsetupEncryptor, '_get_passphrase')
+    @mock.patch.object(cryptsetup.CryptsetupEncryptor, '_get_key')
+    def test_extend_volume(self, mock_key, mock_pass, mock_exec, mock_size):
+        encryptor = self.encryptor
+        res = encryptor.extend_volume(mock.sentinel.context)
+        self.assertEqual(mock_size.return_value, res)
+
+        mock_key.assert_called_once_with(mock.sentinel.context)
+        mock_key.return_value.get_encoded.assert_called_once_with()
+        key = mock_key.return_value.get_encoded.return_value
+        mock_pass.assert_called_once_with(key)
+        mock_exec.assert_called_once_with(
+            'cryptsetup', 'resize', encryptor.dev_path,
+            process_input=mock_pass.return_value, run_as_root=True,
+            check_exit_code=True, root_helper=encryptor._root_helper)
+        mock_size.assert_called_once_with(encryptor, encryptor.dev_path)
 
 
 class Luks2EncryptorTestCase(LuksEncryptorTestCase):

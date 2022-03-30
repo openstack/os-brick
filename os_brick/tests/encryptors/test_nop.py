@@ -36,3 +36,7 @@ class NoOpEncryptorTestCase(test_base.VolumeEncryptorTestCase):
             'provider': 'NoOpEncryptor',
         }
         self.encryptor.detach_volume(**test_args)
+
+    def test_extend_volume(self):
+        # Test that it exists and doesn't break on call
+        self.encryptor.extend_volume('context', anything=1, goes='asdf')

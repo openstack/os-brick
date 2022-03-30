@@ -759,26 +759,6 @@ loop0                                     0"""
         self.assertEqual("0", info['devices'][1]['id'])
         self.assertEqual("3", info['devices'][1]['lun'])
 
-    def test_get_device_size(self):
-        mock_execute = mock.Mock()
-        self.linuxscsi._execute = mock_execute
-        size = '1024'
-        mock_execute.return_value = (size, None)
-
-        ret_size = self.linuxscsi.get_device_size('/dev/fake')
-        self.assertEqual(int(size), ret_size)
-
-        size = 'junk'
-        mock_execute.return_value = (size, None)
-        ret_size = self.linuxscsi.get_device_size('/dev/fake')
-        self.assertIsNone(ret_size)
-
-        size_bad = '1024\n'
-        size_good = 1024
-        mock_execute.return_value = (size_bad, None)
-        ret_size = self.linuxscsi.get_device_size('/dev/fake')
-        self.assertEqual(size_good, ret_size)
-
     def test_multipath_reconfigure(self):
         self.linuxscsi.multipath_reconfigure()
         expected_commands = ['multipathd reconfigure']
@@ -792,7 +772,7 @@ loop0                                     0"""
 
     @mock.patch.object(linuxscsi.LinuxSCSI, 'find_multipath_device_path')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_scsi_wwn')
-    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_device_size')
+    @mock.patch('os_brick.utils.get_device_size')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_device_info')
     def test_extend_volume_no_mpath(self, mock_device_info,
                                     mock_device_size,
@@ -822,7 +802,7 @@ loop0                                     0"""
 
     @mock.patch.object(linuxscsi.LinuxSCSI, 'find_multipath_device_path')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_scsi_wwn')
-    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_device_size')
+    @mock.patch('os_brick.utils.get_device_size')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_device_info')
     def test_extend_volume_with_mpath(self, mock_device_info,
                                       mock_device_size,
@@ -854,7 +834,7 @@ loop0                                     0"""
     @mock.patch.object(linuxscsi.LinuxSCSI, '_multipath_resize_map')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'find_multipath_device_path')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_scsi_wwn')
-    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_device_size')
+    @mock.patch('os_brick.utils.get_device_size')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_device_info')
     def test_extend_volume_with_mpath_fail(self, mock_device_info,
                                            mock_device_size,
@@ -892,7 +872,7 @@ loop0                                     0"""
     @mock.patch.object(linuxscsi.LinuxSCSI, '_multipath_resize_map')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'find_multipath_device_path')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_scsi_wwn')
-    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_device_size')
+    @mock.patch('os_brick.utils.get_device_size')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_device_info')
     def test_extend_volume_with_mpath_pending(self, mock_device_info,
                                               mock_device_size,
@@ -931,7 +911,7 @@ loop0                                     0"""
     @mock.patch.object(linuxscsi.LinuxSCSI, '_multipath_resize_map')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'find_multipath_device_path')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_scsi_wwn')
-    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_device_size')
+    @mock.patch('os_brick.utils.get_device_size')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_device_info')
     def test_extend_volume_with_mpath_timeout(self, mock_device_info,
                                               mock_device_size,

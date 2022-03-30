@@ -537,22 +537,9 @@ class ScaleIOConnector(base.BaseLinuxConnector):
         self._rescan_vols()
         volume_paths = self.get_volume_paths(connection_properties)
         if volume_paths:
-            return self.get_device_size(volume_paths[0])
+            return utils.get_device_size(self, volume_paths[0])
 
         # if we got here, the volume is not mapped
         msg = (_("Error extending ScaleIO volume"))
         LOG.error(msg)
         raise exception.BrickException(message=msg)
-
-    def get_device_size(self, device):
-        """Get the size in bytes of a volume."""
-        (out, _err) = self._execute('blockdev', '--getsize64',
-                                    device, run_as_root=True,
-                                    root_helper=self._root_helper)
-        var = str(out.strip())
-        LOG.debug("Device %(dev)s size: %(var)s",
-                  {'dev': device, 'var': var})
-        if var.isnumeric():
-            return int(var)
-        else:
-            return None

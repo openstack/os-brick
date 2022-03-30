@@ -169,3 +169,6 @@ class CryptsetupEncryptor(base.VolumeEncryptor):
     def detach_volume(self, **kwargs):
         """Removes the dm-crypt mapping for the device."""
         self._close_volume(**kwargs)
+
+    def extend_volume(self, context, **kwargs):
+        raise NotImplementedError()

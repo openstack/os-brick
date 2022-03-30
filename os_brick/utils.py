@@ -394,3 +394,15 @@ def connect_volume_undo_prepare_result(f=None, unlink_after=False):
     if f:
         return decorator(f)
     return decorator
+
+
+def get_device_size(executor, device):
+    """Get the size in bytes of a volume."""
+    (out, _err) = executor._execute('blockdev', '--getsize64',
+                                    device, run_as_root=True,
+                                    root_helper=executor._root_helper)
+    var = str(out.strip())
+    if var.isnumeric():
+        return int(var)
+    else:
+        return None

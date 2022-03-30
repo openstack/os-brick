@@ -229,12 +229,12 @@ class StorPoolConnector(base.BaseLinuxConnector):
         # Wait for the StorPool client to update the size of the local device
         path = '/dev/storpool/' + volume
         for _ in range(10):
-            size = self._get_device_size(path)
+            size = utils.get_device_size(self, path)
             LOG.debug('Got local size %(size)d', {'size': size})
             if size == vdata.size:
                 return size
             time.sleep(0.1)
         else:
-            size = self._get_device_size(path)
+            size = utils.get_device_size(self, path)
             LOG.debug('Last attempt: local size %(size)d', {'size': size})
             return size

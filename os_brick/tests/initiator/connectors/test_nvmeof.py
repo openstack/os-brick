@@ -439,7 +439,7 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         mock_end_raid.assert_called_with(self.connector, '/dev/md/md1')
 
     @mock.patch.object(nvmeof.NVMeOFConnector, 'get_nvme_device_path')
-    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_device_size')
+    @mock.patch('os_brick.utils.get_device_size')
     def test_extend_volume_unreplicated(
             self, mock_device_size, mock_device_path):
         connection_properties = {
@@ -456,10 +456,10 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         mock_device_path.assert_called_with(
             self.connector, volume_replicas[0]['target_nqn'],
             volume_replicas[0]['vol_uuid'])
-        mock_device_size.assert_called_with('/dev/nvme0n1')
+        mock_device_size.assert_called_with(self.connector, '/dev/nvme0n1')
 
     @mock.patch.object(nvmeof.NVMeOFConnector, 'get_nvme_device_path')
-    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_device_size')
+    @mock.patch('os_brick.utils.get_device_size')
     def test_extend_volume_unreplicated_no_replica(
             self, mock_device_size, mock_device_path):
         connection_properties = {
@@ -473,10 +473,10 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
                 connection_properties), 100)
         mock_device_path.assert_called_with(
             self.connector, 'fakenqn', 'fakeuuid')
-        mock_device_size.assert_called_with('/dev/nvme0n1')
+        mock_device_size.assert_called_with(self.connector, '/dev/nvme0n1')
 
     @mock.patch.object(nvmeof.NVMeOFConnector, 'run_mdadm')
-    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_device_size')
+    @mock.patch('os_brick.utils.get_device_size')
     def test_extend_volume_replicated(
             self, mock_device_size, mock_mdadm):
         mock_device_size.return_value = 100
@@ -486,9 +486,9 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         device_path = '/dev/md/' + connection_properties['alias']
         mock_mdadm.assert_called_with(
             self.connector, ['mdadm', '--grow', '--size', 'max', device_path])
-        mock_device_size.assert_called_with(device_path)
+        mock_device_size.assert_called_with(self.connector, device_path)
 
-    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_device_size')
+    @mock.patch('os_brick.utils.get_device_size')
     def test_extend_volume_with_nguid(self, mock_device_size):
         device_path = '/dev/nvme0n1'
         connection_properties = {
@@ -500,7 +500,7 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
             self.connector.extend_volume(connection_properties),
             100
         )
-        mock_device_size.assert_called_with(device_path)
+        mock_device_size.assert_called_with(self.connector, device_path)
 
     @mock.patch.object(nvmeof.NVMeOFConnector, 'rescan')
     @mock.patch.object(nvmeof.NVMeOFConnector, 'get_nvme_device_path')

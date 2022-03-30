@@ -549,17 +549,6 @@ class LinuxSCSI(executor.Executor):
             return info
         return None
 
-    def get_device_size(self, device):
-        """Get the size in bytes of a volume."""
-        (out, _err) = self._execute('blockdev', '--getsize64',
-                                    device, run_as_root=True,
-                                    root_helper=self._root_helper)
-        var = str(out.strip())
-        if var.isnumeric():
-            return int(var)
-        else:
-            return None
-
     def multipath_reconfigure(self):
         """Issue a multipathd reconfigure.
 
@@ -632,13 +621,13 @@ class LinuxSCSI(executor.Executor):
             scsi_path = ("/sys/bus/scsi/drivers/sd/%(device_id)s" %
                          {'device_id': device_id})
 
-            size = self.get_device_size(volume_path)
+            size = utils.get_device_size(self, volume_path)
             LOG.debug("Starting size: %s", size)
 
             # now issue the device rescan
             rescan_path = "%(scsi_path)s/rescan" % {'scsi_path': scsi_path}
             self.echo_scsi_command(rescan_path, "1")
-            new_size = self.get_device_size(volume_path)
+            new_size = utils.get_device_size(self, volume_path)
             LOG.debug("volume size after scsi device rescan %s", new_size)
 
         scsi_wwn = self.get_scsi_wwn(volume_paths[0])
@@ -648,13 +637,13 @@ class LinuxSCSI(executor.Executor):
                 # Force a reconfigure so that resize works
                 self.multipath_reconfigure()
 
-                size = self.get_device_size(mpath_device)
+                size = utils.get_device_size(self, mpath_device)
                 LOG.info("mpath(%(device)s) current size %(size)s",
                          {'device': mpath_device, 'size': size})
 
                 self.multipath_resize_map(scsi_wwn)
 
-                new_size = self.get_device_size(mpath_device)
+                new_size = utils.get_device_size(self, mpath_device)
                 LOG.info("mpath(%(device)s) new size %(size)s",
                          {'device': mpath_device, 'size': new_size})
 

@@ -60,3 +60,8 @@ class VolumeEncryptor(executor.Executor, metaclass=abc.ABCMeta):
 
         """
         pass
+
+    @abc.abstractmethod
+    def extend_volume(self, context, **kwargs):
+        """Extend an encrypted volume and return the decrypted volume size."""
+        pass

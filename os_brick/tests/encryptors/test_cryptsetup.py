@@ -153,3 +153,7 @@ class CryptsetupEncryptorTestCase(test_base.VolumeEncryptorTestCase):
             mock.call('/dev/mapper/%s' % wwn)])
         mock_execute.assert_called_once_with(
             'cryptsetup', 'status', wwn, run_as_root=True)
+
+    def test_extend_volume(self):
+        self.assertRaises(NotImplementedError,
+                          self.encryptor.extend_volume, mock.sentinel.context)

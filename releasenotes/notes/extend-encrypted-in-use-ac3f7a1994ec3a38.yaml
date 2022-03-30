@@ -1,0 +1,7 @@
+---
+fixes:
+  - |
+    `Bug #1967157 <https://bugs.launchpad.net/nova/+bug/1967157>`_: Fixed
+    extending LUKS and LUKSv2 host attached encrypted volumes. Only LUKS v1
+    volumes decrypted via libvirt were working, but now all LUKS based in-use
+    encrypted volumes can be extended.

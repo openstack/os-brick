@@ -18,6 +18,7 @@ from oslo_log import log as logging
 
 from os_brick.encryptors import cryptsetup
 from os_brick.privileged import rootwrap as priv_rootwrap
+from os_brick import utils
 
 LOG = logging.getLogger(__name__)
 
@@ -158,6 +159,20 @@ class LuksEncryptor(cryptsetup.CryptsetupEncryptor):
                       run_as_root=True, check_exit_code=[0, 4],
                       root_helper=self._root_helper,
                       attempts=3)
+
+    def extend_volume(self, context, **kwargs):
+        """Extend an encrypted volume and return the decrypted volume size."""
+        symlink = self.symlink_path
+        LOG.debug('Resizing mapping %s to match underlying device', symlink)
+        key = self._get_key(context).get_encoded()
+        passphrase = self._get_passphrase(key)
+        self._execute('cryptsetup', 'resize', symlink,
+                      process_input=passphrase,
+                      run_as_root=True, check_exit_code=True,
+                      root_helper=self._root_helper)
+        res = utils.get_device_size(self, symlink)
+        LOG.debug('New size of mapping is %s', res)
+        return res
 
 
 class Luks2Encryptor(LuksEncryptor):

@@ -306,7 +306,7 @@ class ScaleIOConnectorTestCase(test_connector.ConnectorTestCase):
 
     @mock.patch.object(os.path, 'exists', return_value=True)
     @mock.patch.object(scaleio.ScaleIOConnector, '_find_volume_path')
-    @mock.patch.object(scaleio.ScaleIOConnector, 'get_device_size')
+    @mock.patch('os_brick.utils.get_device_size')
     def test_extend_volume(self,
                            mock_device_size,
                            mock_find_volume_path,

@@ -28,6 +28,22 @@ class WrongException(exception.BrickException):
     pass
 
 
+@ddt.ddt
+class TestUtils(base.TestCase):
+    @ddt.data(('1024', 1024), ('junk', None), ('2048\n', 2048))
+    @ddt.unpack
+    def test_get_device_size(self, cmd_out, expected):
+        mock_execute = mock.Mock()
+        mock_execute._execute.return_value = (cmd_out, None)
+
+        device = '/dev/fake'
+        ret_size = utils.get_device_size(mock_execute, device)
+        self.assertEqual(expected, ret_size)
+        mock_execute._execute.assert_called_once_with(
+            'blockdev', '--getsize64', device,
+            run_as_root=True, root_helper=mock_execute._root_helper)
+
+
 class TestRetryDecorator(base.TestCase):
 
     def test_no_retry_required(self):

@@ -41,3 +41,6 @@ class NoOpEncryptor(base.VolumeEncryptor):
 
     def detach_volume(self, **kwargs):
         pass
+
+    def extend_volume(self, context, **kwargs):
+        pass

@@ -437,7 +437,7 @@ class NVMeOFConnector(base.BaseLinuxConnector):
         if volume_paths:
             if connection_properties.get('volume_nguid'):
                 for path in volume_paths:
-                    return self._linuxscsi.get_device_size(path)
+                    return utils.get_device_size(self, path)
             return self._linuxscsi.extend_volume(
                 volume_paths, use_multipath=self.use_multipath)
         else:
@@ -531,7 +531,7 @@ class NVMeOFConnector(base.BaseLinuxConnector):
             device_path = NVMeOFConnector.get_nvme_device_path(
                 self, target_nqn, vol_uuid)
 
-        return self._linuxscsi.get_device_size(device_path)
+        return utils.get_device_size(self, device_path)
 
     def _connect_target_volume(self, target_nqn, vol_uuid, portals):
         nvme_ctrls = NVMeOFConnector.rescan(self, target_nqn)
