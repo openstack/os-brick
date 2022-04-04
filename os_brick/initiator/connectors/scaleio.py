@@ -336,6 +336,7 @@ class ScaleIOConnector(base.BaseLinuxConnector):
         return device_info
 
     @utils.trace
+    @utils.connect_volume_prepare_result
     @lockutils.synchronized('scaleio', 'scaleio-', external=True)
     def connect_volume(self, connection_properties):
         """Connect the volume.
@@ -451,6 +452,7 @@ class ScaleIOConnector(base.BaseLinuxConnector):
 
     @utils.trace
     @lockutils.synchronized('scaleio', 'scaleio-', external=True)
+    @utils.connect_volume_undo_prepare_result(unlink_after=True)
     def disconnect_volume(self, connection_properties, device_info,
                           force=False, ignore_errors=False):
         """Disconnect the ScaleIO volume.
@@ -514,6 +516,7 @@ class ScaleIOConnector(base.BaseLinuxConnector):
                 LOG.error(msg)
                 raise exception.BrickException(message=msg)
 
+    @utils.connect_volume_undo_prepare_result
     def extend_volume(self, connection_properties):
         """Update the local kernel's size information.
 

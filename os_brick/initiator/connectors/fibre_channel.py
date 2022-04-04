@@ -169,6 +169,7 @@ class FibreChannelConnector(base.BaseLinuxConnector):
 
     @utils.trace
     @synchronized('extend_volume', external=True)
+    @utils.connect_volume_undo_prepare_result
     def extend_volume(self, connection_properties):
         """Update the local kernel's size information.
 
@@ -189,6 +190,7 @@ class FibreChannelConnector(base.BaseLinuxConnector):
             raise exception.VolumePathsNotFound()
 
     @utils.trace
+    @utils.connect_volume_prepare_result
     @synchronized('connect_volume', external=True)
     def connect_volume(self, connection_properties):
         """Attach the volume to instance_name.
@@ -315,6 +317,7 @@ class FibreChannelConnector(base.BaseLinuxConnector):
 
     @utils.trace
     @synchronized('connect_volume', external=True)
+    @utils.connect_volume_undo_prepare_result(unlink_after=True)
     def disconnect_volume(self, connection_properties, device_info,
                           force=False, ignore_errors=False):
         """Detach the volume from instance_name.
@@ -356,8 +359,7 @@ class FibreChannelConnector(base.BaseLinuxConnector):
         # There may have been more than 1 device mounted
         # by the kernel for this volume.  We have to remove
         # all of them
-        path_used = self._linuxscsi.get_dev_path(connection_properties,
-                                                 device_info)
+        path_used = utils.get_dev_path(connection_properties, device_info)
         # NOTE: Due to bug #1897787 device_info may have a real path for some
         # single paths instead of a symlink as it should have, so it'll only
         # be a multipath if it was a symlink (not real path) and it wasn't a

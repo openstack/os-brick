@@ -1,0 +1,12 @@
+---
+fixes:
+  - |
+    NVMe-oF connector `bug #1964379
+    <https://bugs.launchpad.net/os-brick/+bug/1964379>`_: Fixed using non LUKS
+    v1 encrypted volumes, as once one of such volumes is disconnected from a
+    host all successive NVMe-oF attachments would fail.
+  - |
+    `Bug #1967790
+    <https://bugs.launchpad.net/os-brick/+bug/1967790>`_: Fixed encryptor's
+    connect_volume returns and the symlink is pointing to the raw block device
+    instead of to the decrypted device mapper device.

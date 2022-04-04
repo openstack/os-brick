@@ -1231,36 +1231,6 @@ loop0                                     0"""
         self.linuxscsi.multipath_del_path('/dev/sda')
         self.assertEqual(['multipathd del path /dev/sda'], self.cmds)
 
-    @ddt.data({'con_props': {}, 'dev_info': {'path': mock.sentinel.path}},
-              {'con_props': None, 'dev_info': {'path': mock.sentinel.path}},
-              {'con_props': {'device_path': mock.sentinel.device_path},
-               'dev_info': {'path': mock.sentinel.path}})
-    @ddt.unpack
-    def test_get_dev_path_device_info(self, con_props, dev_info):
-        self.assertEqual(mock.sentinel.path,
-                         self.linuxscsi.get_dev_path(con_props, dev_info))
-
-    @ddt.data({'con_props': {'device_path': mock.sentinel.device_path},
-               'dev_info': {'path': None}},
-              {'con_props': {'device_path': mock.sentinel.device_path},
-               'dev_info': {'path': ''}},
-              {'con_props': {'device_path': mock.sentinel.device_path},
-               'dev_info': {}},
-              {'con_props': {'device_path': mock.sentinel.device_path},
-               'dev_info': None})
-    @ddt.unpack
-    def test_get_dev_path_conn_props(self, con_props, dev_info):
-        self.assertEqual(mock.sentinel.device_path,
-                         self.linuxscsi.get_dev_path(con_props, dev_info))
-
-    @ddt.data({'con_props': {'device_path': ''}, 'dev_info': {'path': None}},
-              {'con_props': {'device_path': None}, 'dev_info': {'path': ''}},
-              {'con_props': {}, 'dev_info': {}},
-              {'con_props': {}, 'dev_info': None})
-    @ddt.unpack
-    def test_get_dev_path_no_path(self, con_props, dev_info):
-        self.assertEqual('', self.linuxscsi.get_dev_path(con_props, dev_info))
-
     @ddt.data(('/dev/sda', '/dev/sda', False, True, None),
               # This checks that we ignore the was_multipath parameter if it
               # doesn't make sense (because the used path is the one we are
