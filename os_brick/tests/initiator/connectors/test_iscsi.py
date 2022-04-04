@@ -551,13 +551,17 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
 
     @mock.patch.object(iscsi.ISCSIConnector, '_cleanup_connection')
     def test_disconnect_volume(self, cleanup_mock):
-        res = self.connector.disconnect_volume(mock.sentinel.con_props,
+        conn_props = {'target_portal': '198.72.124.185:3260',
+                      'target_iqn': 'iqn.2010-10.org.openstack:volume-uuid',
+                      'target_lun': 0,
+                      'device_path': '/dev/sda'}
+        res = self.connector.disconnect_volume(conn_props,
                                                mock.sentinel.dev_info,
                                                mock.sentinel.Force,
                                                mock.sentinel.ignore_errors)
         self.assertEqual(cleanup_mock.return_value, res)
         cleanup_mock.assert_called_once_with(
-            mock.sentinel.con_props,
+            conn_props,
             force=mock.sentinel.Force,
             ignore_errors=mock.sentinel.ignore_errors,
             device_info=mock.sentinel.dev_info,
@@ -677,7 +681,7 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
               ('/dev/dm-11', True),
               ('/dev/disk/by-id/dm-uuid-mpath-MPATH', True))
     @ddt.unpack
-    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_dev_path')
+    @mock.patch('os_brick.utils.get_dev_path')
     @mock.patch.object(iscsi.ISCSIConnector, '_disconnect_connection')
     @mock.patch.object(iscsi.ISCSIConnector, '_get_connection_devices')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'flush_multipath_device')
@@ -1641,17 +1645,14 @@ Setting up iSCSI targets: unused
         scan_mock.assert_not_called()
         dev_name_mock.assert_called_once_with(mock.sentinel.session, hctl)
 
-    @mock.patch.object(iscsi.ISCSIConnector, '_get_device_link')
-    def test__get_connect_result(self, get_link_mock):
+    def test__get_connect_result(self):
         props = self.CON_PROPS.copy()
         props['encrypted'] = False
         res = self.connector._get_connect_result(props, 'wwn', ['sda', 'sdb'])
         expected = {'type': 'block', 'scsi_wwn': 'wwn', 'path': '/dev/sda'}
         self.assertDictEqual(expected, res)
-        get_link_mock.assert_not_called()
 
-    @mock.patch.object(iscsi.ISCSIConnector, '_get_device_link')
-    def test__get_connect_result_mpath(self, get_link_mock):
+    def test__get_connect_result_mpath(self):
         props = self.CON_PROPS.copy()
         props['encrypted'] = False
         res = self.connector._get_connect_result(props, 'wwn', ['sda', 'sdb'],
@@ -1659,106 +1660,6 @@ Setting up iSCSI targets: unused
         expected = {'type': 'block', 'scsi_wwn': 'wwn', 'path': '/dev/mpath',
                     'multipath_id': 'wwn'}
         self.assertDictEqual(expected, res)
-        get_link_mock.assert_not_called()
-
-    @mock.patch.object(iscsi.ISCSIConnector, '_get_device_link',
-                       return_value='/dev/disk/by-id/scsi-wwn')
-    def test__get_connect_result_encrypted(self, get_link_mock):
-        props = self.CON_PROPS.copy()
-        props['encrypted'] = True
-        res = self.connector._get_connect_result(props, 'wwn', ['sda', 'sdb'])
-        expected = {'type': 'block', 'scsi_wwn': 'wwn',
-                    'path': get_link_mock.return_value}
-        self.assertDictEqual(expected, res)
-        get_link_mock.assert_called_once_with('wwn', '/dev/sda', None)
-
-    @mock.patch('os.path.realpath', return_value='/dev/sda')
-    def test__get_device_link(self, realpath_mock):
-        symlink = '/dev/disk/by-id/scsi-wwn'
-        res = self.connector._get_device_link('wwn', '/dev/sda', None)
-        self.assertEqual(symlink, res)
-        realpath_mock.assert_called_once_with(symlink)
-
-    @mock.patch('os.path.realpath', return_value='/dev/dm-0')
-    def test__get_device_link_multipath(self, realpath_mock):
-        symlink = '/dev/disk/by-id/dm-uuid-mpath-wwn'
-        res = self.connector._get_device_link('wwn', '/dev/dm-0', 'wwn')
-        self.assertEqual(symlink, res)
-        realpath_mock.assert_called_once_with(symlink)
-
-    @mock.patch('os.path.realpath', side_effect=('/dev/sdz', '/dev/sdy',
-                                                 '/dev/sda', '/dev/sdx'))
-    @mock.patch('os.listdir', return_value=['dm-...', 'scsi-wwn', 'scsi-...'])
-    def test__get_device_link_check_links(self, listdir_mock, realpath_mock):
-        res = self.connector._get_device_link('wwn', '/dev/sda', None)
-        self.assertEqual(res, '/dev/disk/by-id/scsi-wwn')
-        listdir_mock.assert_called_once_with('/dev/disk/by-id/')
-        realpath_mock.assert_has_calls([
-            mock.call('/dev/disk/by-id/scsi-wwn'),
-            mock.call('/dev/disk/by-id/dm-...'),
-            mock.call('/dev/disk/by-id/scsi-wwn')])
-
-    @mock.patch('os_brick.utils._time_sleep')
-    @mock.patch('os.path.realpath', return_value='/dev/sdz')
-    @mock.patch('os.listdir', return_value=['dm-...', 'scsi-...'])
-    def test__get_device_link_not_found(self, listdir_mock, realpath_mock,
-                                        mock_time):
-        self.assertRaises(exception.VolumeDeviceNotFound,
-                          self.connector._get_device_link,
-                          'wwn', '/dev/sda', None)
-        listdir_mock.assert_has_calls(3 * [mock.call('/dev/disk/by-id/')])
-        self.assertEqual(3, listdir_mock.call_count)
-        realpath_mock.assert_has_calls(
-            3 * [mock.call('/dev/disk/by-id/scsi-wwn'),
-                 mock.call('/dev/disk/by-id/dm-...'),
-                 mock.call('/dev/disk/by-id/scsi-...')])
-        self.assertEqual(9, realpath_mock.call_count)
-
-    @mock.patch('os_brick.utils._time_sleep')
-    @mock.patch('os.path.realpath')
-    @mock.patch('os.listdir', return_value=['dm-...', 'scsi-...'])
-    def test__get_device_link_symlink_found_after_retry(self, mock_listdir,
-                                                        mock_realpath,
-                                                        mock_time):
-        # Return the expected realpath on the third retry
-        mock_realpath.side_effect = [
-            None, None, None, None, None, None, '/dev/sda']
-
-        # Assert that VolumeDeviceNotFound isn't raised
-        self.connector._get_device_link('wwn', '/dev/sda', None)
-
-        # Assert that listdir and realpath have been called correctly
-        mock_listdir.assert_has_calls(2 * [mock.call('/dev/disk/by-id/')])
-        self.assertEqual(2, mock_listdir.call_count)
-        mock_realpath.assert_has_calls(
-            2 * [mock.call('/dev/disk/by-id/scsi-wwn'),
-                 mock.call('/dev/disk/by-id/dm-...'),
-                 mock.call('/dev/disk/by-id/scsi-...')]
-            + [mock.call('/dev/disk/by-id/scsi-wwn')])
-        self.assertEqual(7, mock_realpath.call_count)
-
-    @mock.patch('os_brick.utils._time_sleep')
-    @mock.patch('os.path.realpath')
-    @mock.patch('os.listdir', return_value=['dm-...', 'scsi-...'])
-    def test__get_device_link_symlink_found_after_retry_by_listdir(
-            self, mock_listdir, mock_realpath, mock_time):
-
-        # Return the expected realpath on the second retry while looping over
-        # the devices returned by listdir
-        mock_realpath.side_effect = [
-            None, None, None, None, None, '/dev/sda']
-
-        # Assert that VolumeDeviceNotFound isn't raised
-        self.connector._get_device_link('wwn', '/dev/sda', None)
-
-        # Assert that listdir and realpath have been called correctly
-        mock_listdir.assert_has_calls(2 * [mock.call('/dev/disk/by-id/')])
-        self.assertEqual(2, mock_listdir.call_count)
-        mock_realpath.assert_has_calls(
-            2 * [mock.call('/dev/disk/by-id/scsi-wwn'),
-                 mock.call('/dev/disk/by-id/dm-...'),
-                 mock.call('/dev/disk/by-id/scsi-...')])
-        self.assertEqual(6, mock_realpath.call_count)
 
     @mock.patch.object(iscsi.ISCSIConnector, '_run_iscsiadm_bare')
     def test_get_node_startup_values(self, run_iscsiadm_bare_mock):

@@ -126,6 +126,11 @@ class InitiatorConnector(executor.Executor, metaclass=abc.ABCMeta):
          whenever there's a connection between the host's HBA and the storage
          array's target ports.
 
+        Encrypted volumes have some peculiar requirements on the path that must
+        be returned, so it is recommended to decorate the method with the
+        os_brick.utils.connect_volume_prepare_result to ensure that the right
+        device path is returned to the caller.
+
         :param connection_properties: The dictionary that describes all
                                       of the target volume attributes.
         :type connection_properties: dict
@@ -140,6 +145,15 @@ class InitiatorConnector(executor.Executor, metaclass=abc.ABCMeta):
 
         The connection_properties are the same as from connect_volume.
         The device_info is returned from connect_volume.
+
+        If the connector's connect_volume is decorated with
+        os_brick.utils.connect_volume_prepare_result then the path will
+        have been changed by the decorator if the volume was encrypted, so if
+        we need to have the original path that the connector returned instead
+        of the modified one (for example to identify the WWN from the symlink)
+        then we should use the
+        os_brick.utils.connect_volume_undo_prepare_result decorator with the
+        unlink_after=True parameter.
 
         :param connection_properties: The dictionary that describes all
                                       of the target volume attributes.
@@ -186,6 +200,15 @@ class InitiatorConnector(executor.Executor, metaclass=abc.ABCMeta):
         volume after the volume has been extended on the remote
         system.  The new volume size in bytes will be returned.
         If there is a failure to update, then None will be returned.
+
+        If the connector's connect_volume is decorated with
+        os_brick.utils.connect_volume_prepare_result then the path will
+        have been changed by the decorator if the volume was encrypted, so if
+        this method uses the original path as a shortcut to know which device
+        to extend (instead of using the other connection information) then it
+        should use the os_brick.utils.connect_volume_undo_prepare_result
+        decorator on this method so that it gets the original path instead of
+        the modified symlink one.
 
         :param connection_properties: The volume connection properties.
         :returns: new size of the volume.
