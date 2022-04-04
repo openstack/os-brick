@@ -256,6 +256,7 @@ class LightOSConnector(base.BaseLinuxConnector):
             return None
 
     @utils.trace
+    @utils.connect_volume_prepare_result
     @synchronized('volume_op')
     def connect_volume(self, connection_properties):
         """Discover and attach the volume.
@@ -292,6 +293,7 @@ class LightOSConnector(base.BaseLinuxConnector):
 
     @utils.trace
     @synchronized('volume_op')
+    @utils.connect_volume_undo_prepare_result(unlink_after=True)
     def disconnect_volume(self, connection_properties, device_info,
                           force=False, ignore_errors=False):
         """Disconnect a volume from the local host.
@@ -334,6 +336,7 @@ class LightOSConnector(base.BaseLinuxConnector):
 
     @utils.trace
     @synchronized('volume_op')
+    @utils.connect_volume_undo_prepare_result
     def extend_volume(self, connection_properties):
         uuid = connection_properties['uuid']
         new_size = self._get_size_by_uuid(uuid)
