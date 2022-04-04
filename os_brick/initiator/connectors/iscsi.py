@@ -469,6 +469,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
 
     @utils.trace
     @synchronized('extend_volume', external=True)
+    @utils.connect_volume_undo_prepare_result
     def extend_volume(self, connection_properties):
         """Update the local kernel's size information.
 
@@ -491,6 +492,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
             raise exception.VolumePathsNotFound()
 
     @utils.trace
+    @utils.connect_volume_prepare_result
     @synchronized('connect_volume', external=True)
     def connect_volume(self, connection_properties):
         """Attach the volume to instance_name.
@@ -517,41 +519,8 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
             with excutils.save_and_reraise_exception():
                 self._cleanup_connection(connection_properties, force=True)
 
-    @utils.retry(exceptions=(exception.VolumeDeviceNotFound))
-    def _get_device_link(self, wwn, device, mpath):
-        # These are the default symlinks that should always be there
-        if mpath:
-            symlink = '/dev/disk/by-id/dm-uuid-mpath-' + mpath
-        else:
-            symlink = '/dev/disk/by-id/scsi-' + wwn
-
-        # If default symlinks are not there just search for anything that links
-        # to our device.  In my experience this will return the last added link
-        # first, so if we are going to succeed this should be fast.
-        if not os.path.realpath(symlink) == device:
-            links_path = '/dev/disk/by-id/'
-            for symlink in os.listdir(links_path):
-                symlink = links_path + symlink
-                if os.path.realpath(symlink) == device:
-                    break
-            else:
-                # Raising this will trigger the next retry
-                raise exception.VolumeDeviceNotFound(device='/dev/disk/by-id')
-        return symlink
-
     def _get_connect_result(self, con_props, wwn, devices_names, mpath=None):
         device = '/dev/' + (mpath or devices_names[0])
-
-        # NOTE(geguileo): This is only necessary because of the current
-        # encryption flow that requires that connect_volume returns a symlink
-        # because first we do the volume attach, then the libvirt config is
-        # generated using the path returned by the atach, and then we do the
-        # encryption attach, which is forced to preserve the path that was used
-        # in the libvirt config.  If we fix that flow in OS-brick, Nova, and
-        # Cinder we can remove this and just return the real path.
-        if con_props.get('encrypted'):
-            device = self._get_device_link(wwn, device, mpath)
-
         result = {'type': 'block', 'scsi_wwn': wwn, 'path': device}
         if mpath:
             result['multipath_id'] = wwn
@@ -855,6 +824,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
 
     @utils.trace
     @synchronized('connect_volume', external=True)
+    @utils.connect_volume_undo_prepare_result(unlink_after=True)
     def disconnect_volume(self, connection_properties, device_info,
                           force=False, ignore_errors=False):
         """Detach the volume from instance_name.
@@ -920,8 +890,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         for remove, __ in devices_map.values():
             remove_devices.update(remove)
 
-        path_used = self._linuxscsi.get_dev_path(connection_properties,
-                                                 device_info)
+        path_used = utils.get_dev_path(connection_properties, device_info)
         was_multipath = (path_used.startswith('/dev/dm-') or
                          'mpath' in path_used)
         multipath_name = self._linuxscsi.remove_connection(

@@ -258,6 +258,7 @@ class RBDConnector(base.BaseLinuxConnector):
         return res
 
     @utils.trace
+    @utils.connect_volume_prepare_result
     def connect_volume(self, connection_properties):
         """Connect to a volume.
 
@@ -336,6 +337,7 @@ class RBDConnector(base.BaseLinuxConnector):
         return None
 
     @utils.trace
+    @utils.connect_volume_undo_prepare_result(unlink_after=True)
     def disconnect_volume(self, connection_properties, device_info,
                           force=False, ignore_errors=False):
         """Disconnect a volume.
@@ -399,6 +401,7 @@ class RBDConnector(base.BaseLinuxConnector):
         # For backward compatibility ignore run_as_root param with handles
         return self._check_valid_device(path)
 
+    @utils.connect_volume_undo_prepare_result
     def extend_volume(self, connection_properties):
         """Refresh local volume view and return current size in bytes."""
         # Nothing to do, RBD attached volumes are automatically refreshed, but

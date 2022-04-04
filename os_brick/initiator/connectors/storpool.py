@@ -23,6 +23,7 @@ from oslo_utils import importutils
 
 from os_brick import exception
 from os_brick.initiator.connectors import base
+from os_brick import utils
 
 LOG = logging.getLogger(__name__)
 
@@ -52,6 +53,7 @@ class StorPoolConnector(base.BaseLinuxConnector):
         """The StorPool connector properties."""
         return {}
 
+    @utils.connect_volume_prepare_result
     def connect_volume(self, connection_properties):
         """Connect to a volume.
 
@@ -87,6 +89,7 @@ class StorPoolConnector(base.BaseLinuxConnector):
         self._attach.sync(req_id, None)
         return {'type': 'block', 'path': '/dev/storpool/' + volume}
 
+    @utils.connect_volume_undo_prepare_result(unlink_after=True)
     def disconnect_volume(self, connection_properties, device_info,
                           force=False, ignore_errors=False):
         """Disconnect a volume from the local host.
@@ -197,6 +200,7 @@ class StorPoolConnector(base.BaseLinuxConnector):
         else:
             return None
 
+    @utils.connect_volume_undo_prepare_result
     def extend_volume(self, connection_properties):
         """Update the attached volume's size.
 

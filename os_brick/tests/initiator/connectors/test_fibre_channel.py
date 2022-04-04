@@ -741,7 +741,7 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
     @ddt.unpack
     @mock.patch('os_brick.initiator.linuxscsi.LinuxSCSI.remove_scsi_device')
     @mock.patch('os_brick.initiator.linuxscsi.LinuxSCSI.requires_flush')
-    @mock.patch('os_brick.initiator.linuxscsi.LinuxSCSI.get_dev_path')
+    @mock.patch('os_brick.utils.get_dev_path')
     def test__remove_devices(self, path_used, was_multipath, get_dev_path_mock,
                              flush_mock, remove_mock):
         get_dev_path_mock.return_value = path_used

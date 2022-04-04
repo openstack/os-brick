@@ -12,6 +12,7 @@
 
 from unittest import mock
 
+import ddt
 from oslo_concurrency import processutils as putils
 import six
 
@@ -21,6 +22,7 @@ from os_brick.privileged import rootwrap as priv_rootwrap
 from os_brick.tests import base
 
 
+@ddt.ddt
 class PrivRootwrapTestCase(base.TestCase):
     def setUp(self):
         super(PrivRootwrapTestCase, self).setUp()
@@ -148,3 +150,37 @@ class PrivRootwrapTestCase(base.TestCase):
                           *links, raise_at_end=True)
         unlink_mock.assert_has_calls([mock.call(links[0]),
                                       mock.call(links[1])])
+
+    @mock.patch.object(priv_rootwrap.unlink_root.privsep_entrypoint,
+                       'client_mode', False)
+    @mock.patch('os.symlink')
+    @mock.patch('os.remove')
+    def test_link_root_no_force(self, mock_remove, mock_link):
+        priv_rootwrap.link_root(mock.sentinel.target, mock.sentinel.link_name,
+                                force=False)
+        mock_remove.assert_not_called()
+        mock_link.assert_called_once_with(mock.sentinel.target,
+                                          mock.sentinel.link_name)
+
+    @ddt.data(None, FileNotFoundError)
+    @mock.patch.object(priv_rootwrap.unlink_root.privsep_entrypoint,
+                       'client_mode', False)
+    @mock.patch('os.symlink')
+    @mock.patch('os.remove')
+    def test_link_root_force(self, remove_effect, mock_remove, mock_link):
+        mock_remove.side_effect = remove_effect
+        priv_rootwrap.link_root(mock.sentinel.target, mock.sentinel.link_name)
+        mock_remove.assert_called_once_with(mock.sentinel.link_name)
+        mock_link.assert_called_once_with(mock.sentinel.target,
+                                          mock.sentinel.link_name)
+
+    @mock.patch.object(priv_rootwrap.unlink_root.privsep_entrypoint,
+                       'client_mode', False)
+    @mock.patch('os.symlink')
+    @mock.patch('os.remove', side_effect=IndexError)  # Non not found error
+    def test_link_root_force_fail(self, mock_remove, mock_link):
+        self.assertRaises(IndexError,
+                          priv_rootwrap.link_root,
+                          mock.sentinel.target, mock.sentinel.link_name)
+        mock_remove.assert_called_once_with(mock.sentinel.link_name)
+        mock_link.assert_not_called()

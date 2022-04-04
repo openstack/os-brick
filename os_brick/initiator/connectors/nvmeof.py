@@ -221,6 +221,7 @@ class NVMeOFConnector(base.BaseLinuxConnector):
                 raise
 
     @utils.trace
+    @utils.connect_volume_prepare_result
     @synchronized('connect_volume', external=True)
     def connect_volume(self, connection_properties):
         """Discover and attach the volume.
@@ -269,6 +270,7 @@ class NVMeOFConnector(base.BaseLinuxConnector):
 
     @utils.trace
     @synchronized('disconnect_volume', external=True)
+    @utils.connect_volume_undo_prepare_result(unlink_after=True)
     def disconnect_volume(self, connection_properties, device_info,
                           force=False, ignore_errors=False):
         """Detach and flush the volume.
@@ -321,6 +323,7 @@ class NVMeOFConnector(base.BaseLinuxConnector):
 
     @utils.trace
     @synchronized('extend_volume', external=True)
+    @utils.connect_volume_undo_prepare_result
     def extend_volume(self, connection_properties):
         """Update the local kernel's size information.
 

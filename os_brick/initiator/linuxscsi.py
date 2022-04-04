@@ -250,14 +250,6 @@ class LinuxSCSI(executor.Executor):
         return None
 
     @staticmethod
-    def get_dev_path(connection_properties, device_info):
-        """Determine what path was used by Nova/Cinder to access volume."""
-        if device_info and device_info.get('path'):
-            return device_info.get('path')
-
-        return connection_properties.get('device_path') or ''
-
-    @staticmethod
     def requires_flush(path, path_used, was_multipath):
         """Check if a device needs to be flushed when detaching.
 

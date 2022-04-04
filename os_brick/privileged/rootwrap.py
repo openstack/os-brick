@@ -213,8 +213,25 @@ def unlink_root(*links, **kwargs):
     raise_at_end = kwargs.get('raise_at_end', False)
     exc = exception.ExceptionChainer()
     catch_exception = no_errors or raise_at_end
+    LOG.debug('Unlinking %s', links)
     for link in links:
         with exc.context(catch_exception, 'Unlink failed for %s', link):
             os.unlink(link)
     if not no_errors and raise_at_end and exc:
         raise exc
+
+
+@privileged.default.entrypoint
+def link_root(target, link_name, force=True):
+    """Create a symbolic link with sys admin privileges.
+
+    This method behaves like the "ln -s" command, including the force parameter
+    where it will replace the link_name file even if it's not a symlink.
+    """
+    LOG.debug('Linking %s -> %s', link_name, target)
+    if force:
+        try:
+            os.remove(link_name)
+        except FileNotFoundError:
+            pass
+    os.symlink(target, link_name)
