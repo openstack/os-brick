@@ -206,6 +206,23 @@ class Portal(object):
                     '"devices_on_start"')
         return target.get_device_path_by_initial_devices()
 
+    def get_all_namespaces_ctrl_paths(self) -> List[str]:
+        """Return all nvme sysfs control paths for this portal.
+
+        The basename of the path can be single volume or a channel to an ANA
+        volume.
+
+        For example for the nvme1 controller we could return:
+
+            ['/sys/class/nvme-fabrics/ctl/nvme1n1 ',
+             '/sys/class/nvme-fabrics/ctl/nvme0c1n1']
+        """
+        if not self.controller:
+            return []
+        # Look under the controller, where we will have normal devices and ANA
+        # channel devices. For nvme1 we could find nvme1n1 or nvme0c1n1)
+        return glob.glob(f'{NVME_CTRL_SYSFS_PATH}{self.controller}/nvme*')
+
     def get_device_by_property(self,
                                prop_name: str,
                                value: str) -> Optional[str]:
@@ -219,10 +236,7 @@ class Portal(object):
         LOG.debug('Looking for device where %s=%s on controller %s',
                   prop_name, value, self.controller)
 
-        # Look under the controller, where we will have normal devices and ANA
-        # channel devices. For nvme1 we could find nvme1n1 or nvme0c1n1)
-        paths = glob.glob(f'{NVME_CTRL_SYSFS_PATH}{self.controller}/nvme*')
-        for path in paths:
+        for path in self.get_all_namespaces_ctrl_paths():
             prop_value = sysfs_property(prop_name, path)
             if prop_value == value:
                 # Convert path to the namespace device name
@@ -235,6 +249,34 @@ class Portal(object):
 
         LOG.debug('No device Found on controller %s', self.controller)
         return None
+
+    def can_disconnect(self) -> bool:
+        """Check if this portal can be disconnected.
+
+        A portal can be disconnected if it is connected (has a controller name)
+        and the subsystem has no namespaces left or if it has only one and it
+        is from this target.
+        """
+        if not self.controller:
+            LOG.debug('Portal %s is not present', self)
+            return False
+
+        ns_ctrl_paths = self.get_all_namespaces_ctrl_paths()
+        num_namespaces = len(ns_ctrl_paths)
+        # No namespaces => disconnect, >1 ns => can't disconnect
+        if num_namespaces != 1:
+            result = not bool(num_namespaces)
+            LOG.debug('There are %s namespaces on %s so we %s disconnect',
+                      num_namespaces, self, 'can' if result else 'cannot')
+            return result
+
+        # With only 1 namespace, check if it belongs to the portal
+        # Get the device on this target's portal (may be None)
+        portal_dev = os.path.basename(self.get_device() or '')
+        result = portal_dev == nvme_basename(ns_ctrl_paths[0])
+        LOG.debug("The only namespace on portal %s is %s and %s this target's",
+                  self, portal_dev, "matches" if result else "doesn't match")
+        return result
 
 
 class Target(object):
@@ -803,13 +845,17 @@ class NVMeOFConnector(base.BaseLinuxConnector):
     def connect_volume(
             self, connection_properties: NVMeOFConnProps) -> Dict[str, str]:
         """Attach and discover the volume."""
-        if connection_properties.is_replicated is False:
-            LOG.debug('Starting non replicated connection')
-            path = self._connect_target(connection_properties.targets[0])
+        try:
+            if connection_properties.is_replicated is False:
+                LOG.debug('Starting non replicated connection')
+                path = self._connect_target(connection_properties.targets[0])
 
-        else:  # If we know it's replicated or we don't yet know
-            LOG.debug('Starting replicated connection')
-            path = self._connect_volume_replicated(connection_properties)
+            else:  # If we know it's replicated or we don't yet know
+                LOG.debug('Starting replicated connection')
+                path = self._connect_volume_replicated(connection_properties)
+        except Exception:
+            self._try_disconnect_all(connection_properties)
+            raise
 
         return {'type': 'block', 'path': path}
 
@@ -914,13 +960,14 @@ class NVMeOFConnector(base.BaseLinuxConnector):
                 host_device_paths.append(rep_host_device_path)
             except Exception as ex:
                 LOG.error("_connect_target: %s", ex)
+
         if not host_device_paths:
             raise exception.VolumeDeviceNotFound(
                 device=connection_properties.targets)
 
         if connection_properties.is_replicated:
-            device_path = self._handle_replicated_volume(host_device_paths,
-                                                         connection_properties)
+            device_path = self._handle_replicated_volume(
+                host_device_paths, connection_properties)
         else:
             device_path = self._handle_single_replica(
                 host_device_paths, connection_properties.alias)
@@ -1006,22 +1053,64 @@ class NVMeOFConnector(base.BaseLinuxConnector):
                 conn_props.cinder_volume_id or conn_props.targets[0].nqn)
             return
 
+        exc = exception.ExceptionChainer()
+
         if not os.path.exists(device_path):
             LOG.warning("Trying to disconnect device %(device_path)s, but "
                         "it is not connected. Skipping.",
                         {'device_path': device_path})
             return
 
-        try:
-            # We assume that raid devices are flushed when ending the raid
-            if device_path.startswith(RAID_PATH):
+        # We assume that raid devices are flushed when ending the raid
+        if device_path.startswith(RAID_PATH):
+            with exc.context(force, 'Failed to end raid %s', device_path):
                 self.end_raid(device_path)
 
-            else:
+        else:
+            with exc.context(force, 'Failed to flush %s', device_path):
                 self._linuxscsi.flush_device_io(device_path)
-        except Exception:
+
+        self._try_disconnect_all(conn_props, exc)
+
+        if exc:
+            LOG.warning('There were errors removing %s', device_path)
             if not ignore_errors:
-                raise
+                raise exc
+
+    def _try_disconnect_all(
+            self,
+            conn_props: NVMeOFConnProps,
+            exc: Optional[exception.ExceptionChainer] = None) -> None:
+        """Disconnect all subsystems that are not being used.
+
+        Only sees if it has to disconnect this connection properties portals,
+        leaves other alone.
+
+        Since this is unrelated to the flushing of the devices failures will be
+        logged but they won't be raised.
+        """
+        if exc is None:
+            exc = exception.ExceptionChainer()
+
+        for target in conn_props.targets:
+            # Associate each portal with its controller name
+            target.set_portals_controllers()
+            for portal in target.portals:
+                # Ignore exceptions to disconnect as many as possible.
+                with exc.context(True, 'Failed to disconnect %s', portal):
+                    self._try_disconnect(portal)
+
+    def _try_disconnect(self, portal: Portal) -> None:
+        """Disconnect a specific subsystem if it's safe.
+
+        Only disconnect if it has no namespaces left or has only one left and
+        it is from this connection.
+        """
+        LOG.debug('Checking if %s can be disconnected', portal)
+        if portal.can_disconnect():
+            self._execute('nvme', 'disconnect',
+                          '-d', '/dev/' + portal.controller,  # type: ignore
+                          root_helper=self._root_helper, run_as_root=True)
 
     # #######  Extend methods ########
 

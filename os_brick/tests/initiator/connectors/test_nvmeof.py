@@ -209,12 +209,33 @@ class PortalTestCase(test_base.TestCase):
         self.assertEqual('result', res)
         mock_get_dev.assert_called_once_with()
 
+    @mock.patch('glob.glob')
+    def test_get_all_namespaces_ctrl_paths(self, mock_glob):
+        expected = ['/sys/class/nvme-fabrics/ctl/nvme0/nvme0n1',
+                    '/sys/class/nvme-fabrics/ctl/nvme0/nvme1c1n2']
+        mock_glob.return_value = expected[:]
+        self.portal.controller = 'nvme0'
+
+        res = self.portal.get_all_namespaces_ctrl_paths()
+
+        self.assertEqual(expected, res)
+        mock_glob.assert_called_once_with(
+            '/sys/class/nvme-fabrics/ctl/nvme0/nvme*')
+
+    @mock.patch('glob.glob')
+    def test_get_all_namespaces_ctrl_paths_no_controller(self, mock_glob):
+        res = self.portal.get_all_namespaces_ctrl_paths()
+
+        self.assertEqual([], res)
+        mock_glob.assert_not_called()
+
     @mock.patch.object(nvmeof, 'nvme_basename', return_value='nvme1n2')
     @mock.patch.object(nvmeof, 'sysfs_property')
-    @mock.patch('glob.glob')
-    def test_get_device_by_property(self, mock_glob, mock_property, mock_name):
+    @mock.patch.object(nvmeof.Portal, 'get_all_namespaces_ctrl_paths')
+    def test_get_device_by_property(self, mock_paths, mock_property,
+                                    mock_name):
         """Searches all devices for the right one and breaks when found."""
-        mock_glob.return_value = [
+        mock_paths.return_value = [
             '/sys/class/nvme-fabrics/ctl/nvme0/nvme0n1',
             '/sys/class/nvme-fabrics/ctl/nvme0/nvme1c1n2',
             '/sys/class/nvme-fabrics/ctl/nvme0/nvme0n3'
@@ -226,8 +247,7 @@ class PortalTestCase(test_base.TestCase):
 
         self.assertEqual('/dev/nvme1n2', res)
 
-        mock_glob.assert_called_once_with(
-            '/sys/class/nvme-fabrics/ctl/nvme0/nvme*')
+        mock_paths.assert_called_once_with()
         self.assertEqual(2, mock_property.call_count)
         mock_property.assert_has_calls(
             [mock.call('uuid', '/sys/class/nvme-fabrics/ctl/nvme0/nvme0n1'),
@@ -238,12 +258,12 @@ class PortalTestCase(test_base.TestCase):
 
     @mock.patch.object(nvmeof, 'nvme_basename', return_value='nvme1n2')
     @mock.patch.object(nvmeof, 'sysfs_property')
-    @mock.patch('glob.glob')
+    @mock.patch.object(nvmeof.Portal, 'get_all_namespaces_ctrl_paths')
     def test_get_device_by_property_not_found(
-            self, mock_glob, mock_property, mock_name):
+            self, mock_paths, mock_property, mock_name):
         """Exhausts devices searching before returning None."""
-        mock_glob.return_value = ['/sys/class/nvme-fabrics/ctl/nvme0/nvme0n1',
-                                  '/sys/class/nvme-fabrics/ctl/nvme0/nvme0n2']
+        mock_paths.return_value = ['/sys/class/nvme-fabrics/ctl/nvme0/nvme0n1',
+                                   '/sys/class/nvme-fabrics/ctl/nvme0/nvme0n2']
         mock_property.side_effect = ['uuid1', 'uuid2']
         self.portal.controller = 'nvme0'
 
@@ -251,14 +271,58 @@ class PortalTestCase(test_base.TestCase):
 
         self.assertIsNone(res)
 
-        mock_glob.assert_called_once_with(
-            '/sys/class/nvme-fabrics/ctl/nvme0/nvme*')
+        mock_paths.assert_called_once_with()
         self.assertEqual(2, mock_property.call_count)
         mock_property.assert_has_calls(
             [mock.call('uuid', '/sys/class/nvme-fabrics/ctl/nvme0/nvme0n1'),
              mock.call('uuid', '/sys/class/nvme-fabrics/ctl/nvme0/nvme0n2')]
         )
         mock_name.assert_not_called()
+
+    @mock.patch.object(nvmeof.Portal, 'get_all_namespaces_ctrl_paths')
+    def test__can_disconnect_no_controller_name(self, mock_paths):
+        """Cannot disconnect when portal doesn't have a controller."""
+        res = self.portal.can_disconnect()
+        self.assertFalse(res)
+        mock_paths.assert_not_called()
+
+    @ddt.data(([], True),
+              (['/sys/class/nvme-fabrics/ctl/nvme0/nvme0n1',
+                '/sys/class/nvme-fabrics/ctl/nvme0/nvme0n2'], False))
+    @ddt.unpack
+    @mock.patch.object(nvmeof.Portal, 'get_all_namespaces_ctrl_paths')
+    def test__can_disconnect_not_1_namespace(
+            self, ctrl_paths, expected, mock_paths):
+        """Check if can disconnect when we don't have 1 namespace in subsys."""
+        self.portal.controller = 'nvme0'
+        mock_paths.return_value = ctrl_paths
+        res = self.portal.can_disconnect()
+        self.assertIs(expected, res)
+        mock_paths.assert_called_once_with()
+
+    @mock.patch.object(nvmeof.Portal, 'get_device')
+    @mock.patch.object(nvmeof.Portal, 'get_all_namespaces_ctrl_paths')
+    def test__can_disconnect(self, mock_paths, mock_device):
+        """Can disconnect if the namespace is the one from this target.
+
+        This tests that even when ANA is enabled it can identify the control
+        path as belonging to the used device path.
+        """
+        self.portal.controller = 'nvme0'
+        mock_device.return_value = '/dev/nvme1n2'
+        mock_paths.return_value = [
+            '/sys/class/nvme-fabrics/ctl/nvme0/nvme1c1n2']
+        self.assertTrue(self.portal.can_disconnect())
+
+    @mock.patch.object(nvmeof.Portal, 'get_device')
+    @mock.patch.object(nvmeof.Portal, 'get_all_namespaces_ctrl_paths')
+    def test__can_disconnect_different_target(self, mock_paths, mock_device):
+        """Cannot disconnect if the namespace is from a different target."""
+        self.portal.controller = 'nvme0'
+        mock_device.return_value = None
+        mock_paths.return_value = [
+            '/sys/class/nvme-fabrics/ctl/nvme0/nvme1c1n2']
+        self.assertFalse(self.portal.can_disconnect())
 
 
 @ddt.ddt
@@ -970,23 +1034,45 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
                          self.connector.get_volume_paths(conn_props))
 
     @mock.patch.object(nvmeof.Target, 'set_portals_controllers', mock.Mock())
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_try_disconnect_all')
     @mock.patch.object(nvmeof.NVMeOFConnector, '_connect_target')
-    def test_connect_volume_not_replicated(self, mock_connect_target):
+    def test_connect_volume_not_replicated(
+            self, mock_connect_target, mock_disconnect):
         """Single vol attach."""
         connection_properties = volume_replicas[0].copy()
         mock_connect_target.return_value = '/dev/nvme0n1'
         self.assertEqual({'type': 'block', 'path': '/dev/nvme0n1'},
                          self.connector.connect_volume(connection_properties))
-
         mock_connect_target.assert_called_with(mock.ANY)
         self.assertIsInstance(mock_connect_target.call_args[0][0],
                               nvmeof.Target)
+        mock_disconnect.assert_not_called()
 
     @mock.patch.object(nvmeof.Target, 'set_portals_controllers', mock.Mock())
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_try_disconnect_all')
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_connect_target')
+    def test_connect_volume_not_replicated_fails(
+            self, mock_connect_target, mock_disconnect):
+        """Single vol attach fails and disconnects on failure."""
+        connection_properties = volume_replicas[0].copy()
+        mock_connect_target.side_effect = exception.VolumeDeviceNotFound,
+        self.assertRaises(exception.VolumeDeviceNotFound,
+                          self.connector.connect_volume,
+                          connection_properties)
+        mock_connect_target.assert_called_with(mock.ANY)
+        self.assertIsInstance(mock_connect_target.call_args[0][0],
+                              nvmeof.Target)
+        mock_disconnect.assert_called_with(mock.ANY)
+        self.assertIsInstance(mock_disconnect.call_args[0][0],
+                              nvmeof.NVMeOFConnProps)
+
+    @mock.patch.object(nvmeof.Target, 'set_portals_controllers', mock.Mock())
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_try_disconnect_all')
     @mock.patch.object(nvmeof.NVMeOFConnector, '_connect_volume_replicated')
     @mock.patch.object(nvmeof.NVMeOFConnector, '_connect_target')
     def test_connect_volume_replicated(
-            self, mock_connect_target, mock_replicated_volume):
+            self, mock_connect_target, mock_replicated_volume,
+            mock_disconnect):
         mock_replicated_volume.return_value = '/dev/md/md1'
 
         actual = self.connector.connect_volume(connection_properties)
@@ -998,20 +1084,27 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         self.assertIsInstance(mock_replicated_volume.call_args[0][0],
                               nvmeof.NVMeOFConnProps)
         mock_connect_target.assert_not_called()
+        mock_disconnect.assert_not_called()
 
     @mock.patch.object(nvmeof.Target, 'set_portals_controllers', mock.Mock())
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_try_disconnect_all')
     @mock.patch.object(nvmeof.NVMeOFConnector, '_handle_replicated_volume')
     @mock.patch.object(nvmeof.NVMeOFConnector, '_connect_target')
     def test_connect_volume_replicated_exception(
-            self, mock_connect_target, mock_replicated_volume):
+            self, mock_connect_target, mock_replicated_volume,
+            mock_disconnect):
         mock_connect_target.side_effect = Exception()
         self.assertRaises(exception.VolumeDeviceNotFound,
                           self.connector.connect_volume, connection_properties)
+        mock_disconnect.assert_called_with(mock.ANY)
+        self.assertIsInstance(mock_disconnect.call_args[0][0],
+                              nvmeof.NVMeOFConnProps)
 
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_try_disconnect_all')
     @mock.patch.object(nvmeof.NVMeOFConnector, 'get_volume_paths')
     @mock.patch('os.path.exists', return_value=True)
     def test_disconnect_volume_path_not_found(
-            self, mock_exists, mock_get_paths):
+            self, mock_exists, mock_get_paths, mock_disconnect):
         """Disconnect can't find device path from conn props and dev info."""
         mock_get_paths.return_value = []
         res = self.connector.disconnect_volume(connection_properties,
@@ -1022,6 +1115,7 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         self.assertIsInstance(mock_get_paths.call_args[0][0],
                               nvmeof.NVMeOFConnProps)
         mock_exists.assert_not_called()
+        mock_disconnect.assert_not_called()
 
     @mock.patch.object(nvmeof.NVMeOFConnector, 'get_volume_paths')
     @mock.patch('os.path.exists', return_value=True)
@@ -1040,6 +1134,7 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
                               nvmeof.NVMeOFConnProps)
         mock_exists.assert_called_once_with(dev_path)
 
+    @mock.patch.object(nvmeof.Target, 'set_portals_controllers', mock.Mock())
     @mock.patch('os_brick.initiator.linuxscsi.LinuxSCSI.flush_device_io')
     @mock.patch.object(nvmeof.NVMeOFConnector, 'get_volume_paths')
     @mock.patch.object(nvmeof.NVMeOFConnector, 'end_raid')
@@ -1060,6 +1155,7 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         mock_end_raid.assert_not_called()
         mock_flush.assert_called_with(dev_path)
 
+    @mock.patch.object(nvmeof.Target, 'set_portals_controllers', mock.Mock())
     @mock.patch('os_brick.initiator.linuxscsi.LinuxSCSI.flush_device_io')
     @mock.patch.object(nvmeof.NVMeOFConnector, 'get_volume_paths')
     @mock.patch.object(nvmeof.NVMeOFConnector, 'end_raid')
@@ -1849,3 +1945,97 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         self.connector.use_multipath = use_multipath
         self.connector.native_multipath_supported = ana_support
         self.assertIs(result, self.connector._do_multipath())
+
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_try_disconnect')
+    @mock.patch.object(nvmeof.Target, 'set_portals_controllers')
+    def test__try_disconnect_all(self, mock_set_portals, mock_disconnect):
+        """Disconnect all portals for all targets in connection properties."""
+        connection_properties = {
+            'vol_uuid': VOL_UUID,
+            'alias': 'raid_alias',
+            'replica_count': 2,
+            'volume_replicas': [
+                {'target_nqn': 'nqn1',
+                 'vol_uuid': VOL_UUID1,
+                 'portals': [['portal1', 'port_value', 'RoCEv2'],
+                             ['portal2', 'port_value', 'anything']]},
+                {'target_nqn': 'nqn2',
+                 'vol_uuid': VOL_UUID2,
+                 'portals': [['portal4', 'port_value', 'anything'],
+                             ['portal3', 'port_value', 'RoCEv2']]}
+            ],
+        }
+        conn_props = nvmeof.NVMeOFConnProps(connection_properties)
+        exc = exception.ExceptionChainer()
+
+        self.connector._try_disconnect_all(conn_props, exc)
+
+        self.assertEqual(2, mock_set_portals.call_count)
+        mock_set_portals.assert_has_calls((mock.call(), mock.call()))
+        self.assertEqual(4, mock_disconnect.call_count)
+        mock_disconnect.assert_has_calls((
+            mock.call(conn_props.targets[0].portals[0]),
+            mock.call(conn_props.targets[0].portals[1]),
+            mock.call(conn_props.targets[1].portals[0]),
+            mock.call(conn_props.targets[1].portals[1])
+        ))
+        self.assertFalse(bool(exc))
+
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_try_disconnect')
+    @mock.patch.object(nvmeof.Target, 'set_portals_controllers')
+    def test__try_disconnect_all_with_failures(
+            self, mock_set_portals, mock_disconnect):
+        """Even with failures it should try to disconnect all portals."""
+        exc = exception.ExceptionChainer()
+        mock_disconnect.side_effect = [Exception, None]
+
+        self.connector._try_disconnect_all(self.conn_props, exc)
+
+        mock_set_portals.assert_called_once_with()
+
+        self.assertEqual(3, mock_disconnect.call_count)
+        mock_disconnect.assert_has_calls((
+            mock.call(self.conn_props.targets[0].portals[0]),
+            mock.call(self.conn_props.targets[0].portals[1]),
+            mock.call(self.conn_props.targets[0].portals[2])
+        ))
+        self.assertTrue(bool(exc))
+
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_execute')
+    @mock.patch.object(nvmeof.Portal, 'can_disconnect')
+    def test__try_disconnect(self, mock_can_disconnect, mock_execute):
+        """We try to disconnect when we can without breaking other devices."""
+        mock_can_disconnect.return_value = True
+        portal = self.conn_props.targets[0].portals[0]
+        portal.controller = 'nvme0'
+        self.connector._try_disconnect(portal)
+        mock_can_disconnect.assert_called_once_with()
+        mock_execute.assert_called_once_with(
+            'nvme', 'disconnect', '-d', '/dev/nvme0',
+            root_helper=self.connector._root_helper, run_as_root=True)
+
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_execute')
+    @mock.patch.object(nvmeof.Portal, 'can_disconnect')
+    def test__try_disconnect_failure(self, mock_can_disconnect, mock_execute):
+        """Confirm disconnect doesn't swallow exceptions."""
+        mock_can_disconnect.return_value = True
+        portal = self.conn_props.targets[0].portals[0]
+        portal.controller = 'nvme0'
+        mock_execute.side_effect = ValueError
+        self.assertRaises(ValueError,
+                          self.connector._try_disconnect, portal)
+        mock_can_disconnect.assert_called_once_with()
+        mock_execute.assert_called_once_with(
+            'nvme', 'disconnect', '-d', '/dev/nvme0',
+            root_helper=self.connector._root_helper, run_as_root=True)
+
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_execute')
+    @mock.patch.object(nvmeof.Portal, 'can_disconnect')
+    def test__try_disconnect_no_disconnect(
+            self, mock_can_disconnect, mock_execute):
+        """Doesn't disconnect when it would break other devices."""
+        mock_can_disconnect.return_value = False
+        portal = self.conn_props.targets[0].portals[0]
+        self.connector._try_disconnect(portal)
+        mock_can_disconnect.assert_called_once_with()
+        mock_execute.assert_not_called()

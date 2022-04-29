@@ -15,7 +15,7 @@
 """Exceptions for the Brick library."""
 
 import traceback
-from typing import Iterable, List, Optional  # noqa: H301
+from typing import Any, List, Optional  # noqa: H301
 
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
@@ -215,7 +215,7 @@ class ExceptionChainer(BrickException):
     def context(self,
                 catch_exception: bool,
                 msg: str = '',
-                *msg_args: Iterable):
+                *msg_args: Any):
         self._catch_exception = catch_exception
         self._exc_msg = msg
         self._exc_msg_args = list(msg_args)
