@@ -1,0 +1,8 @@
+---
+fixes:
+  - |
+    NVMe-oF connector `bug #1961102
+    <https://bugs.launchpad.net/os-brick/+bug/1961102>`_: Fixed leaving
+    controller devices (i.e., /dev/nvme0) behind on hosts.  Now NVMe-oF
+    subsytems are disconnected when disconnecting volumes if the subsytem
+    doesn't have additional volumes present in the host.
