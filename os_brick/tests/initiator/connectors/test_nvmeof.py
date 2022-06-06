@@ -50,7 +50,8 @@ connection_properties = {
     'replica_count': 3
 }
 fake_portal = ('fake', 'portal', 'tcp')
-
+fake_controller = '/sys/class/nvme-fabrics/ctl/nvme1'
+fake_controllers_map = {'traddr=fakeaddress,trsvcid=4430': 'nvme1'}
 nvme_list_subsystems_stdout = """
  {
    "Subsystems" : [
@@ -137,6 +138,9 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         uuid = self.connector._get_host_uuid()
         self.assertIsNone(uuid)
 
+    @mock.patch.object(nvmeof.NVMeOFConnector,
+                       '_is_native_multipath_supported',
+                       return_value=True)
     @mock.patch.object(nvmeof.NVMeOFConnector, 'nvme_present',
                        return_value=True)
     @mock.patch.object(utils, 'get_host_nqn',
@@ -147,11 +151,15 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
                        return_value=None)
     def test_get_connector_properties_without_sysuuid(self, mock_host_uuid,
                                                       mock_sysuuid, mock_nqn,
-                                                      mock_nvme_present):
+                                                      mock_nvme_present,
+                                                      mock_nat_mpath_support):
         props = self.connector.get_connector_properties('sudo')
-        expected_props = {'nqn': 'fakenqn'}
+        expected_props = {'nqn': 'fakenqn', 'nvme_native_multipath': False}
         self.assertEqual(expected_props, props)
 
+    @mock.patch.object(nvmeof.NVMeOFConnector,
+                       '_is_native_multipath_supported',
+                       return_value=True)
     @mock.patch.object(nvmeof.NVMeOFConnector, 'nvme_present')
     @mock.patch.object(utils, 'get_host_nqn', autospec=True)
     @mock.patch.object(nvmeof.NVMeOFConnector, '_get_system_uuid',
@@ -159,14 +167,15 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(nvmeof.NVMeOFConnector, '_get_host_uuid', autospec=True)
     def test_get_connector_properties_with_sysuuid(self, mock_host_uuid,
                                                    mock_sysuuid, mock_nqn,
-                                                   mock_nvme_present):
+                                                   mock_nvme_present,
+                                                   mock_native_mpath_support):
         mock_host_uuid.return_value = HOST_UUID
         mock_sysuuid.return_value = SYS_UUID
         mock_nqn.return_value = HOST_NQN
         mock_nvme_present.return_value = True
         props = self.connector.get_connector_properties('sudo')
         expected_props = {"system uuid": SYS_UUID, "nqn": HOST_NQN,
-                          "uuid": HOST_UUID}
+                          "uuid": HOST_UUID, 'nvme_native_multipath': False}
         self.assertEqual(expected_props, props)
 
     def test_get_volume_paths_unreplicated(self):
@@ -277,7 +286,7 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
             self, mock_connect_target_volume):
         mock_connect_target_volume.return_value = '/dev/nvme0n1'
         self.assertEqual(
-            self.connector._connect_volume_replicated(
+            self.connector._connect_volume_by_uuid(
                 {
                     'target_nqn': 'fakenqn',
                     'vol_uuid': 'fakeuuid',
@@ -493,34 +502,30 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         )
         mock_device_size.assert_called_with(device_path)
 
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_controller')
     @mock.patch.object(nvmeof.NVMeOFConnector, 'rescan')
     @mock.patch.object(nvmeof.NVMeOFConnector, 'get_nvme_device_path')
     def test__connect_target_volume_with_connected_device(
-            self, mock_device_path, mock_rescan, mock_controller):
+            self, mock_device_path, mock_rescan):
         mock_device_path.return_value = '/dev/nvme0n1'
         self.assertEqual(
             self.connector._connect_target_volume(
                 'fakenqn', 'fakeuuid', [('fake', 'portal', 'tcp')]),
             '/dev/nvme0n1')
-        mock_controller.assert_called_with(self.connector, 'fakenqn')
-        mock_rescan.assert_called_with(self.connector, 'fakenqn', 'fakeuuid')
+        mock_rescan.assert_called_with(self.connector, 'fakenqn')
         mock_device_path.assert_called_with(
-            self.connector, 'fakenqn', 'fakeuuid')
+            self.connector, 'fakenqn', 'fakeuuid', list({}.values()))
 
     @mock.patch.object(nvmeof.NVMeOFConnector, 'connect_to_portals')
     @mock.patch.object(nvmeof.NVMeOFConnector, 'get_nvme_device_path')
     def test__connect_target_volume_not_connected(
             self, mock_device_path, mock_portals):
         mock_device_path.side_effect = exception.VolumeDeviceNotFound()
-        mock_portals.return_value = True
+        mock_portals.return_value = False
         self.assertRaises(exception.VolumeDeviceNotFound,
                           self.connector._connect_target_volume, TARGET_NQN,
                           VOL_UUID, [('fake', 'portal', 'tcp')])
-        mock_device_path.assert_called_with(
-            self.connector, TARGET_NQN, VOL_UUID)
 
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_controller')
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'get_nvme_controllers')
     @mock.patch.object(nvmeof.NVMeOFConnector, 'connect_to_portals')
     def test__connect_target_volume_no_portals_con(
             self, mock_portals, mock_controller):
@@ -530,21 +535,30 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
                           self.connector._connect_target_volume, 'fakenqn',
                           'fakeuuid', [fake_portal])
 
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_controller')
-    @mock.patch.object(nvmeof.NVMeOFConnector, 'connect_to_portals')
     @mock.patch.object(nvmeof.NVMeOFConnector, 'get_nvme_device_path')
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'get_live_nvme_controllers_map')
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'connect_to_portals')
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'rescan')
     def test__connect_target_volume_new_device_path(
-            self, mock_device_path, mock_connect_portal, mock_controller):
-        mock_controller.side_effect = exception.VolumeDeviceNotFound()
+            self, mock_rescan, mock_connect_portal,
+            mock_get_live_nvme_controllers_map, mock_device_path):
         mock_device_path.return_value = '/dev/nvme0n1'
+        mock_rescan.return_value = {}
+        mock_connect_portal.return_value = True
+        mock_get_live_nvme_controllers_map.return_value = fake_controllers_map
         self.assertEqual(
             self.connector._connect_target_volume(
                 'fakenqn', 'fakeuuid', [('fake', 'portal', 'tcp')]),
             '/dev/nvme0n1')
+        mock_rescan.assert_called_with(self.connector, 'fakenqn')
         mock_connect_portal.assert_called_with(
-            self.connector, 'fakenqn', [('fake', 'portal', 'tcp')])
+            self.connector, 'fakenqn', [('fake', 'portal', 'tcp')], {})
+        mock_get_live_nvme_controllers_map.assert_called_with(self.connector,
+                                                              'fakenqn')
+        fake_controllers_map_values = fake_controllers_map.values()
         mock_device_path.assert_called_with(
-            self.connector, 'fakenqn', 'fakeuuid')
+            self.connector, 'fakenqn', 'fakeuuid',
+            list(fake_controllers_map_values))
 
     @mock.patch.object(nvmeof.NVMeOFConnector, 'run_nvme_cli')
     def test_connect_to_portals(self, mock_nvme_cli):
@@ -553,7 +567,7 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
             'tcp', '-n', 'fakenqn', '-Q', '128', '-l', '-1')
         self.assertEqual(
             self.connector.connect_to_portals(
-                self.connector, 'fakenqn', [('10.0.0.1', 4420, 'tcp')]),
+                self.connector, 'fakenqn', [('10.0.0.1', 4420, 'tcp')], {}),
             True)
         mock_nvme_cli.assert_called_with(self.connector, nvme_command)
 
@@ -565,7 +579,7 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
             'rdma', '-n', 'fakenqn', '-Q', '128', '-l', '-1')
         self.assertEqual(
             self.connector.connect_to_portals(
-                self.connector, 'fakenqn', [('10.0.0.1', 4420, 'RoCEv2')]),
+                self.connector, 'fakenqn', [('10.0.0.1', 4420, 'RoCEv2')], {}),
             False)
         mock_nvme_cli.assert_called_with(self.connector, nvme_command)
 
@@ -735,25 +749,28 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
             self.connector, ['mdadm', '--remove', '/dev/md/md1'])
 
     @mock.patch.object(nvmeof.NVMeOFConnector, 'run_nvme_cli')
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_controller')
-    def test_rescan(self, mock_get_nvme_controller, mock_run_nvme_cli):
-        mock_get_nvme_controller.return_value = 'nvme1'
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'get_live_nvme_controllers_map')
+    def test_rescan(self, mock_get_live_nvme_controllers_map,
+                    mock_run_nvme_cli):
+        mock_get_live_nvme_controllers_map.return_value = fake_controllers_map
         mock_run_nvme_cli.return_value = None
-        result = self.connector.rescan(EXECUTOR, TARGET_NQN, VOL_UUID)
-        self.assertIsNone(result)
-        mock_get_nvme_controller.assert_called_with(EXECUTOR, TARGET_NQN)
+        result = self.connector.rescan(EXECUTOR, TARGET_NQN)
+        self.assertEqual(fake_controllers_map, result)
+        mock_get_live_nvme_controllers_map.assert_called_with(EXECUTOR,
+                                                              TARGET_NQN)
         nvme_command = ('ns-rescan', NVME_DEVICE_PATH)
         mock_run_nvme_cli.assert_called_with(EXECUTOR, nvme_command)
 
     @mock.patch.object(nvmeof.NVMeOFConnector, 'run_nvme_cli')
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_controller')
-    def test_rescan_err(self, mock_get_nvme_controller, mock_run_nvme_cli):
-        mock_get_nvme_controller.return_value = 'nvme1'
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'get_live_nvme_controllers_map')
+    def test_rescan_err(self, mock_get_live_nvme_controllers_map,
+                        mock_run_nvme_cli):
+        mock_get_live_nvme_controllers_map.return_value = fake_controllers_map
         mock_run_nvme_cli.side_effect = Exception()
-        self.assertRaises(exception.CommandExecutionFailed,
-                          self.connector.rescan, EXECUTOR, TARGET_NQN,
-                          VOL_UUID)
-        mock_get_nvme_controller.assert_called_with(EXECUTOR, TARGET_NQN)
+        result = self.connector.rescan(EXECUTOR, TARGET_NQN)
+        self.assertEqual(fake_controllers_map, result)
+        mock_get_live_nvme_controllers_map.assert_called_with(EXECUTOR,
+                                                              TARGET_NQN)
         nvme_command = ('ns-rescan', NVME_DEVICE_PATH)
         mock_run_nvme_cli.assert_called_with(EXECUTOR, nvme_command)
 
@@ -874,17 +891,17 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
 
     @mock.patch.object(executor.Executor, '_execute')
     @mock.patch.object(glob, 'glob')
-    @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_controller')
-    def test_get_nvme_device_path(self, mock_get_nvme_controller, mock_glob,
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'get_nvme_controllers')
+    def test_get_nvme_device_path(self, mock_get_nvme_controllers, mock_glob,
                                   mock_execute):
-        mock_get_nvme_controller.return_value = 'nvme1'
+        mock_get_nvme_controllers.return_value = ['nvme1']
         block_dev_path = '/sys/class/block/nvme1n*/uuid'
-        mock_glob.return_value = ['/sys/class/block/nvme1n1/uuid']
+        mock_glob.side_effect = [['/sys/class/block/nvme1n1/uuid']]
         mock_execute.return_value = (VOL_UUID + "\n", "")
         cmd = ['cat', '/sys/class/block/nvme1n1/uuid']
         result = self.connector.get_nvme_device_path(EXECUTOR, TARGET_NQN,
                                                      VOL_UUID)
-        mock_get_nvme_controller.assert_called_with(EXECUTOR, TARGET_NQN)
+        mock_get_nvme_controllers.assert_called_with(EXECUTOR, TARGET_NQN)
         self.assertEqual(NVME_NS_PATH, result)
         mock_glob.assert_any_call(block_dev_path)
         args, kwargs = mock_execute.call_args
@@ -909,29 +926,25 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         if 'state' in value:
             return 'live' + "\n", ""
 
-    @mock.patch.object(executor.Executor, '_execute',
-                       side_effect=execute_side_effect)
-    @mock.patch.object(glob, 'glob')
-    def test_get_nvme_controller(self, mock_glob, mock_execute):
-        ctrl_path = '/sys/class/nvme-fabrics/ctl/nvme*'
-        mock_glob.side_effect = [['/sys/class/nvme-fabrics/ctl/nvme1']]
-        cmd = ['cat', '/sys/class/nvme-fabrics/ctl/nvme1/state']
-        result = self.connector._get_nvme_controller(EXECUTOR, TARGET_NQN)
-        self.assertEqual('nvme1', result)
-        mock_glob.assert_any_call(ctrl_path)
-        args, kwargs = mock_execute.call_args
-        self.assertEqual(args[0], cmd[0])
-        self.assertEqual(args[1], cmd[1])
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'get_live_nvme_controllers_map')
+    def test_get_nvme_controllers(self, mock_get_live_nvme_controllers_map):
+        mock_get_live_nvme_controllers_map.return_value = fake_controllers_map
+        result = self.connector.get_nvme_controllers(EXECUTOR, TARGET_NQN)
+        fake_controllers_map_values = fake_controllers_map.values()
+        self.assertEqual(list(fake_controllers_map_values)[0][1],
+                         list(result)[0][1])
+        mock_get_live_nvme_controllers_map.assert_called_with(EXECUTOR,
+                                                              TARGET_NQN)
 
     @mock.patch.object(executor.Executor, '_execute',
                        side_effect=execute_side_effect_not_live)
     @mock.patch.object(glob, 'glob')
-    def test_get_nvme_controller_not_live(self, mock_glob, mock_execute):
+    def test_get_nvme_controllers_not_live(self, mock_glob, mock_execute):
         ctrl_path = '/sys/class/nvme-fabrics/ctl/nvme*'
         mock_glob.side_effect = [['/sys/class/nvme-fabrics/ctl/nvme1']]
         cmd = ['cat', '/sys/class/nvme-fabrics/ctl/nvme1/state']
         self.assertRaises(exception.VolumeDeviceNotFound,
-                          self.connector._get_nvme_controller, EXECUTOR,
+                          self.connector.get_nvme_controllers, EXECUTOR,
                           TARGET_NQN)
         mock_glob.assert_any_call(ctrl_path)
         args, kwargs = mock_execute.call_args
@@ -941,12 +954,12 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(executor.Executor, '_execute',
                        side_effect=execute_side_effect_not_found)
     @mock.patch.object(glob, 'glob')
-    def test_get_nvme_controller_not_found(self, mock_glob, mock_execute):
+    def test_get_nvme_controllers_not_found(self, mock_glob, mock_execute):
         ctrl_path = '/sys/class/nvme-fabrics/ctl/nvme*'
         mock_glob.side_effect = [['/sys/class/nvme-fabrics/ctl/nvme1']]
         cmd = ['cat', '/sys/class/nvme-fabrics/ctl/nvme1/state']
         self.assertRaises(exception.VolumeDeviceNotFound,
-                          self.connector._get_nvme_controller, EXECUTOR,
+                          self.connector.get_nvme_controllers, EXECUTOR,
                           TARGET_NQN)
         mock_glob.assert_any_call(ctrl_path)
         args, kwargs = mock_execute.call_args
@@ -1086,6 +1099,7 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         self.assertFalse(result)
 
     def _get_host_nqn(self):
+        host_nqn = None
         try:
             with open('/etc/nvme/hostnqn', 'r') as f:
                 host_nqn = f.read().strip()

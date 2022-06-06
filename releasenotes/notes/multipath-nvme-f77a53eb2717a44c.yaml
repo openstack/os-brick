@@ -1,0 +1,7 @@
+---
+features:
+  - |
+    Phase 1 (Native) implementation of NVMeoF Multipathing.
+    See the `NVMeoF Multipathing
+    <https://specs.openstack.org/openstack/cinder-specs/specs/yoga/nvme-multipath.html>`_
+    spec for details.
