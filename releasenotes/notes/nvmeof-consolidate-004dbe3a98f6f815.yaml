@@ -1,0 +1,46 @@
+---
+fixes:
+  - |
+    NVMe-oF connector `bug #1964395
+    <https://bugs.launchpad.net/os-brick/+bug/1964395>`_: Fixed dependence on a
+    specific nvme cli version for proper detection of devices when attaching a
+    volume.
+
+  - |
+    NVMe-oF connector `bug #1964388
+    <https://bugs.launchpad.net/os-brick/+bug/1964388>`_: Fixed corner case
+    where it could return the wrong path for a volume, resulting in attaching
+    in Nova the wrong volume to an instance, destroying volume data in Cinder,
+    and other similarly dangerous scenarios.
+
+  - |
+    NVMe-oF connector `bug #1964385
+    <https://bugs.launchpad.net/os-brick/+bug/1964385>`_: Fixed disappearance
+    of volumes/devices from the host, with potential data loss of unflushed
+    data, when network issues last longer than 10 minutes.
+
+  - |
+    NVMe-oF connector `bug #1964380
+    <https://bugs.launchpad.net/os-brick/+bug/1964380>`_: Fixed support for
+    newer nvme cli exit code when trying to connect to an already
+    subsystem-portal.
+
+  - |
+    NVMe-oF connector `bug #1964383
+    <https://bugs.launchpad.net/os-brick/+bug/1964383>`_: Fixed not being able
+    to attach a volume if there was already a controller for the subsystem.
+
+  - |
+    NVMe-oF connector `bug #1965954
+    <https://bugs.launchpad.net/os-brick/+bug/1965954>`_: Fixed extend of
+    in-use replicated volumes with a single replica not growing the RAID
+
+  - |
+    NVMe-oF connector `bug #1964590
+    <https://bugs.launchpad.net/os-brick/+bug/1964590>`_: Fixed extend failure
+    of in-use volumes with some Cinder drivers.
+
+  - |
+    NVMe-oF connector `bug #1903032
+    <https://bugs.launchpad.net/os-brick/+bug/1903032>`_: Fixed not flushing
+    single connection volumes on some Cinder drivers.

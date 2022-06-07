@@ -406,3 +406,21 @@ def get_device_size(executor, device):
         return int(var)
     else:
         return None
+
+
+class Anything(object):
+    """Object equal to everything."""
+    def __eq__(self, other):
+        return True
+
+    def __ne__(self, other):
+        return False
+
+    def __str__(self):
+        return '<Anything>'
+
+    __lt__ = __gt__ = __le__ = __ge__ = __ne__
+    __repr__ = __str__
+
+
+ANY = Anything()

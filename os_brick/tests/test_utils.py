@@ -612,3 +612,20 @@ class ConnectionPropertiesDecoratorsTestCase(base.TestCase):
         outer_self.assertEqual('extend_volume', res)
         mock_dev_path.assert_called_once_with(symlink_path)
         mock_unlink.assert_not_called()
+
+
+@ddt.ddt
+class AnyTestCase(base.TestCase):
+    @ddt.data('hola', 1, None, {'a': 1}, {1, 2}, False)
+    def test_equal(self, what):
+        self.assertEqual(what, utils.ANY)
+        self.assertEqual(utils.ANY, what)
+
+    @ddt.data('hola', 1, None, {'a': 1}, {1, 2}, False)
+    def test_different(self, what):
+        self.assertFalse(what != utils.ANY)  # noqa
+        self.assertFalse(utils.ANY != what)  # noqa
+        self.assertFalse(utils.ANY > what)  # noqa
+        self.assertFalse(utils.ANY < what)  # noqa
+        self.assertFalse(utils.ANY <= what)  # noqa
+        self.assertFalse(utils.ANY >= what)  # noqa

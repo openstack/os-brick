@@ -27,3 +27,11 @@
 
       .. automethod:: connect_volume
       .. automethod:: disconnect_volume
+
+   .. autoclass:: os_brick.initiator.connectors.nvmeof.NVMeOFConnector
+
+      .. automethod:: connect_volume
+      .. automethod:: disconnect_volume
+      .. automethod:: extend_volume
+      .. automethod:: get_volume_paths
+      .. automethod:: get_connector_properties
