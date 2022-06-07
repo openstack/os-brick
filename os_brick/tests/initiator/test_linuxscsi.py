@@ -851,7 +851,7 @@ loop0                                     0"""
                          'multipathd resize map %s' % wwn]
         self.assertEqual(expected_cmds, self.cmds)
 
-    @mock.patch.object(linuxscsi.LinuxSCSI, 'multipath_resize_map')
+    @mock.patch.object(linuxscsi.LinuxSCSI, '_multipath_resize_map')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'find_multipath_device_path')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_scsi_wwn')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_device_size')
@@ -873,17 +873,105 @@ loop0                                     0"""
         mock_find_mpath_path.return_value = ('/dev/mapper/dm-uuid-mpath-%s' %
                                              wwn)
 
-        mock_mpath_resize_map.return_value = 'fail'
+        mock_mpath_resize_map.side_effect = putils.ProcessExecutionError(
+            stdout="fail")
 
-        ret_size = self.linuxscsi.extend_volume(['/dev/fake1', '/dev/fake2'],
-                                                use_multipath=True)
-        self.assertIsNone(ret_size)
+        self.assertRaises(
+            putils.ProcessExecutionError,
+            self.linuxscsi.extend_volume,
+            volume_paths=['/dev/fake1', '/dev/fake2'],
+            use_multipath=True)
 
         # because we don't mock out the echo_scsi_command
         expected_cmds = ['tee -a /sys/bus/scsi/drivers/sd/0:0:0:1/rescan',
                          'tee -a /sys/bus/scsi/drivers/sd/1:0:0:1/rescan',
                          'multipathd reconfigure']
         self.assertEqual(expected_cmds, self.cmds)
+
+    @mock.patch('time.sleep')
+    @mock.patch.object(linuxscsi.LinuxSCSI, '_multipath_resize_map')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'find_multipath_device_path')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_scsi_wwn')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_device_size')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_device_info')
+    def test_extend_volume_with_mpath_pending(self, mock_device_info,
+                                              mock_device_size,
+                                              mock_scsi_wwn,
+                                              mock_find_mpath_path,
+                                              mock_mpath_resize_map,
+                                              mock_sleep):
+        """Test extending a volume where there is a multipath device fail."""
+        mock_device_info.side_effect = [{'host': host,
+                                         'channel': '0',
+                                         'id': '0',
+                                         'lun': '1'} for host in ['0', '1']]
+
+        mock_device_size.side_effect = [1024, 2048, 1024, 2048, 1024, 2048]
+        wwn = '1234567890123456'
+        mock_scsi_wwn.return_value = wwn
+        mock_find_mpath_path.return_value = ('/dev/mapper/dm-uuid-mpath-%s' %
+                                             wwn)
+        mock_mpath_resize_map.side_effect = (
+            putils.ProcessExecutionError(stdout="timeout"),
+            "success")
+
+        ret_size = self.linuxscsi.extend_volume(['/dev/fake1', '/dev/fake2'],
+                                                use_multipath=True)
+        self.assertEqual(2048, ret_size)
+
+        # because we don't mock out the echo_scsi_command
+        expected_cmds = ['tee -a /sys/bus/scsi/drivers/sd/0:0:0:1/rescan',
+                         'tee -a /sys/bus/scsi/drivers/sd/1:0:0:1/rescan',
+                         'multipathd reconfigure']
+        self.assertEqual(expected_cmds, self.cmds)
+        mock_mpath_resize_map.assert_has_calls([mock.call(wwn)] * 2)
+
+    @mock.patch('time.sleep')
+    @mock.patch('time.time')
+    @mock.patch.object(linuxscsi.LinuxSCSI, '_multipath_resize_map')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'find_multipath_device_path')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_scsi_wwn')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_device_size')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_device_info')
+    def test_extend_volume_with_mpath_timeout(self, mock_device_info,
+                                              mock_device_size,
+                                              mock_scsi_wwn,
+                                              mock_find_mpath_path,
+                                              mock_mpath_resize_map,
+                                              mock_currtime,
+                                              mock_sleep):
+        """Test extending a volume where there is a multipath device fail."""
+        mock_device_info.side_effect = [{'host': host,
+                                         'channel': '0',
+                                         'id': '0',
+                                         'lun': '1'} for host in ['0', '1']]
+
+        mock_device_size.side_effect = [1024, 2048, 1024, 2048, 1024, 2048]
+        wwn = '1234567890123456'
+        mock_scsi_wwn.return_value = wwn
+        mock_find_mpath_path.return_value = ('/dev/mapper/dm-uuid-mpath-%s' %
+                                             wwn)
+
+        # time.time is used to check if our own timeout has been exceeded,
+        # which is why it has to be mocked.
+        fake_time = 0
+
+        def get_fake_time():
+            nonlocal fake_time
+            fake_time += 10
+            return fake_time
+
+        mock_currtime.side_effect = get_fake_time
+        # We're testing the scenario in which the multipath resize map
+        # call times out indefinitely.
+        mock_mpath_resize_map.side_effect = putils.ProcessExecutionError(
+            stdout="timeout")
+
+        self.assertRaises(
+            putils.ProcessExecutionError,
+            self.linuxscsi.extend_volume,
+            ['/dev/fake1', '/dev/fake2'],
+            use_multipath=True)
 
     def test_process_lun_id_list(self):
         lun_list = [2, 255, 88, 370, 5, 256]

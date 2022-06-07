@@ -24,6 +24,7 @@ from typing import Dict, List, Optional  # noqa: H301
 
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
+from oslo_utils import excutils
 
 from os_brick import exception
 from os_brick import executor
@@ -37,6 +38,7 @@ MULTIPATH_WWID_REGEX = re.compile(r"\((?P<wwid>.+)\)")
 MULTIPATH_DEVICE_ACTIONS = ['unchanged:', 'reject:', 'reload:',
                             'switchpg:', 'rename:', 'create:',
                             'resize:']
+MULTIPATHD_RESIZE_TIMEOUT = 120
 
 
 class LinuxSCSI(executor.Executor):
@@ -571,16 +573,44 @@ class LinuxSCSI(executor.Executor):
                                     root_helper=self._root_helper)
         return out
 
+    def _multipath_resize_map(self, mpath_id):
+        cmd = ('multipathd', 'resize', 'map', mpath_id)
+        (out, _err) = self._execute(*cmd,
+                                    run_as_root=True,
+                                    root_helper=self._root_helper)
+        if 'fail' in out or 'timeout' in out:
+            raise putils.ProcessExecutionError(
+                stdout=out, stderr=_err,
+                exit_code=1, cmd=cmd)
+
+        return out
+
     def multipath_resize_map(self, mpath_id):
         """Issue a multipath resize map on device.
 
         This forces the multipath daemon to update it's
         size information a particular multipath device.
         """
-        (out, _err) = self._execute('multipathd', 'resize', 'map', mpath_id,
-                                    run_as_root=True,
-                                    root_helper=self._root_helper)
-        return out
+
+        # "multipathd reconfigure" is async since 0.6.1. While the
+        # operation is in progress, "multipathd resize map" returns
+        # "timeout".
+        tstart = time.time()
+        while True:
+            try:
+                self._multipath_resize_map(mpath_id)
+                break
+            except putils.ProcessExecutionError as err:
+                with excutils.save_and_reraise_exception(reraise=True) as ctx:
+                    elapsed = time.time() - tstart
+                    if 'timeout' in err.stdout and (
+                            elapsed < MULTIPATHD_RESIZE_TIMEOUT):
+                        LOG.debug(
+                            "multipathd resize map timed out. "
+                            "Elapsed: %s, timeout: %s. Retrying...",
+                            elapsed, MULTIPATHD_RESIZE_TIMEOUT)
+                        ctx.reraise = False
+                        time.sleep(1)
 
     def extend_volume(self, volume_paths, use_multipath=False):
         """Signal the SCSI subsystem to test for volume resize.
@@ -621,13 +651,8 @@ class LinuxSCSI(executor.Executor):
                 size = self.get_device_size(mpath_device)
                 LOG.info("mpath(%(device)s) current size %(size)s",
                          {'device': mpath_device, 'size': size})
-                result = self.multipath_resize_map(scsi_wwn)
-                if 'fail' in result:
-                    LOG.error("Multipathd failed to update the size mapping "
-                              "of multipath device %(scsi_wwn)s volume "
-                              "%(volume)s",
-                              {'scsi_wwn': scsi_wwn, 'volume': volume_paths})
-                    return None
+
+                self.multipath_resize_map(scsi_wwn)
 
                 new_size = self.get_device_size(mpath_device)
                 LOG.info("mpath(%(device)s) new size %(size)s",
