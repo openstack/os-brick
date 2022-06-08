@@ -23,6 +23,8 @@ from oslo_config import fixture as config_fixture
 from oslo_utils import strutils
 import testtools
 
+from os_brick.initiator.connectors import nvmeof
+
 
 class TestCase(testtools.TestCase):
     """Test case base class for all unit tests."""
@@ -73,6 +75,9 @@ class TestCase(testtools.TestCase):
         self.fixture = self.useFixture(config_fixture.Config(lockutils.CONF))
         self.fixture.config(lock_path=lock_path, group='oslo_concurrency')
         lockutils.set_defaults(lock_path)
+
+        # Regardless of the system force no native NVMe-oF multipathing
+        nvmeof.NVMeOFConnector.native_multipath_supported = False
 
     def _common_cleanup(self):
         """Runs after each test method to tear down test environment."""

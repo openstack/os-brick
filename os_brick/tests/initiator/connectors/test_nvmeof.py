@@ -1107,3 +1107,24 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         except IOError:
             host_nqn = HOST_NQN
         return host_nqn
+
+    @ddt.data(True, False)
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'native_multipath_supported',
+                       None)
+    @mock.patch.object(nvmeof.NVMeOFConnector,
+                       '_is_native_multipath_supported')
+    def test__set_native_multipath_supported(self, value, mock_ana):
+        mock_ana.return_value = value
+        res = self.connector._set_native_multipath_supported()
+        mock_ana.assert_called_once_with()
+        self.assertIs(value, res)
+
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'native_multipath_supported',
+                       True)
+    @mock.patch.object(nvmeof.NVMeOFConnector,
+                       '_is_native_multipath_supported')
+    def test__set_native_multipath_supported_second_call(self, mock_ana):
+        mock_ana.return_value = False
+        res = self.connector._set_native_multipath_supported()
+        mock_ana.assert_not_called()
+        self.assertTrue(res)
