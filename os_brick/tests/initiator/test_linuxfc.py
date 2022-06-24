@@ -34,16 +34,6 @@ class LinuxFCTestCase(base.TestCase):
         self.cmds.append(" ".join(cmd))
         return "", None
 
-    def test_has_fc_support(self):
-
-        self.mock_object(os.path, 'isdir', return_value=False)
-        has_fc = self.lfc.has_fc_support()
-        self.assertFalse(has_fc)
-
-        self.mock_object(os.path, 'isdir', return_value=True)
-        has_fc = self.lfc.has_fc_support()
-        self.assertTrue(has_fc)
-
     @staticmethod
     def __get_rescan_info(zone_manager=False):
 
@@ -384,35 +374,97 @@ class LinuxFCTestCase(base.TestCase):
             self.lfc.rescan_hosts(hbas, con_props)
             execute_mock.assert_not_called()
 
-    def test_get_fc_hbas_fail(self):
-        def fake_exec1(a, b, c, d, run_as_root=True, root_helper='sudo'):
-            raise OSError
-
-        def fake_exec2(a, b, c, d, run_as_root=True, root_helper='sudo'):
-            return None, 'None found'
-
-        self.lfc._execute = fake_exec1
+    @mock.patch('glob.glob', return_value=[])
+    def test_get_fc_hbas_no_hbas(self, mock_glob):
         hbas = self.lfc.get_fc_hbas()
-        self.assertEqual(0, len(hbas))
-        self.lfc._execute = fake_exec2
-        hbas = self.lfc.get_fc_hbas()
-        self.assertEqual(0, len(hbas))
+        self.assertListEqual([], hbas)
+        mock_glob.assert_called_once_with('/sys/class/fc_host/*')
 
-    def test_get_fc_hbas(self):
-        def fake_exec(a, b, c, d, run_as_root=True, root_helper='sudo'):
-            return SYSTOOL_FC, None
-        self.lfc._execute = fake_exec
+    @mock.patch('os.path.realpath')
+    @mock.patch('glob.glob', return_value=['/sys/class/fc_host/host0',
+                                           '/sys/class/fc_host/host2'])
+    @mock.patch('builtins.open', side_effect=IOError)
+    def test_get_fc_hbas_fail(self, mock_open, mock_glob, mock_path):
         hbas = self.lfc.get_fc_hbas()
-        self.assertEqual(2, len(hbas))
-        hba1 = hbas[0]
-        self.assertEqual("host0", hba1["ClassDevice"])
-        hba2 = hbas[1]
-        self.assertEqual("host2", hba2["ClassDevice"])
+        mock_glob.assert_called_once_with('/sys/class/fc_host/*')
+        self.assertListEqual([], hbas)
+        self.assertEqual(2, mock_open.call_count)
+        mock_open.assert_has_calls(
+            (mock.call('/sys/class/fc_host/host0/port_name', 'rt'),
+             mock.call('/sys/class/fc_host/host2/port_name', 'rt'))
+        )
+        self.assertEqual(2, mock_path.call_count)
+        mock_path.assert_has_calls(
+            (mock.call('/sys/class/fc_host/host0'),
+             mock.call('/sys/class/fc_host/host2'))
+        )
+
+    @mock.patch('os.path.realpath')
+    @mock.patch('glob.glob', return_value=['/sys/class/fc_host/host0',
+                                           '/sys/class/fc_host/host2'])
+    @mock.patch('builtins.open')
+    def test_get_fc_hbas(self, mock_open, mock_glob, mock_path):
+        mock_open.return_value.__enter__.return_value.read.side_effect = [
+            '0x50014380242b9750\n', '0x50014380242b9751\n', 'Online',
+            '0x50014380242b9752\n', '0x50014380242b9753\n', 'Online',
+        ]
+        pci_path = '/sys/devices/pci0000:20/0000:20:03.0/0000:21:00.'
+        host0_pci = f'{pci_path}0/host0/fc_host/host0'
+        host2_pci = f'{pci_path}1/host2/fc_host/host2'
+        mock_path.side_effect = [host0_pci, host2_pci]
+
+        hbas = self.lfc.get_fc_hbas()
+
+        expected = [
+            {'ClassDevice': 'host0',
+             'ClassDevicepath': host0_pci,
+             'port_name': '0x50014380242b9750',
+             'node_name': '0x50014380242b9751',
+             'port_state': 'Online'},
+            {'ClassDevice': 'host2',
+             'ClassDevicepath': host2_pci,
+             'port_name': '0x50014380242b9752',
+             'node_name': '0x50014380242b9753',
+             'port_state': 'Online'},
+        ]
+        self.assertListEqual(expected, hbas)
+        mock_glob.assert_called_once_with('/sys/class/fc_host/*')
+        self.assertEqual(6, mock_open.call_count)
+        mock_open.assert_has_calls(
+            (mock.call('/sys/class/fc_host/host0/port_name', 'rt'),
+             mock.call('/sys/class/fc_host/host0/node_name', 'rt'),
+             mock.call('/sys/class/fc_host/host0/port_state', 'rt'),
+             mock.call('/sys/class/fc_host/host2/port_name', 'rt'),
+             mock.call('/sys/class/fc_host/host2/node_name', 'rt'),
+             mock.call('/sys/class/fc_host/host2/port_state', 'rt')),
+            any_order=True,
+        )
+        self.assertEqual(2, mock_path.call_count)
+        mock_path.assert_has_calls(
+            (mock.call('/sys/class/fc_host/host0'),
+             mock.call('/sys/class/fc_host/host2'))
+        )
+
+    def _set_get_fc_hbas(self):
+        pci_path = '/sys/devices/pci0000:20/0000:20:03.0/0000:21:00.'
+        host0_pci = f'{pci_path}0/host0/fc_host/host0'
+        host2_pci = f'{pci_path}1/host2/fc_host/host2'
+        return_value = [{'ClassDevice': 'host0',
+                         'ClassDevicepath': host0_pci,
+                         'port_name': '0x50014380242b9750',
+                         'node_name': '0x50014380242b9751',
+                         'port_state': 'Online'},
+                        {'ClassDevice': 'host2',
+                         'ClassDevicepath': host2_pci,
+                         'port_name': '0x50014380242b9752',
+                         'node_name': '0x50014380242b9753',
+                         'port_state': 'Online'}]
+        mocked = self.mock_object(linuxfc.LinuxFibreChannel, 'get_fc_hbas',
+                                  return_value=return_value)
+        return mocked
 
     def test_get_fc_hbas_info(self):
-        def fake_exec(a, b, c, d, run_as_root=True, root_helper='sudo'):
-            return SYSTOOL_FC, None
-        self.lfc._execute = fake_exec
+        mock_hbas = self._set_get_fc_hbas()
         hbas_info = self.lfc.get_fc_hbas_info()
         expected_info = [{'device_path': '/sys/devices/pci0000:20/'
                                          '0000:20:03.0/0000:21:00.0/'
@@ -426,92 +478,20 @@ class LinuxFCTestCase(base.TestCase):
                           'host_device': 'host2',
                           'node_name': '50014380242b9753',
                           'port_name': '50014380242b9752'}, ]
-        self.assertEqual(expected_info, hbas_info)
+        self.assertListEqual(expected_info, hbas_info)
+        mock_hbas.assert_called_once_with()
 
     def test_get_fc_wwpns(self):
-        def fake_exec(a, b, c, d, run_as_root=True, root_helper='sudo'):
-            return SYSTOOL_FC, None
-
-        self.lfc._execute = fake_exec
+        self._set_get_fc_hbas()
         wwpns = self.lfc.get_fc_wwpns()
         expected_wwpns = ['50014380242b9750', '50014380242b9752']
         self.assertEqual(expected_wwpns, wwpns)
 
     def test_get_fc_wwnns(self):
-        def fake_exec(a, b, c, d, run_as_root=True, root_helper='sudo'):
-            return SYSTOOL_FC, None
-        self.lfc._execute = fake_exec
-        wwnns = self.lfc.get_fc_wwpns()
-        expected_wwnns = ['50014380242b9750', '50014380242b9752']
+        self._set_get_fc_hbas()
+        wwnns = self.lfc.get_fc_wwnns()
+        expected_wwnns = ['50014380242b9751', '50014380242b9753']
         self.assertEqual(expected_wwnns, wwnns)
-
-
-SYSTOOL_FC = """
-Class = "fc_host"
-
-  Class Device = "host0"
-  Class Device path = "/sys/devices/pci0000:20/0000:20:03.0/\
-0000:21:00.0/host0/fc_host/host0"
-    dev_loss_tmo        = "16"
-    fabric_name         = "0x100000051ea338b9"
-    issue_lip           = <store method only>
-    max_npiv_vports     = "0"
-    node_name           = "0x50014380242b9751"
-    npiv_vports_inuse   = "0"
-    port_id             = "0x960d0d"
-    port_name           = "0x50014380242b9750"
-    port_state          = "Online"
-    port_type           = "NPort (fabric via point-to-point)"
-    speed               = "8 Gbit"
-    supported_classes   = "Class 3"
-    supported_speeds    = "1 Gbit, 2 Gbit, 4 Gbit, 8 Gbit"
-    symbolic_name       = "QMH2572 FW:v4.04.04 DVR:v8.03.07.12-k"
-    system_hostname     = ""
-    tgtid_bind_type     = "wwpn (World Wide Port Name)"
-    uevent              =
-    vport_create        = <store method only>
-    vport_delete        = <store method only>
-
-    Device = "host0"
-    Device path = "/sys/devices/pci0000:20/0000:20:03.0/0000:21:00.0/host0"
-      edc                 = <store method only>
-      optrom_ctl          = <store method only>
-      reset               = <store method only>
-      uevent              = "DEVTYPE=scsi_host"
-
-
-  Class Device = "host2"
-  Class Device path = "/sys/devices/pci0000:20/0000:20:03.0/\
-0000:21:00.1/host2/fc_host/host2"
-    dev_loss_tmo        = "16"
-    fabric_name         = "0x100000051ea33b79"
-    issue_lip           = <store method only>
-    max_npiv_vports     = "0"
-    node_name           = "0x50014380242b9753"
-    npiv_vports_inuse   = "0"
-    port_id             = "0x970e09"
-    port_name           = "0x50014380242b9752"
-    port_state          = "Online"
-    port_type           = "NPort (fabric via point-to-point)"
-    speed               = "8 Gbit"
-    supported_classes   = "Class 3"
-    supported_speeds    = "1 Gbit, 2 Gbit, 4 Gbit, 8 Gbit"
-    symbolic_name       = "QMH2572 FW:v4.04.04 DVR:v8.03.07.12-k"
-    system_hostname     = ""
-    tgtid_bind_type     = "wwpn (World Wide Port Name)"
-    uevent              =
-    vport_create        = <store method only>
-    vport_delete        = <store method only>
-
-    Device = "host2"
-    Device path = "/sys/devices/pci0000:20/0000:20:03.0/0000:21:00.1/host2"
-      edc                 = <store method only>
-      optrom_ctl          = <store method only>
-      reset               = <store method only>
-      uevent              = "DEVTYPE=scsi_host"
-
-
-"""
 
 
 class LinuxFCS390XTestCase(LinuxFCTestCase):
@@ -522,10 +502,14 @@ class LinuxFCS390XTestCase(LinuxFCTestCase):
         self.lfc = linuxfc.LinuxFibreChannelS390X(None,
                                                   execute=self.fake_execute)
 
-    def test_get_fc_hbas_info(self):
-        def fake_exec(a, b, c, d, run_as_root=True, root_helper='sudo'):
-            return SYSTOOL_FC_S390X, None
-        self.lfc._execute = fake_exec
+    @mock.patch.object(linuxfc.LinuxFibreChannel, 'get_fc_hbas')
+    def test_get_fc_hbas_info(self, mock_hbas):
+        host_pci = '/sys/devices/css0/0.0.02ea/0.0.3080/host0/fc_host/host0'
+        mock_hbas.return_value = [{'ClassDevice': 'host0',
+                                   'ClassDevicepath': host_pci,
+                                   'port_name': '0xc05076ffe680a960',
+                                   'node_name': '0x1234567898765432',
+                                   'port_state': 'Online'}]
         hbas_info = self.lfc.get_fc_hbas_info()
         expected = [{'device_path': '/sys/devices/css0/0.0.02ea/'
                                     '0.0.3080/host0/fc_host/host0',
@@ -554,38 +538,3 @@ class LinuxFCS390XTestCase(LinuxFCTestCase):
         expected_commands = [('tee -a /sys/bus/ccw/drivers/zfcp/'
                               '0.0.2319/0x50014380242b9751/unit_remove')]
         self.assertEqual(expected_commands, self.cmds)
-
-
-SYSTOOL_FC_S390X = """
-Class = "fc_host"
-
-  Class Device = "host0"
-  Class Device path = "/sys/devices/css0/0.0.02ea/0.0.3080/host0/fc_host/host0"
-    active_fc4s         = "0x00 0x00 0x01 0x00 0x00 0x00 0x00 0x00 0x00 0x00 \
-    0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 \
-    0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 "
-    dev_loss_tmo        = "60"
-    maxframe_size       = "2112 bytes"
-    node_name           = "0x1234567898765432"
-    permanent_port_name = "0xc05076ffe6803081"
-    port_id             = "0x010014"
-    port_name           = "0xc05076ffe680a960"
-    port_state          = "Online"
-    port_type           = "NPIV VPORT"
-    serial_number       = "IBM00000000000P30"
-    speed               = "8 Gbit"
-    supported_classes   = "Class 2, Class 3"
-    supported_fc4s      = "0x00 0x00 0x01 0x00 0x00 0x00 0x00 0x00 0x00 0x00 \
-    0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 \
-    0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 "
-    supported_speeds    = "2 Gbit, 4 Gbit"
-    symbolic_name       = "IBM     2827            00000000000P30  \
-    PCHID: 0308 NPIV UlpId: 01EA0A00   DEVNO: 0.0.1234 NAME: dummy"
-    tgtid_bind_type     = "wwpn (World Wide Port Name)"
-    uevent              =
-
-    Device = "host0"
-    Device path = "/sys/devices/css0/0.0.02ea/0.0.3080/host0"
-      uevent              = "DEVTYPE=scsi_host"
-
-"""

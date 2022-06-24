@@ -14,7 +14,7 @@
 
 """Generic linux Fibre Channel utilities."""
 
-import errno
+import glob
 import os
 
 from oslo_concurrency import processutils as putils
@@ -26,13 +26,9 @@ LOG = logging.getLogger(__name__)
 
 
 class LinuxFibreChannel(linuxscsi.LinuxSCSI):
-
-    def has_fc_support(self):
-        FC_HOST_SYSFS_PATH = '/sys/class/fc_host'
-        if os.path.isdir(FC_HOST_SYSFS_PATH):
-            return True
-        else:
-            return False
+    FC_HOST_SYSFS_PATH = '/sys/class/fc_host'
+    # Only load the sysfs attributes we care about
+    HBA_ATTRIBUTES = ('port_name', 'node_name', 'port_state')
 
     def _get_hba_channel_scsi_target_lun(self, hba, conn_props):
         """Get HBA channels, SCSI targets, LUNs to FC targets for given HBA.
@@ -148,66 +144,24 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
                                            't': target_id,
                                            'l': target_lun})
 
-    def get_fc_hbas(self):
-        """Get the Fibre Channel HBA information."""
-
-        if not self.has_fc_support():
-            # there is no FC support in the kernel loaded
-            # so there is no need to even try to run systool
-            LOG.debug("No Fibre Channel support detected on system.")
-            return []
-
-        out = None
-        try:
-            out, _err = self._execute('systool', '-c', 'fc_host', '-v',
-                                      run_as_root=True,
-                                      root_helper=self._root_helper)
-        except putils.ProcessExecutionError as exc:
-            # This handles the case where rootwrap is used
-            # and systool is not installed
-            # 96 = nova.cmd.rootwrap.RC_NOEXECFOUND:
-            if exc.exit_code == 96:
-                LOG.warning("systool is not installed")
-            return []
-        except OSError as exc:
-            # This handles the case where rootwrap is NOT used
-            # and systool is not installed
-            if exc.errno == errno.ENOENT:
-                LOG.warning("systool is not installed")
-            return []
-
-        # No FC HBAs were found
-        if out is None:
-            return []
-
-        lines = out.split('\n')
-        # ignore the first 2 lines
-        lines = lines[2:]
+    @classmethod
+    def get_fc_hbas(cls):
+        """Get the Fibre Channel HBA information from sysfs."""
         hbas = []
-        hba = {}
-        lastline = None
-        for line in lines:
-            line = line.strip()
-            # 2 newlines denotes a new hba port
-            if line == '' and lastline == '':
-                if len(hba) > 0:
-                    hbas.append(hba)
-                    hba = {}
-            else:
-                val = line.split('=')
-                if len(val) == 2:
-                    key = val[0].strip().replace(" ", "")
-                    value = val[1].strip()
-                    hba[key] = value.replace('"', '')
-            lastline = line
-
+        for hostpath in glob.glob(f'{cls.FC_HOST_SYSFS_PATH}/*'):
+            try:
+                hba = {'ClassDevice': os.path.basename(hostpath),
+                       'ClassDevicepath': os.path.realpath(hostpath)}
+                for attribute in cls.HBA_ATTRIBUTES:
+                    with open(os.path.join(hostpath, attribute), 'rt') as f:
+                        hba[attribute] = f.read().strip()
+                hbas.append(hba)
+            except Exception as exc:
+                LOG.warning(f'Could not read attributes for {hostpath}: {exc}')
         return hbas
 
     def get_fc_hbas_info(self):
         """Get Fibre Channel WWNs and device paths from the system, if any."""
-
-        # Note(walter-boring) modern Linux kernels contain the FC HBA's in /sys
-        # and are obtainable via the systool app
         hbas = self.get_fc_hbas()
 
         hbas_info = []
@@ -224,9 +178,6 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
 
     def get_fc_wwpns(self):
         """Get Fibre Channel WWPNs from the system, if any."""
-
-        # Note(walter-boring) modern Linux kernels contain the FC HBA's in /sys
-        # and are obtainable via the systool app
         hbas = self.get_fc_hbas()
 
         wwpns = []
@@ -239,9 +190,6 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
 
     def get_fc_wwnns(self):
         """Get Fibre Channel WWNNs from the system, if any."""
-
-        # Note(walter-boring) modern Linux kernels contain the FC HBA's in /sys
-        # and are obtainable via the systool app
         hbas = self.get_fc_hbas()
 
         wwnns = []

@@ -1,0 +1,5 @@
+---
+upgrade:
+  - |
+    No longer using ``systool`` to gather FC HBA information, so the
+    ``sysfsutils`` package is no longer needed.
