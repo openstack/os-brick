@@ -27,7 +27,7 @@ LOG = logging.getLogger(__name__)
 
 
 @os_brick.privileged.default.entrypoint
-def create_hostnqn():
+def create_hostnqn() -> str:
     """Create the hostnqn file to speed up finding out the nqn.
 
     By having the /etc/nvme/hostnqn not only do we make sure that that value is
