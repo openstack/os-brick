@@ -379,7 +379,7 @@ class Target(object):
         if all(p.controller for p in self.portals):  # all have been found
             return
 
-        hostnqn: str = self.host_nqn or utils.get_host_nqn()
+        hostnqn: Optional[str] = self.host_nqn or utils.get_host_nqn()
 
         # List of portal addresses and transports for this target
         # Unlike "nvme list-subsys -o json" sysfs addr is separated by a comma

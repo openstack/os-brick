@@ -12,12 +12,14 @@
 #
 """Utilities and helper functions."""
 
+from __future__ import annotations
+
 import functools
 import inspect
 import logging as py_logging
 import os
 import time
-from typing import Any, Callable, Tuple, Type, Union   # noqa: H301
+from typing import Any, Callable, Optional, Type, Union   # noqa: H301
 
 from oslo_concurrency import processutils
 from oslo_log import log as logging
@@ -54,7 +56,7 @@ LOG = logging.getLogger(__name__)
 
 class retry_if_exit_code(tenacity.retry_if_exception):
     """Retry on ProcessExecutionError specific exit codes."""
-    def __init__(self, codes: Union[int, Tuple[int, ...]]):
+    def __init__(self, codes: Union[int, tuple[int, ...]]):
         self.codes = (codes,) if isinstance(codes, int) else codes
         super(retry_if_exit_code, self).__init__(self._check_exit_code)
 
@@ -66,9 +68,9 @@ class retry_if_exit_code(tenacity.retry_if_exception):
 
 def retry(retry_param: Union[None,
                              Type[Exception],
-                             Tuple[Type[Exception], ...],
+                             tuple[Type[Exception], ...],
                              int,
-                             Tuple[int, ...]],
+                             tuple[int, ...]],
           interval: float = 1,
           retries: int = 3,
           backoff_rate: float = 2,
@@ -217,7 +219,7 @@ def convert_str(text: Union[bytes, str]) -> str:
         return text
 
 
-def get_host_nqn():
+def get_host_nqn() -> Optional[str]:
     try:
         with open('/etc/nvme/hostnqn', 'r') as f:
             host_nqn = f.read().strip()
@@ -328,7 +330,9 @@ def get_dev_path(connection_properties, device_info):
     return convert_str(res)
 
 
-def connect_volume_undo_prepare_result(f=None, unlink_after=False):
+def connect_volume_undo_prepare_result(
+        f: Optional[Callable] = None,
+        unlink_after: bool = False) -> Callable:
     """Decorator that returns the device path to how it was originally.
 
     WARNING: This decorator must be **the first** decorator of the method to
