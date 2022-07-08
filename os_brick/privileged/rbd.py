@@ -13,13 +13,15 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+from typing import Optional
+
 from oslo_utils import fileutils
 from oslo_utils import importutils
 
 import os_brick.privileged
 
 # Lazy load the rbd module to avoid circular references
-RBDConnector = None
+RBDConnector: Optional['os_brick.initiator.connectors.rbd.RBDConnector'] = None
 
 
 def _get_rbd_class():
@@ -48,6 +50,7 @@ def root_create_ceph_conf(monitor_ips, monitor_ports, cluster_name, user,
                           keyring):
     """Create a .conf file for Ceph cluster only accessible by root."""
     get_rbd_class()
+    assert RBDConnector is not None
     return RBDConnector._create_ceph_conf(monitor_ips, monitor_ports,
                                           cluster_name, user, keyring)
 
@@ -55,5 +58,6 @@ def root_create_ceph_conf(monitor_ips, monitor_ports, cluster_name, user,
 @os_brick.privileged.default.entrypoint
 def check_valid_path(path):
     get_rbd_class()
+    assert RBDConnector is not None
     with open(path, 'rb') as rbd_handle:
         return RBDConnector._check_valid_device(rbd_handle)
