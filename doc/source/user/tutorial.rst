@@ -15,6 +15,42 @@ run without raising an exception:
 
    >>> import os_brick
 
+Configuration
+-------------
+
+There are some os-brick connectors that use file locks to prevent concurrent
+access to critical sections of the code.
+
+These file locks use the ``oslo.concurrency`` ``lock_utils`` module and require
+the ``lock_path`` to be configured with the path where locks should be created.
+
+os-brick can use a specific directory just for its locks or use the same
+directory as the service using os-brick.
+
+The os-brick specific configuration option is ``[os_brick]/lock_path``, and if
+left undefined it will use the value from ``[oslo_concurrency]/lock_path``.
+
+Setup
+-----
+
+Once os_brick has been loaded it needs to be initialized, which is done by
+calling the ``os_brick.setup`` method with the ``oslo.conf`` configuration.
+
+It is important that the call to ``setup`` method happens **after** oslo.config
+has been properly initialized.
+
+.. code-block:: python
+
+   from oslo_config import cfg
+   from cinder import version
+
+   CONF = cfg.CONF
+
+   def main():
+       CONF(sys.argv[1:], project='cinder',
+            version=version.version_string())
+       os_brick.setup(CONF)
+
 Fetch all of the initiator information from the host
 ----------------------------------------------------
 
@@ -24,6 +60,9 @@ a volume to this host.
 .. code-block:: python
 
    from os_brick.initiator import connector
+
+
+   os_brick.setup(CONF)
 
    # what helper do you want to use to get root access?
    root_helper = "sudo"

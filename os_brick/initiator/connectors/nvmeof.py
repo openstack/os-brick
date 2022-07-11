@@ -17,7 +17,6 @@ import os.path
 import re
 import time
 
-from oslo_concurrency import lockutils
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
 
@@ -34,8 +33,6 @@ from os_brick import utils
 DEV_SEARCH_PATH = '/dev/'
 
 DEVICE_SCAN_ATTEMPTS_DEFAULT = 5
-
-synchronized = lockutils.synchronized_with_prefix('os-brick-')
 
 LOG = logging.getLogger(__name__)
 
@@ -330,7 +327,7 @@ class NVMeOFConnector(base.BaseLinuxConnector):
 
     @utils.trace
     @utils.connect_volume_prepare_result
-    @synchronized('connect_volume', external=True)
+    @base.synchronized('connect_volume', external=True)
     def connect_volume(self, connection_properties):
         """Discover and attach the volume.
 
@@ -381,7 +378,7 @@ class NVMeOFConnector(base.BaseLinuxConnector):
         return device_info
 
     @utils.trace
-    @synchronized('connect_volume', external=True)
+    @base.synchronized('connect_volume', external=True)
     @utils.connect_volume_undo_prepare_result(unlink_after=True)
     def disconnect_volume(self, connection_properties, device_info,
                           force=False, ignore_errors=False):
@@ -426,7 +423,7 @@ class NVMeOFConnector(base.BaseLinuxConnector):
                 raise
 
     @utils.trace
-    @synchronized('extend_volume', external=True)
+    @base.synchronized('extend_volume', external=True)
     @utils.connect_volume_undo_prepare_result
     def extend_volume(self, connection_properties):
         """Update the local kernel's size information.
