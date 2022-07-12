@@ -1,0 +1,6 @@
+---
+fixes:
+  - |
+    RBD connector `bug #1981455
+    <https://bugs.launchpad.net/cinder/+bug/1981455>`_: Fixed AttributeError
+    error on disconnect for RBD encrypted volumes not using host attachments.
