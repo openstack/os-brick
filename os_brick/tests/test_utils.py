@@ -388,6 +388,12 @@ class ConnectionPropertiesDecoratorsTestCase(base.TestCase):
         res = utils._device_path_from_symlink(symlink)
         self.assertEqual('/dev/md/alias', res)
 
+    def test__device_path_from_symlink_file_handle(self):
+        """Get device name for a file handle (eg: RBD)."""
+        handle = io.StringIO()
+        res = utils._device_path_from_symlink(handle)
+        self.assertEqual(handle, res)
+
     @ddt.data(({}, {'type': 'block', 'path': '/dev/sda'}),
               ({'encrypted': False}, {'type': 'block', 'path': '/dev/sda'}),
               ({'encrypted': False}, {'type': 'block', 'path': b'/dev/sda'}),
