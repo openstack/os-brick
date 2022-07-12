@@ -31,11 +31,8 @@ Features
 Hacking
 -------
 
-Hacking on brick requires Python 3.6+. A recent tox is required, as is a recent
+Hacking on brick requires Python 3.8+. A recent tox is required, as is a recent
 virtualenv (20.2.2 or newer).
-
-If "tox -e py34" fails with the error "db type could not be determined", remove
-the .testrepository/ directory and then run "tox -e py34".
 
 For any other information, refer to the developer documents:
   https://docs.openstack.org/os-brick/latest/
