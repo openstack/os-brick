@@ -223,7 +223,8 @@ def _device_path_from_symlink(symlink):
     This is the reverse operation of the one performed by the
     _symlink_name_from_device_path method.
     """
-    if symlink and symlink.startswith(CUSTOM_LINK_PREFIX):
+    if (symlink and isinstance(symlink, str)
+            and symlink.startswith(CUSTOM_LINK_PREFIX)):
         ending = symlink[len(CUSTOM_LINK_PREFIX):]
         return ending.replace('+', '/')
     return symlink
