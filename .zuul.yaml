@@ -14,13 +14,14 @@
         - os-brick-src-tempest-lvm-lio-barbican
         - os-brick-src-tempest-nfs:
             voting: false
+        - os-brick-mypy:
+            voting: false
     gate:
       jobs:
         - os-brick-src-tempest-lvm-lio-barbican
     experimental:
       jobs:
         - openstack-tox-pylint
-        - os-brick-mypy
 
 - job:
     name: os-brick-code-coverage
