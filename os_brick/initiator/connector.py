@@ -24,7 +24,6 @@ import platform
 import socket
 import sys
 
-from oslo_concurrency import lockutils
 from oslo_log import log as logging
 from oslo_utils import importutils
 
@@ -34,8 +33,6 @@ from os_brick import initiator
 from os_brick import utils
 
 LOG = logging.getLogger(__name__)
-
-synchronized = lockutils.synchronized_with_prefix('os-brick-')
 
 # List of connectors to call when getting
 # the connector properties for a host

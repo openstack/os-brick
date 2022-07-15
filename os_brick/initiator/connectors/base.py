@@ -13,11 +13,16 @@
 #    under the License.
 
 
+import functools
 import glob
 import os
 
+from oslo_concurrency import lockutils
 from oslo_concurrency import processutils as putils
+from oslo_config import cfg
 from oslo_log import log as logging
+from oslo_utils import reflection
+from oslo_utils import timeutils
 
 from os_brick import exception
 from os_brick import initiator
@@ -26,6 +31,64 @@ from os_brick.initiator import initiator_connector
 from os_brick.initiator import linuxscsi
 
 LOG = logging.getLogger(__name__)
+CONF = cfg.CONF
+
+
+def synchronized(name, lock_file_prefix='os-brick-', external=False,
+                 lock_path=None, semaphores=None, delay=0.01, fair=False,
+                 blocking=True):
+    """os-brick synchronization decorator
+
+    Like the one in lock_utils but defaulting the prefix to os-brick- and using
+    our own lock_path.
+
+    Cannot use lock_utils one because when using the default we don't know the
+    value until setup has been called, which can be after the code using the
+    decorator has been loaded.
+    """
+    def wrap(f):
+        @functools.wraps(f)
+        def inner(*args, **kwargs):
+            t1 = timeutils.now()
+            t2 = None
+            gotten = True
+            lpath = lock_path or CONF.os_brick.lock_path
+            # TODO: (AA Release) Remove this failsafe
+            if not lpath and CONF.oslo_concurrency.lock_path:
+                LOG.warning("Service needs to call os_brick.setup() before "
+                            "connecting volumes, if it doesn't it will break "
+                            "on the next release")
+                lpath = CONF.oslo_concurrency.lock_path
+            f_name = reflection.get_callable_name(f)
+            try:
+                LOG.debug('Acquiring lock "%s" by "%s"', name, f_name)
+                with lockutils.lock(name, lock_file_prefix, external, lpath,
+                                    do_log=False, semaphores=semaphores,
+                                    delay=delay, fair=fair, blocking=blocking):
+                    t2 = timeutils.now()
+                    LOG.debug('Lock "%(name)s" acquired by "%(function)s" :: '
+                              'waited %(wait_secs)0.3fs',
+                              {'name': name,
+                               'function': f_name,
+                               'wait_secs': (t2 - t1)})
+                    return f(*args, **kwargs)
+            except lockutils.AcquireLockFailedException:
+                gotten = False
+            finally:
+                t3 = timeutils.now()
+                if t2 is None:
+                    held_secs = "N/A"
+                else:
+                    held_secs = "%0.3fs" % (t3 - t2)
+                LOG.debug('Lock "%(name)s" "%(gotten)s" by "%(function)s" ::'
+                          ' held %(held_secs)s',
+                          {'name': name,
+                           'gotten': 'released' if gotten else 'unacquired',
+                           'function': f_name,
+                           'held_secs': held_secs})
+        return inner
+
+    return wrap
 
 
 class BaseLinuxConnector(initiator_connector.InitiatorConnector):

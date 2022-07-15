@@ -1,0 +1,17 @@
+---
+features:
+  - |
+    Specific location for os-brick file locks using the ``lock_path``
+    configuration option in the ``os_brick`` configuration group.  Previously,
+    os-brick used the consuming service's lock_path for its locks, but there
+    are some deployment configurations (for example, Nova and Cinder collocated
+    on the same host) where this would result in anomalous behavior.  Default
+    is to use the consuming service's lock_path.
+
+    This change requires a consuming service to call the ``os_brick.setup``
+    method after service configuration options have been called.
+upgrade:
+  - |
+    To use the os-brick specific file lock location introduced in this release,
+    an external service using the library must call the ``os_brick.setup``
+    method.

@@ -14,7 +14,6 @@
 
 import os
 
-from oslo_concurrency import lockutils
 from oslo_log import log as logging
 
 from os_brick import exception
@@ -23,7 +22,6 @@ from os_brick.initiator.connectors import base
 from os_brick import utils
 
 LOG = logging.getLogger(__name__)
-synchronized = lockutils.synchronized_with_prefix('os-brick-')
 
 
 class HuaweiStorHyperConnector(base.BaseLinuxConnector):
@@ -85,7 +83,7 @@ class HuaweiStorHyperConnector(base.BaseLinuxConnector):
         return out['dev_addr']
 
     @utils.trace
-    @synchronized('connect_volume', external=True)
+    @base.synchronized('connect_volume', external=True)
     def connect_volume(self, connection_properties):
         """Connect to a volume.
 
@@ -116,7 +114,7 @@ class HuaweiStorHyperConnector(base.BaseLinuxConnector):
         return device_info
 
     @utils.trace
-    @synchronized('connect_volume', external=True)
+    @base.synchronized('connect_volume', external=True)
     def disconnect_volume(self, connection_properties, device_info,
                           force=False, ignore_errors=False):
         """Disconnect a volume from the local host.

@@ -21,7 +21,6 @@ import re
 import time
 from typing import List, Tuple  # noqa: H301
 
-from oslo_concurrency import lockutils
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
 from oslo_utils import excutils
@@ -35,8 +34,6 @@ from os_brick.initiator.connectors import base
 from os_brick.initiator.connectors import base_iscsi
 from os_brick.initiator import utils as initiator_utils
 from os_brick import utils
-
-synchronized = lockutils.synchronized_with_prefix('os-brick-')
 
 LOG = logging.getLogger(__name__)
 
@@ -474,7 +471,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
             root_helper=self._root_helper)
 
     @utils.trace
-    @synchronized('extend_volume', external=True)
+    @base.synchronized('extend_volume', external=True)
     @utils.connect_volume_undo_prepare_result
     def extend_volume(self, connection_properties: dict):
         """Update the local kernel's size information.
@@ -499,7 +496,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
 
     @utils.trace
     @utils.connect_volume_prepare_result
-    @synchronized('connect_volume', external=True)
+    @base.synchronized('connect_volume', external=True)
     def connect_volume(self, connection_properties: dict):
         """Attach the volume to instance_name.
 
@@ -831,7 +828,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         return device_map
 
     @utils.trace
-    @synchronized('connect_volume', external=True)
+    @base.synchronized('connect_volume', external=True)
     @utils.connect_volume_undo_prepare_result(unlink_after=True)
     def disconnect_volume(self, connection_properties, device_info,
                           force=False, ignore_errors=False):
@@ -1017,7 +1014,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         target_iqn = connection_properties['target_iqn']
 
         lock_name = f'connect_to_iscsi_portal-{portal}-{target_iqn}'
-        method = synchronized(
+        method = base.synchronized(
             lock_name, external=True)(self._connect_to_iscsi_portal_unsafe)
         return method(connection_properties)
 

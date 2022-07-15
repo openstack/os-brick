@@ -16,7 +16,6 @@ import json
 import os
 import urllib
 
-from oslo_concurrency import lockutils
 from oslo_log import log as logging
 import requests
 
@@ -30,7 +29,6 @@ from os_brick import utils
 LOG = logging.getLogger(__name__)
 DEVICE_SCAN_ATTEMPTS_DEFAULT = 3
 CONNECTOR_CONF_PATH = '/opt/emc/scaleio/openstack/connector.conf'
-synchronized = lockutils.synchronized_with_prefix('os-brick-')
 
 
 def io(_type, nr):
@@ -349,7 +347,7 @@ class ScaleIOConnector(base.BaseLinuxConnector):
 
     @utils.trace
     @utils.connect_volume_prepare_result
-    @lockutils.synchronized('scaleio', 'scaleio-', external=True)
+    @base.synchronized('scaleio', 'scaleio-', external=True)
     def connect_volume(self, connection_properties):
         """Connect the volume.
 
@@ -463,7 +461,7 @@ class ScaleIOConnector(base.BaseLinuxConnector):
         return device_info
 
     @utils.trace
-    @lockutils.synchronized('scaleio', 'scaleio-', external=True)
+    @base.synchronized('scaleio', 'scaleio-', external=True)
     @utils.connect_volume_undo_prepare_result(unlink_after=True)
     def disconnect_volume(self, connection_properties, device_info,
                           force=False, ignore_errors=False):

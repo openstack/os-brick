@@ -22,7 +22,6 @@ import tempfile
 import time
 import traceback
 
-from oslo_concurrency import lockutils
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
 
@@ -37,7 +36,6 @@ DEVICE_SCAN_ATTEMPTS_DEFAULT = 5
 DISCOVERY_CLIENT_PORT = 6060
 LOG = logging.getLogger(__name__)
 
-synchronized = lockutils.synchronized_with_prefix('os-brick-')
 nvmec_pattern = ".*nvme[0-9]+[cp][0-9]+.*"
 nvmec_match = re.compile(nvmec_pattern)
 
@@ -257,7 +255,7 @@ class LightOSConnector(base.BaseLinuxConnector):
 
     @utils.trace
     @utils.connect_volume_prepare_result
-    @synchronized('volume_op')
+    @base.synchronized('volume_op')
     def connect_volume(self, connection_properties):
         """Discover and attach the volume.
 
@@ -292,7 +290,7 @@ class LightOSConnector(base.BaseLinuxConnector):
         return device_info
 
     @utils.trace
-    @synchronized('volume_op')
+    @base.synchronized('volume_op')
     @utils.connect_volume_undo_prepare_result(unlink_after=True)
     def disconnect_volume(self, connection_properties, device_info,
                           force=False, ignore_errors=False):
@@ -335,7 +333,7 @@ class LightOSConnector(base.BaseLinuxConnector):
                 raise exc
 
     @utils.trace
-    @synchronized('volume_op')
+    @base.synchronized('volume_op')
     @utils.connect_volume_undo_prepare_result
     def extend_volume(self, connection_properties):
         uuid = connection_properties['uuid']
