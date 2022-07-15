@@ -1,0 +1,6 @@
+---
+fixes:
+  - |
+    NVMe-oF connector `bug #1964389
+    <https://bugs.launchpad.net/os-brick/+bug/1964389>`_: Fixed showing
+    misleading traceback.

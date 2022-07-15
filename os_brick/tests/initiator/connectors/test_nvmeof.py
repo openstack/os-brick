@@ -1004,19 +1004,15 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         result = self.connector.ks_readlink(dest)
         self.assertEqual('', result)
 
-    @mock.patch.object(executor.Executor, '_execute')
+    @mock.patch.object(executor.Executor, '_execute',
+                       return_value=('', 'There was a big error'))
     def test_get_fs_type_err(self, mock_execute):
-        mock_execute.side_effect = putils.ProcessExecutionError()
         result = self.connector._get_fs_type(NVME_DEVICE_PATH)
         self.assertIsNone(result)
-        cmd = ['blkid', NVME_DEVICE_PATH, '-s', 'TYPE', '-o', 'value']
-        args, kwargs = mock_execute.call_args
-        self.assertEqual(args[0], cmd[0])
-        self.assertEqual(args[1], cmd[1])
-        self.assertEqual(args[2], cmd[2])
-        self.assertEqual(args[3], cmd[3])
-        self.assertEqual(args[4], cmd[4])
-        self.assertEqual(args[5], cmd[5])
+        mock_execute.assert_called_once_with(
+            'blkid', NVME_DEVICE_PATH, '-s', 'TYPE', '-o', 'value',
+            run_as_root=True, root_helper=self.connector._root_helper,
+            check_exit_code=False)
 
     @mock.patch.object(nvmeof.NVMeOFConnector, '_get_nvme_devices')
     def test__is_nvme_available(self, mock_nvme_devices):
