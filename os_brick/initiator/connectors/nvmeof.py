@@ -56,7 +56,7 @@ TRANSPORT = 'transport_type'
 PORTAL = 'target_portal'
 PORT = 'target_port'
 
-# These were only present in the old connection info, but now we'll allowed
+# These were only present in the old connection info, but now we'll allow
 # both in the old format, the new format, and as part of a volume_replicas
 # element.
 NGUID = 'volume_nguid'
@@ -230,7 +230,7 @@ class Portal(object):
                 LOG.debug('Device found at %s, using %s', path, result)
                 return result
 
-            LOG.debug('Block %s is not the one we look for (%s != %s)',
+            LOG.debug('Block %s is not the one we are looking for (%s != %s)',
                       path, prop_value, value)
 
         LOG.debug('No device Found on controller %s', self.controller)
@@ -273,9 +273,9 @@ class Target(object):
                  source_conn_props: 'NVMeOFConnProps',
                  nqn: str,
                  portals: List[str],
-                 uuid: str = None,
-                 nguid: str = None,
-                 ns_id: str = None,
+                 uuid: Optional[str] = None,
+                 nguid: Optional[str] = None,
+                 ns_id: Optional[str] = None,
                  host_nqn=None,
                  find_controllers=False) -> None:
         """Initialize instance.
@@ -340,7 +340,7 @@ class Target(object):
         hostnqn: str = self.host_nqn or utils.get_host_nqn()
 
         # List of portal addresses and transports for this target
-        # Unlike "nvme list-subsys -o json" sysfs addr is separated by a coma
+        # Unlike "nvme list-subsys -o json" sysfs addr is separated by a comma
         sysfs_portals: List[Tuple[Optional[str],
                                   Optional[str],
                                   Optional[Union[str, utils.Anything]]]] = [
@@ -704,7 +704,7 @@ class NVMeOFConnector(base.BaseLinuxConnector):
 
     @classmethod
     def nvme_present(cls: type) -> bool:
-        """Check if the nvme command is present."""
+        """Check if the nvme CLI is present."""
         try:
             priv_rootwrap.custom_execute('nvme', 'version')
             return True

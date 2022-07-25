@@ -188,11 +188,11 @@ class PortalTestCase(test_base.TestCase):
 
     @mock.patch.object(nvmeof.Portal, 'get_device_by_property')
     def test_get_device_by_ns_id(self, mock_property):
-        """nguid takes priority over ns_id if no UUID."""
+        """ns_id takes priority if no UUID and nguid are present."""
         mock_property.return_value = 'result'
         self.target.uuid = None
         self.target.nguid = None
-        self.target.ns_id = 'ns_id_value'  # will be ignored
+        self.target.ns_id = 'ns_id_value'
         res = self.portal.get_device()
         self.assertEqual('result', res)
         mock_property.assert_called_once_with('nsid', 'ns_id_value')
