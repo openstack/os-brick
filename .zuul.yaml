@@ -9,8 +9,8 @@
       jobs:
         - os-brick-code-coverage:
             voting: false
-        - os-brick-src-devstack-plugin-ceph:
-            voting: false
+        - os-brick-src-devstack-plugin-ceph-v
+        - os-brick-src-devstack-plugin-ceph-nv
         - os-brick-src-tempest-lvm-lio-barbican
         - os-brick-src-tempest-nfs:
             voting: false
@@ -35,6 +35,7 @@
 
 - job:
     name: os-brick-src-devstack-plugin-ceph
+    abstract: true
     description: |
       Tempest job which tests os-brick from source.
       Former names for this job were:
@@ -46,6 +47,37 @@
       - ^.*\.rst$
       - ^doc/.*$
       - ^releasenotes/.*$
+
+- job:
+    name: os-brick-src-devstack-plugin-ceph-v
+    final: true
+    description: |
+      Runs tempest tests on os-brick source against ceph.
+      This voting job runs on changes that could affect rbd.
+    parent: os-brick-src-devstack-plugin-ceph
+    files:
+      - ^os_brick/initiator/connector.py$
+      - ^os_brick/initiator/connectors/rbd.py$
+      - ^os_brick/initiator/linuxrbd.py$
+      - ^os_brick/utils.py$
+
+- job:
+    name: os-brick-src-devstack-plugin-ceph-nv
+    final: true
+    voting: false
+    description: |
+      Runs tempest tests on os-brick source against ceph.
+      This non-voting job runs changes that don't specifically
+      impact ceph-related os-brick code.
+    parent: os-brick-src-devstack-plugin-ceph
+    irrelevant-files:
+      - ^.*\.rst$
+      - ^doc/.*$
+      - ^releasenotes/.*$
+      - ^os_brick/initiator/connector.py$
+      - ^os_brick/initiator/connectors/rbd.py$
+      - ^os_brick/initiator/linuxrbd.py$
+      - ^os_brick/utils.py$
 
 - job:
     name: os-brick-src-tempest-lvm-lio-barbican
