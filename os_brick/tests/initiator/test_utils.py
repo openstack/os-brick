@@ -48,6 +48,16 @@ class InitiatorUtilsTestCase(base.TestCase):
             mock_lock.assert_not_called()
 
     @mock.patch('oslo_concurrency.lockutils.lock')
+    def test_guard_connection_manual_scan_support_forced(self, mock_lock):
+        """Guard locks when cinder forces locking."""
+        utils.ISCSI_SUPPORTS_MANUAL_SCAN = True
+        # We confirm that shared_targets is ignored
+        with utils.guard_connection({'service_uuid': mock.sentinel.uuid,
+                                     'shared_targets': None}):
+            mock_lock.assert_called_once_with(mock.sentinel.uuid, 'os-brick-',
+                                              external=True)
+
+    @mock.patch('oslo_concurrency.lockutils.lock')
     def test_guard_connection_manual_scan_unsupported_not_shared(self,
                                                                  mock_lock):
         utils.ISCSI_SUPPORTS_MANUAL_SCAN = False
@@ -55,7 +65,7 @@ class InitiatorUtilsTestCase(base.TestCase):
             mock_lock.assert_not_called()
 
     @mock.patch('oslo_concurrency.lockutils.lock')
-    def test_guard_connection_manual_scan_unsupported_hared(self, mock_lock):
+    def test_guard_connection_manual_scan_unsupported_shared(self, mock_lock):
         utils.ISCSI_SUPPORTS_MANUAL_SCAN = False
         with utils.guard_connection({'service_uuid': mock.sentinel.uuid,
                                      'shared_targets': True}):
