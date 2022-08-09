@@ -95,7 +95,7 @@ class LightOSConnector(base.BaseLinuxConnector):
             resp = conn.getresponse()
             return 'found' if resp.status == http.client.OK else ''
         except Exception as e:
-            LOG.debug(f'LIGHTOS: {e}')
+            LOG.debug('LIGHTOS: %s', e)
             out = ''
         return out
 
@@ -124,8 +124,8 @@ class LightOSConnector(base.BaseLinuxConnector):
                 priv_lightos.move_dsc_file(dscfile.name, dest_name)
             except Exception:
                 LOG.warning(
-                    "LIGHTOS: Failed to create dsc file for connection with"
-                    f" uuid:{uuid}")
+                    "LIGHTOS: Failed to create dsc file for connection with "
+                    "uuid:%s", uuid)
                 raise
 
     def dsc_disconnect_volume(self, connection_info):
@@ -133,7 +133,7 @@ class LightOSConnector(base.BaseLinuxConnector):
         try:
             priv_lightos.delete_dsc_file(self.dsc_file_name(uuid))
         except Exception:
-            LOG.warning("LIGHTOS: Failed delete dsc file uuid:{}".format(uuid))
+            LOG.warning("LIGHTOS: Failed delete dsc file uuid:%s", uuid)
             raise
 
     def monitor_db(self, lightos_db):
@@ -231,7 +231,7 @@ class LightOSConnector(base.BaseLinuxConnector):
                 if device:
                     return device
             except Exception as e:
-                LOG.debug(f'LIGHTOS: {e}')
+                LOG.debug('LIGHTOS: %s', e)
             device = self._check_device_exists_reading_block_class(uuid)
             if device:
                 return device

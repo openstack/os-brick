@@ -157,7 +157,8 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
                         hba[attribute] = f.read().strip()
                 hbas.append(hba)
             except Exception as exc:
-                LOG.warning(f'Could not read attributes for {hostpath}: {exc}')
+                LOG.warning('Could not read attributes for %(hp)s: %(exc)s',
+                            {'hp': hostpath, 'exc': exc})
         return hbas
 
     def get_fc_hbas_info(self):

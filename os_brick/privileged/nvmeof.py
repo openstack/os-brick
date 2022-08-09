@@ -68,6 +68,6 @@ def create_hostnqn():
             f.write(host_nqn)
         os.chmod('/etc/nvme/hostnqn', 0o644)
     except Exception as e:
-        LOG.warning("Could not generate host nqn: %s" % str(e))
+        LOG.warning("Could not generate host nqn: %s", e)
 
     return host_nqn

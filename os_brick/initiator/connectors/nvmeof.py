@@ -792,7 +792,7 @@ class NVMeOFConnector(base.BaseLinuxConnector):
             return lines.split('\n')[0]
         except putils.ProcessExecutionError as e:
             LOG.warning(
-                "Process execution error in _get_host_uuid: %s" % str(e))
+                "Process execution error in _get_host_uuid: %s", e)
             return None
 
     def _get_system_uuid(self) -> str:
@@ -1265,7 +1265,7 @@ class NVMeOFConnector(base.BaseLinuxConnector):
             'cat /proc/mdstat | grep ' + device_name +
             ' | awk \'{print $1;}\'')
         cmd = ['bash', '-c', get_md_cmd]
-        LOG.debug("[!] cmd = " + str(cmd))
+        LOG.debug("[!] cmd = %s", cmd)
         cmd_output = None
 
         try:
@@ -1282,7 +1282,7 @@ class NVMeOFConnector(base.BaseLinuxConnector):
 
             return cmd_output
         except putils.ProcessExecutionError as ex:
-            LOG.warning("[!] Could not run cmd: %s", str(ex))
+            LOG.warning("[!] Could not run cmd: %s", ex)
         return None
 
     def stop_and_assemble_raid(self,
@@ -1303,8 +1303,9 @@ class NVMeOFConnector(base.BaseLinuxConnector):
                 if md_name and md_name == link:
                     return
                 LOG.debug(
-                    "sleeping 1 sec -allow auto assemble link = " +
-                    link + " md path = " + md_path)
+                    "sleeping 1 sec -allow auto assemble link = %(link)s "
+                    "md path = %(md_path)s",
+                    {'link': link, 'md_path': md_path})
                 time.sleep(1)
 
             if md_name and md_name != link:
@@ -1366,7 +1367,7 @@ class NVMeOFConnector(base.BaseLinuxConnector):
         for i in range(len(drives)):
             cmd.append(drives[i])
 
-        LOG.debug('[!] cmd = ' + str(cmd))
+        LOG.debug('[!] cmd = %s', cmd)
         self.run_mdadm(cmd)
         # sometimes under load, md is not created right away so we wait
         for i in range(60):
@@ -1405,20 +1406,20 @@ class NVMeOFConnector(base.BaseLinuxConnector):
                   md_path: str,
                   raise_exception: bool = False) -> Optional[str]:
         cmd = ['mdadm', '--stop', md_path]
-        LOG.debug("[!] cmd = " + str(cmd))
+        LOG.debug("[!] cmd = %s", cmd)
         cmd_out = self.run_mdadm(cmd, raise_exception)
         return cmd_out
 
     def is_raid_exists(self, device_path: str) -> bool:
         cmd = ['mdadm', '--detail', device_path]
-        LOG.debug("[!] cmd = " + str(cmd))
+        LOG.debug("[!] cmd = %s", cmd)
         raid_expected = device_path + ':'
         try:
             lines, err = self._execute(
                 *cmd, run_as_root=True, root_helper=self._root_helper)
 
             for line in lines.split('\n'):
-                LOG.debug("[!] line = " + line)
+                LOG.debug("[!] line = %s", line)
                 if line == raid_expected:
                     return True
                 else:
@@ -1429,7 +1430,7 @@ class NVMeOFConnector(base.BaseLinuxConnector):
 
     def remove_raid(self, device_path: str) -> None:
         cmd = ['mdadm', '--remove', device_path]
-        LOG.debug("[!] cmd = " + str(cmd))
+        LOG.debug("[!] cmd = %s", cmd)
         self.run_mdadm(cmd)
 
     def _is_raid_device(self, device: str) -> bool:
@@ -1437,7 +1438,7 @@ class NVMeOFConnector(base.BaseLinuxConnector):
 
     def _get_fs_type(self, device_path: str) -> Optional[str]:
         cmd = ['blkid', device_path, '-s', 'TYPE', '-o', 'value']
-        LOG.debug("[!] cmd = " + str(cmd))
+        LOG.debug("[!] cmd = %s", cmd)
         fs_type = None
 
         # We don't care about errors, on error lines will be '' so it's ok
