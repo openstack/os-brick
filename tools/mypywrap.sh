@@ -12,7 +12,7 @@
 
 ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-export MYPYPATH=$ROOT_DIR/../os_brick/tests/stubs/
+#export MYPYPATH=$ROOT_DIR/../os_brick/tests/stubs/
 
 if [ $# -eq 0 ]; then
     # if no arguments provided, use the standard converted lists
