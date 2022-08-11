@@ -15,7 +15,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional  # noqa: H301
 
 from oslo_log import log as logging
 from oslo_utils import netutils
@@ -37,7 +37,7 @@ class RBDConnectorMixin(object):
     @classmethod
     def _get_rbd_args(cls,
                       connection_properties: dict[str, Any],
-                      conf: str = None) -> list[str]:
+                      conf: Optional[str] = None) -> list[str]:
         user = connection_properties.get('auth_username')
         monitor_ips = connection_properties.get('hosts')
         monitor_ports = connection_properties.get('ports')
