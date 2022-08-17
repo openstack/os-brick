@@ -13,11 +13,15 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+from __future__ import annotations
+
+from typing import Any
 
 from oslo_log import log as logging
 from oslo_utils import importutils
 from oslo_utils import strutils
 
+from os_brick.encryptors import base
 from os_brick.encryptors import nop
 
 LOG = logging.getLogger(__name__)
@@ -45,11 +49,11 @@ LEGACY_PROVIDER_CLASS_TO_FORMAT_MAP = {
 }
 
 
-def get_volume_encryptor(root_helper,
-                         connection_info,
+def get_volume_encryptor(root_helper: str,
+                         connection_info: dict[str, Any],
                          keymgr,
                          execute=None,
-                         *args, **kwargs):
+                         *args, **kwargs) -> base.VolumeEncryptor:
     """Creates a VolumeEncryptor used to encrypt the specified volume.
 
     :param: the connection information used to attach the volume
@@ -105,7 +109,10 @@ def get_volume_encryptor(root_helper,
     return encryptor
 
 
-def get_encryption_metadata(context, volume_api, volume_id, connection_info):
+def get_encryption_metadata(context,
+                            volume_api,
+                            volume_id: str,
+                            connection_info: dict[str, Any]) -> dict[str, Any]:
     metadata = {}
     if ('data' in connection_info and
             connection_info['data'].get('encrypted', False)):

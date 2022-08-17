@@ -1,3 +1,5 @@
+os_brick/encryptors/__init__.py
+os_brick/encryptors/luks.py
 os_brick/exception.py
 os_brick/executor.py
 os_brick/i18n.py
@@ -20,4 +22,3 @@ os_brick/privileged/nvmeof.py
 os_brick/privileged/rbd.py
 os_brick/remotefs/remotefs.py
 os_brick/initiator/linuxrbd.py
-os_brick/encryptors/luks.py
