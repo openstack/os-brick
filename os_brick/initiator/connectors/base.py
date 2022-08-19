@@ -12,12 +12,14 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+from __future__ import annotations
+
 
 import functools
 import glob
 import os
 import typing
-from typing import Optional, Tuple  # noqa: H301
+from typing import Optional
 
 from oslo_concurrency import lockutils
 from oslo_concurrency import processutils as putils
@@ -155,7 +157,7 @@ class BaseLinuxConnector(initiator_connector.InitiatorConnector):
     def _discover_mpath_device(self,
                                device_wwn: str,
                                connection_properties: dict,
-                               device_name: str) -> Tuple[str, str]:
+                               device_name: str) -> tuple[str, str]:
         """This method discovers a multipath device.
 
         Discover a multipath device based on a defined connection_property

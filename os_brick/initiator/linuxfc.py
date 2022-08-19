@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import glob
 import os
-from typing import Dict, Iterable, List  # noqa: H301
+from typing import Iterable
 
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
@@ -166,7 +166,7 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
                             {'hp': hostpath, 'exc': exc})
         return hbas
 
-    def get_fc_hbas_info(self) -> List[Dict[str, str]]:
+    def get_fc_hbas_info(self) -> list[dict[str, str]]:
         """Get Fibre Channel WWNs and device paths from the system, if any."""
         hbas = self.get_fc_hbas()
 
@@ -182,7 +182,7 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
                               'device_path': device_path})
         return hbas_info
 
-    def get_fc_wwpns(self) -> List[str]:
+    def get_fc_wwpns(self) -> list[str]:
         """Get Fibre Channel WWPNs from the system, if any."""
         hbas = self.get_fc_hbas()
 
@@ -194,7 +194,7 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
 
         return wwpns
 
-    def get_fc_wwnns(self) -> List[str]:
+    def get_fc_wwnns(self) -> list[str]:
         """Get Fibre Channel WWNNs from the system, if any."""
         hbas = self.get_fc_hbas()
 

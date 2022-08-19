@@ -14,8 +14,10 @@
 
 """Exceptions for the Brick library."""
 
+from __future__ import annotations
+
 import traceback
-from typing import Any, List, Optional  # noqa: H301
+from typing import Any, Optional  # noqa: H301
 
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
@@ -184,7 +186,7 @@ class ExceptionChainer(BrickException):
     logged with warning level.
     """
     def __init__(self, *args, **kwargs):
-        self._exceptions: List[tuple] = []
+        self._exceptions: list[tuple] = []
         self._repr: Optional[str] = None
         self._exc_msg_args = []
         super(ExceptionChainer, self).__init__(*args, **kwargs)
