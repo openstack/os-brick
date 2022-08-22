@@ -19,7 +19,7 @@
 """
 
 import threading
-from typing import Callable
+from typing import Callable, Optional  # noqa: H301
 
 from oslo_concurrency import processutils as putils
 from oslo_context import context as context_utils
@@ -29,12 +29,15 @@ from os_brick.privileged import rootwrap as priv_rootwrap
 
 
 class Executor(object):
-    def __init__(self, root_helper, execute=None,
+    def __init__(self,
+                 root_helper,
+                 execute: Optional[Callable[..., tuple[str, str]]] = None,
                  *args, **kwargs):
         if execute is None:
             execute = priv_rootwrap.execute
         self.set_execute(execute)
         self.set_root_helper(root_helper)
+        self.__execute: Callable[..., tuple[str, str]]
 
     @staticmethod
     def safe_decode(string) -> str:
@@ -59,7 +62,7 @@ class Executor(object):
             self.make_putils_error_safe(e)
             raise
 
-    def set_execute(self, execute: Callable) -> None:
+    def set_execute(self, execute: Callable[..., tuple[str, str]]) -> None:
         self.__execute = execute
 
     def set_root_helper(self, helper: str) -> None:

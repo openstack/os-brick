@@ -40,7 +40,8 @@ import os
 import signal
 import threading
 import time
-from typing import Any, Iterable
+import typing
+from typing import Any
 
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
@@ -53,7 +54,7 @@ from os_brick import privileged
 LOG = logging.getLogger(__name__)
 
 
-def custom_execute(*cmd, **kwargs):
+def custom_execute(*cmd: str, **kwargs) -> tuple[str, str]:
     """Custom execute with additional functionality on top of Oslo's.
 
     Additional features are timeouts and exponential backoff retries.
@@ -84,6 +85,9 @@ def custom_execute(*cmd, **kwargs):
                           not False.
     :returns: Tuple with stdout and stderr
     """
+    # TODO: rework this into using a tuple w/ specific types
+    shared_data: list[Any]
+
     # Since python 2 doesn't have nonlocal we use a mutable variable to store
     # the previous attempt number, the timeout handler, and the process that
     # timed out
@@ -164,7 +168,7 @@ def custom_execute(*cmd, **kwargs):
 # Entrypoint used for rootwrap.py transition code.  Don't use this for
 # other purposes, since it will be removed when we think the
 # transition is finished.
-def execute(*cmd, **kwargs):
+def execute(*cmd: str, **kwargs):
     """NB: Raises processutils.ProcessExecutionError on failure."""
     run_as_root = kwargs.pop('run_as_root', False)
     kwargs.pop('root_helper', None)
@@ -193,13 +197,13 @@ def execute(*cmd, **kwargs):
 
 # See comment on `execute`
 @privileged.default.entrypoint
-def execute_root(*cmd, **kwargs):
+def execute_root(*cmd: str, **kwargs) -> tuple[str, str]:
     """NB: Raises processutils.ProcessExecutionError/OSError on failure."""
     return custom_execute(*cmd, shell=False, run_as_root=False, **kwargs)
 
 
 @privileged.default.entrypoint
-def unlink_root(*links: Iterable[str], **kwargs: dict[str, Any]) -> None:
+def unlink_root(*links: str, **kwargs: dict[str, Any]) -> None:
     """Unlink system links with sys admin privileges.
 
     By default it will raise an exception if a link does not exist and stop
@@ -217,6 +221,7 @@ def unlink_root(*links: Iterable[str], **kwargs: dict[str, Any]) -> None:
     raise_at_end = kwargs.get('raise_at_end', False)
     exc = exception.ExceptionChainer()
     catch_exception = no_errors or raise_at_end
+    catch_exception = typing.cast(bool, catch_exception)
     LOG.debug('Unlinking %s', links)
     for link in links:
         with exc.context(catch_exception, 'Unlink failed for %s', link):

@@ -40,7 +40,7 @@ class LVM(executor.Executor):
     def __init__(self, vg_name: str, root_helper: str, create_vg: bool = False,
                  physical_volumes: Optional[list] = None,
                  lvm_type: Optional[str] = 'default',
-                 executor: Optional[Callable] = None,
+                 executor: Optional[Callable[..., tuple[str, str]]] = None,
                  lvm_conf=None,
                  suppress_fd_warn: Optional[bool] = False):
 
