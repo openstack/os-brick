@@ -62,6 +62,13 @@ Node          SN      Model Namespace Usage            Format      FW Rev
 /dev/nvme0n2  AB12345 s123  12683     0.00 B / 1.07 GB 512 B + 0 B 2.1.0.0
 """
 
+md_stat_contents = """
+Personalities : [raid0]
+md0 : active raid0 nvme0n1[4] nvme1n1[3] nvme2n1[2] nvme3n1[1]
+      20508171264 blocks super 1.2 level 5, 512k chunk, algorithm 2 [4/4] [UUUU]
+unused devices: <none>
+"""  # noqa
+
 
 @ddt.ddt
 class UtilityMethodsTestCase(test_base.TestCase):
@@ -1701,29 +1708,20 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         self.assertEqual(args[1], cmd[1])
         self.assertEqual(args[2], cmd[2])
 
-    @mock.patch.object(executor.Executor, '_execute')
-    def test_get_md_name(self, mock_execute):
-        mock_execute.return_value = ('nvme1' + "\n", "")
-        result = self.connector.get_md_name(NVME_DEVICE_PATH)
-        self.assertEqual('nvme1', result)
-        get_md_cmd = 'cat /proc/mdstat | grep /dev/nvme1 | awk \'{print $1;}\''
-        cmd = ['bash', '-c', get_md_cmd]
-        args, kwargs = mock_execute.call_args
-        self.assertEqual(args[0], cmd[0])
-        self.assertEqual(args[1], cmd[1])
-        self.assertEqual(args[2], cmd[2])
+    def test_get_md_name(self):
+        mock_open = mock.mock_open(read_data=md_stat_contents)
+        with mock.patch('builtins.open', mock_open):
+            result = self.connector.get_md_name(os.path.basename(NVME_NS_PATH))
+        self.assertEqual('md0', result)
+        mock_open.assert_called_once_with('/proc/mdstat', 'r')
+        mock_fd = mock_open.return_value.__enter__.return_value
+        mock_fd.__iter__.assert_called_once_with()
 
-    @mock.patch.object(executor.Executor, '_execute')
-    def test_get_md_name_err(self, mock_execute):
-        mock_execute.side_effect = putils.ProcessExecutionError()
-        result = self.connector.get_md_name(NVME_DEVICE_PATH)
+    @mock.patch.object(builtins, 'open', side_effect=Exception)
+    def test_get_md_name_err(self, mock_open):
+        result = self.connector.get_md_name(os.path.basename(NVME_NS_PATH))
         self.assertIsNone(result)
-        get_md_cmd = 'cat /proc/mdstat | grep /dev/nvme1 | awk \'{print $1;}\''
-        cmd = ['bash', '-c', get_md_cmd]
-        args, kwargs = mock_execute.call_args
-        self.assertEqual(args[0], cmd[0])
-        self.assertEqual(args[1], cmd[1])
-        self.assertEqual(args[2], cmd[2])
+        mock_open.assert_called_once_with('/proc/mdstat', 'r')
 
     @mock.patch.object(executor.Executor, '_execute')
     def test_is_device_in_raid(self, mock_execute):
