@@ -18,8 +18,10 @@
    and root_helper settings, so this provides that hook.
 """
 
+from __future__ import annotations
+
 import threading
-from typing import Callable, Tuple  # noqa: H301
+from typing import Callable
 
 from oslo_concurrency import processutils as putils
 from oslo_context import context as context_utils
@@ -48,7 +50,7 @@ class Executor(object):
             if value:
                 setattr(exc, field, cls.safe_decode(value))
 
-    def _execute(self, *args, **kwargs) -> Tuple[str, str]:
+    def _execute(self, *args, **kwargs) -> tuple[str, str]:
         try:
             result = self.__execute(*args, **kwargs)
             if result:

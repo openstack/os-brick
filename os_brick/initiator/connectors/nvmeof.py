@@ -13,14 +13,15 @@
 # Look in the NVMeOFConnProps class docstring to see the format of the NVMe-oF
 # connection properties
 
+from __future__ import annotations
+
 import errno
 import functools
 import glob
 import json
 import os.path
 import time
-from typing import (Callable, Dict, List, Optional, Sequence,  # noqa: H301
-                    Tuple, Type, Union)  # noqa: H301
+from typing import (Callable, Optional, Sequence, Type, Union)  # noqa: H301
 import uuid as uuid_lib
 
 
@@ -206,7 +207,7 @@ class Portal(object):
                     '"devices_on_start"')
         return target.get_device_path_by_initial_devices()
 
-    def get_all_namespaces_ctrl_paths(self) -> List[str]:
+    def get_all_namespaces_ctrl_paths(self) -> list[str]:
         """Return all nvme sysfs control paths for this portal.
 
         The basename of the path can be single volume or a channel to an ANA
@@ -295,7 +296,7 @@ class Target(object):
     def factory(cls: Type['Target'],
                 source_conn_props: 'NVMeOFConnProps',
                 target_nqn: str,
-                portals: List[str],
+                portals: list[str],
                 vol_uuid: Optional[str] = None,
                 volume_nguid: Optional[str] = None,
                 ns_id: Optional[str] = None,
@@ -314,7 +315,7 @@ class Target(object):
     def __init__(self,
                  source_conn_props: 'NVMeOFConnProps',
                  nqn: str,
-                 portals: List[str],
+                 portals: list[str],
                  uuid: Optional[str] = None,
                  nguid: Optional[str] = None,
                  ns_id: Optional[str] = None,
@@ -347,13 +348,13 @@ class Target(object):
             LOG.debug('Devices on start are: %s', self.devices_on_start)
 
     @staticmethod
-    def _get_nvme_devices() -> List[str]:
+    def _get_nvme_devices() -> list[str]:
         """Get all NVMe devices present in the system."""
         pattern = '/dev/nvme*n*'  # e.g. /dev/nvme10n10
         return glob.glob(pattern)
 
     @property
-    def live_portals(self) -> List[Portal]:
+    def live_portals(self) -> list[Portal]:
         """Get live portals.
 
         Must have called set_portals_controllers first since portals without a
@@ -362,7 +363,7 @@ class Target(object):
         return [p for p in self.portals if p.is_live]
 
     @property
-    def present_portals(self) -> List[Portal]:
+    def present_portals(self) -> list[Portal]:
         """Get present portals.
 
         Must have called set_portals_controllers first since portals without a
@@ -383,13 +384,13 @@ class Target(object):
 
         # List of portal addresses and transports for this target
         # Unlike "nvme list-subsys -o json" sysfs addr is separated by a comma
-        sysfs_portals: List[Tuple[Optional[str],
+        sysfs_portals: list[tuple[Optional[str],
                                   Optional[str],
                                   Optional[Union[str, utils.Anything]]]] = [
             (f'traddr={p.address},trsvcid={p.port}', p.transport, hostnqn)
             for p in self.portals
         ]
-        known_names: List[str] = [p.controller for p in self.portals
+        known_names: list[str] = [p.controller for p in self.portals
                                   if p.controller]
 
         warned = False
@@ -434,7 +435,7 @@ class Target(object):
             if len(known_names) == len(sysfs_portals):
                 return
 
-    def get_devices(self, only_live=False, get_one=False) -> List[str]:
+    def get_devices(self, only_live=False, get_one=False) -> list[str]:
         """Return devices for this target
 
         Optionally only return devices from portals that are live and also
@@ -610,7 +611,7 @@ class NVMeOFConnProps(object):
     replica_count = None
     cinder_volume_id: Optional[str] = None
 
-    def __init__(self, conn_props: Dict,
+    def __init__(self, conn_props: dict,
                  find_controllers: bool = False) -> None:
         # Generic connection properties fields used by Nova
         self.qos_specs = conn_props.get('qos_specs')
@@ -649,7 +650,7 @@ class NVMeOFConnProps(object):
         # Below fields may have been added by nova
         self.device_path = conn_props.get('device_path')
 
-    def get_devices(self, only_live: bool = False) -> List[str]:
+    def get_devices(self, only_live: bool = False) -> list[str]:
         """Get all device paths present in the system for all targets."""
         result = []
         for target in self.targets:
@@ -707,7 +708,7 @@ class NVMeOFConnector(base.BaseLinuxConnector):
     def get_volume_paths(
             self,
             connection_properties: NVMeOFConnProps,
-            device_info: Optional[Dict[str, str]] = None) -> List[str]:
+            device_info: Optional[dict[str, str]] = None) -> list[str]:
         """Return paths where the volume is present."""
         # Priority is on the value returned by connect_volume method
         if device_info and device_info.get('path'):
@@ -759,7 +760,7 @@ class NVMeOFConnector(base.BaseLinuxConnector):
         return False
 
     @classmethod
-    def get_connector_properties(cls, root_helper, *args, **kwargs) -> Dict:
+    def get_connector_properties(cls, root_helper, *args, **kwargs) -> dict:
         """The NVMe-oF connector properties (initiator uuid and nqn.)"""
         execute = kwargs.get('execute') or priv_rootwrap.execute
         nvmf = NVMeOFConnector(root_helper=root_helper, execute=execute)
@@ -843,7 +844,7 @@ class NVMeOFConnector(base.BaseLinuxConnector):
     @base.synchronized('connect_volume', external=True)
     @NVMeOFConnProps.from_dictionary_parameter
     def connect_volume(
-            self, connection_properties: NVMeOFConnProps) -> Dict[str, str]:
+            self, connection_properties: NVMeOFConnProps) -> dict[str, str]:
         """Attach and discover the volume."""
         try:
             if connection_properties.is_replicated is False:
@@ -978,7 +979,7 @@ class NVMeOFConnector(base.BaseLinuxConnector):
         return device_path
 
     def _handle_replicated_volume(self,
-                                  host_device_paths: List[str],
+                                  host_device_paths: list[str],
                                   conn_props: NVMeOFConnProps) -> str:
         """Assemble the raid from found devices."""
         path_in_raid = False
@@ -1004,7 +1005,7 @@ class NVMeOFConnector(base.BaseLinuxConnector):
         return device_path
 
     def _handle_single_replica(self,
-                               host_device_paths: List[str],
+                               host_device_paths: list[str],
                                volume_alias: str) -> str:
         """Assemble the raid from a single device."""
         if self._is_raid_device(host_device_paths[0]):
@@ -1019,8 +1020,8 @@ class NVMeOFConnector(base.BaseLinuxConnector):
     @base.synchronized('connect_volume', external=True)
     @utils.connect_volume_undo_prepare_result(unlink_after=True)
     def disconnect_volume(self,
-                          connection_properties: Dict,
-                          device_info: Dict[str, str],
+                          connection_properties: dict,
+                          device_info: dict[str, str],
                           force: bool = False,
                           ignore_errors: bool = False) -> None:
         """Flush the volume.
@@ -1115,7 +1116,7 @@ class NVMeOFConnector(base.BaseLinuxConnector):
     # #######  Extend methods ########
 
     @staticmethod
-    def _get_sizes_from_lba(ns_data: Dict) -> Tuple[Optional[int],
+    def _get_sizes_from_lba(ns_data: dict) -> tuple[Optional[int],
                                                     Optional[int]]:
         """Return size in bytes and the nsze of the volume from NVMe NS data.
 
@@ -1143,7 +1144,7 @@ class NVMeOFConnector(base.BaseLinuxConnector):
     @utils.trace
     @base.synchronized('extend_volume', external=True)
     @utils.connect_volume_undo_prepare_result
-    def extend_volume(self, connection_properties: Dict[str, str]) -> int:
+    def extend_volume(self, connection_properties: dict[str, str]) -> int:
         """Update an attached volume to reflect the current size after extend
 
         The only way to reflect the new size of an NVMe-oF volume on the host
@@ -1286,7 +1287,7 @@ class NVMeOFConnector(base.BaseLinuxConnector):
         return None
 
     def stop_and_assemble_raid(self,
-                               drives: List[str],
+                               drives: list[str],
                                md_path: str,
                                read_only: bool) -> None:
         md_name = None
@@ -1317,7 +1318,7 @@ class NVMeOFConnector(base.BaseLinuxConnector):
                 i += 1
 
     def assemble_raid(self,
-                      drives: List[str],
+                      drives: list[str],
                       md_path: str,
                       read_only: bool) -> bool:
         cmd = ['mdadm', '--assemble', '--run', md_path]
@@ -1337,7 +1338,7 @@ class NVMeOFConnector(base.BaseLinuxConnector):
         return True
 
     def create_raid(self,
-                    drives: List[str],
+                    drives: list[str],
                     raid_type: str,
                     device_name: str,
                     name: str,
@@ -1452,7 +1453,7 @@ class NVMeOFConnector(base.BaseLinuxConnector):
 
     def run_nvme_cli(self,
                      nvme_command: Sequence[str],
-                     **kwargs) -> Tuple[str, str]:
+                     **kwargs) -> tuple[str, str]:
         """Run an nvme cli command and return stdout and stderr output."""
         (out, err) = self._execute('nvme', *nvme_command, run_as_root=True,
                                    root_helper=self._root_helper,

@@ -16,11 +16,14 @@
 
    Note, this is not iSCSI.
 """
+
+from __future__ import annotations
+
 import glob
 import os
 import re
 import time
-from typing import Dict, List, Optional  # noqa: H301
+from typing import Optional
 
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
@@ -82,7 +85,7 @@ class LinuxSCSI(executor.Executor):
             with exc.context(force, 'Removing %s failed', device):
                 self.echo_scsi_command(path, "1")
 
-    def wait_for_volumes_removal(self, volumes_names: List[str]) -> None:
+    def wait_for_volumes_removal(self, volumes_names: list[str]) -> None:
         """Wait for device paths to be removed from the system."""
         str_names = ', '.join(volumes_names)
         LOG.debug('Checking to see if SCSI volumes %s have been removed.',
@@ -105,7 +108,7 @@ class LinuxSCSI(executor.Executor):
                     LOG.debug('%s still exist.', ', '.join(exist))
         raise exception.VolumePathNotRemoved(volume_path=exist)
 
-    def get_device_info(self, device: str) -> Dict[str, Optional[str]]:
+    def get_device_info(self, device: str) -> dict[str, Optional[str]]:
         dev_info = {'device': device, 'host': None,
                     'channel': None, 'id': None, 'lun': None}
         # The input argument 'device' can be of 2 types:
@@ -132,7 +135,7 @@ class LinuxSCSI(executor.Executor):
         LOG.debug('dev_info=%s', str(dev_info))
         return dev_info
 
-    def get_sysfs_wwn(self, device_names: List[str], mpath=None) -> str:
+    def get_sysfs_wwn(self, device_names: list[str], mpath=None) -> str:
         """Return the wwid from sysfs in any of devices in udev format."""
         # If we have a multipath DM we know that it has found the WWN
         if mpath:

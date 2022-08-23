@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 import copy
-from typing import Any, Dict, Generator  # noqa: H301
+from typing import Any, Generator  # noqa: H301
 
 from os_brick.initiator import initiator_connector
 
@@ -23,7 +23,7 @@ from os_brick.initiator import initiator_connector
 class BaseISCSIConnector(initiator_connector.InitiatorConnector):
     def _iterate_all_targets(
             self,
-            connection_properties: dict) -> Generator[Dict[str, Any],
+            connection_properties: dict) -> Generator[dict[str, Any],
                                                       None, None]:
         for portal, iqn, lun in self._get_all_targets(connection_properties):
             props = copy.deepcopy(connection_properties)

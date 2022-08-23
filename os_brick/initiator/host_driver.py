@@ -13,14 +13,15 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+from __future__ import annotations
+
 import errno
 import os
-from typing import List
 
 
 class HostDriver(object):
 
-    def get_all_block_devices(self) -> List[str]:
+    def get_all_block_devices(self) -> list[str]:
         """Get the list of all block devices seen in /dev/disk/by-path/."""
         dir = "/dev/disk/by-path/"
         try:
