@@ -226,6 +226,8 @@ class RBDVolumeIOWrapper(io.RawIOBase):
         return self._offset
 
     def flush(self):
+        # Raise ValueError if already closed
+        super().flush()
         try:
             self._rbd_volume.image.flush()
         except AttributeError:
@@ -240,4 +242,8 @@ class RBDVolumeIOWrapper(io.RawIOBase):
         raise IOError(_("fileno() not supported by RBD()"))
 
     def close(self):
-        self.rbd_image.close()
+        if not self.closed:
+            # Can't set closed attribute ourselves, call parent to flush and
+            # change it.
+            super().close()
+            self.rbd_image.close()

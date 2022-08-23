@@ -194,6 +194,14 @@ class RBDVolumeIOWrapperTestCase(base.TestCase):
             self.assertEqual(1, self.mock_volume.image.flush.call_count)
             self.assertEqual(1, mock_logger.warning.call_count)
 
+    def test_flush_on_closed(self):
+        self.mock_volume_wrapper.close()
+        self.mock_volume.image.flush.assert_called_once_with()
+        self.assertTrue(self.mock_volume_wrapper.closed)
+        self.mock_volume.image.flush.reset_mock()
+        self.assertRaises(ValueError, self.mock_volume_wrapper.flush)
+        self.mock_volume.image.flush.assert_not_called()
+
     def test_fileno(self):
         self.assertRaises(IOError, self.mock_volume_wrapper.fileno)
 
@@ -205,6 +213,12 @@ class RBDVolumeIOWrapperTestCase(base.TestCase):
         rbd_volume = linuxrbd.RBDVolume(rbd_client, 'volume')
         rbd_handle = linuxrbd.RBDVolumeIOWrapper(
             linuxrbd.RBDImageMetadata(rbd_volume, 'pool', 'user', None))
+        rbd_handle.close()
+        self.assertEqual(1, rbd_disconnect.call_count)
+        # Confirm the handle now reports that is closed (this attribute cannot
+        # be modified directly)
+        self.assertTrue(rbd_handle.closed)
+        # New call to close shouldn't create additional calls
         rbd_handle.close()
         self.assertEqual(1, rbd_disconnect.call_count)
 
