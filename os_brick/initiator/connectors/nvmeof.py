@@ -35,6 +35,7 @@ try:
     from os_brick.initiator.connectors import nvmeof_agent
 except ImportError:
     nvmeof_agent = None
+from os_brick.privileged import nvmeof as priv_nvmeof
 from os_brick.privileged import rootwrap as priv_rootwrap
 from os_brick import utils
 
@@ -768,7 +769,7 @@ class NVMeOFConnector(base.BaseLinuxConnector):
 
         nqn = None
         uuid = nvmf._get_host_uuid()
-        suuid = nvmf._get_system_uuid()
+        suuid = priv_nvmeof.get_system_uuid()
         if cls.nvme_present():
             nqn = utils.get_host_nqn()
         if uuid:
@@ -795,31 +796,6 @@ class NVMeOFConnector(base.BaseLinuxConnector):
             LOG.warning(
                 "Process execution error in _get_host_uuid: %s", e)
             return None
-
-    def _get_system_uuid(self) -> str:
-        """Get the system's UUID from DMI
-
-        First try reading it from sysfs and if not possible use the dmidecode
-        tool.
-        """
-        # RSD requires system_uuid to let Cinder RSD Driver identify
-        # Nova node for later RSD volume attachment.
-        try:
-            out, err = self._execute('cat', '/sys/class/dmi/id/product_uuid',
-                                     root_helper=self._root_helper,
-                                     run_as_root=True)
-        except putils.ProcessExecutionError:
-            try:
-                out, err = self._execute('dmidecode', '-ssystem-uuid',
-                                         root_helper=self._root_helper,
-                                         run_as_root=True)
-                if not out:
-                    LOG.warning('dmidecode returned empty system-uuid')
-            except putils.ProcessExecutionError as e:
-                LOG.debug("Unable to locate dmidecode. For Cinder RSD Backend,"
-                          " please make sure it is installed: %s", e)
-                out = ""
-        return out.strip()
 
     @classmethod
     def _set_native_multipath_supported(cls):

@@ -125,3 +125,44 @@ class PrivNVMeTestCase(base.TestCase):
                                             exist_ok=True)
         mock_exec.assert_called_once_with('nvme', 'show-hostnqn')
         self.assertEqual('', res)
+
+    @mock.patch.object(builtins, 'open', new_callable=mock.mock_open)
+    def test_get_system_uuid_product_uuid(self, mock_open):
+        uuid = 'dbc6ba60-36ae-4b96-9310-628832bdfc3d'
+        mock_fd = mock_open.return_value.__enter__.return_value
+        mock_fd.read.return_value = uuid
+        res = privsep_nvme.get_system_uuid()
+        self.assertEqual(uuid, res)
+        mock_open.assert_called_once_with('/sys/class/dmi/id/product_uuid',
+                                          'r')
+        mock_fd.read.assert_called_once_with()
+
+    @mock.patch.object(builtins, 'open', side_effect=Exception)
+    @mock.patch.object(rootwrap, 'custom_execute')
+    def test_get_system_uuid_dmidecode(self, mock_exec, mock_open):
+        uuid = 'dbc6ba60-36ae-4b96-9310-628832bdfc3d'
+        mock_exec.return_value = (f' {uuid} ', '')
+        res = privsep_nvme.get_system_uuid()
+        self.assertEqual(uuid, res)
+        mock_open.assert_called_once_with('/sys/class/dmi/id/product_uuid',
+                                          'r')
+        mock_exec.assert_called_once_with('dmidecode', '-ssystem-uuid')
+
+    @mock.patch.object(builtins, 'open', side_effect=Exception)
+    @mock.patch.object(rootwrap, 'custom_execute', return_value=('', ''))
+    def test_get_system_uuid_dmidecode_empty(self, mock_exec, mock_open):
+        res = privsep_nvme.get_system_uuid()
+        self.assertEqual('', res)
+        mock_open.assert_called_once_with('/sys/class/dmi/id/product_uuid',
+                                          'r')
+        mock_exec.assert_called_once_with('dmidecode', '-ssystem-uuid')
+
+    @mock.patch.object(builtins, 'open', side_effect=Exception)
+    @mock.patch.object(rootwrap, 'custom_execute',
+                       side_effect=putils.ProcessExecutionError)
+    def test_get_system_uuid_failure(self, mock_exec, mock_open):
+        res = privsep_nvme.get_system_uuid()
+        self.assertEqual('', res)
+        mock_open.assert_called_once_with('/sys/class/dmi/id/product_uuid',
+                                          'r')
+        mock_exec.assert_called_once_with('dmidecode', '-ssystem-uuid')
