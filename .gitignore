@@ -36,6 +36,7 @@ pip-log.txt
 tools/lintstack.head.py
 tools/pylint_exceptions
 cover
+mypy-report
 
 # Translations
 *.mo
