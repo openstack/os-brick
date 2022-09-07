@@ -13,10 +13,14 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from oslo_concurrency import processutils as putils
+import binascii
+import os
+
+from oslo_concurrency import processutils
 from oslo_log import log as logging
 
-from os_brick.encryptors import cryptsetup
+from os_brick.encryptors import base
+from os_brick import exception
 from os_brick.privileged import rootwrap as priv_rootwrap
 from os_brick import utils
 
@@ -38,14 +42,14 @@ def is_luks(root_helper, device, execute=None):
                 run_as_root=True, root_helper=root_helper,
                 check_exit_code=True)
         return True
-    except putils.ProcessExecutionError as e:
+    except processutils.ProcessExecutionError as e:
         LOG.warning("isLuks exited abnormally (status %(exit_code)s): "
                     "%(stderr)s",
                     {"exit_code": e.exit_code, "stderr": e.stderr})
         return False
 
 
-class LuksEncryptor(cryptsetup.CryptsetupEncryptor):
+class LuksEncryptor(base.VolumeEncryptor):
     """A VolumeEncryptor based on LUKS.
 
     This VolumeEncryptor uses dm-crypt to encrypt the specified volume.
@@ -61,6 +65,59 @@ class LuksEncryptor(cryptsetup.CryptsetupEncryptor):
             keymgr=keymgr,
             execute=execute,
             *args, **kwargs)
+
+        # Fail if no device_path was set when connecting the volume, e.g. in
+        # the case of libvirt network volume drivers.
+        data = connection_info['data']
+        if not data.get('device_path'):
+            volume_id = data.get('volume_id') or connection_info.get('serial')
+            raise exception.VolumeEncryptionNotSupported(
+                volume_id=volume_id,
+                volume_type=connection_info['driver_volume_type'])
+
+        # the device's path as given to libvirt -- e.g., /dev/disk/by-path/...
+        self.symlink_path = connection_info['data']['device_path']
+
+        # a unique name for the volume -- e.g., the iSCSI participant name
+        self.dev_name = 'crypt-%s' % os.path.basename(self.symlink_path)
+
+        # NOTE(lixiaoy1): This is to import fix for 1439869 from Nova.
+        # NOTE(tsekiyama): In older version of nova, dev_name was the same
+        # as the symlink name. Now it has 'crypt-' prefix to avoid conflict
+        # with multipath device symlink. To enable rolling update, we use the
+        # old name when the encrypted volume already exists.
+        old_dev_name = os.path.basename(self.symlink_path)
+        wwn = data.get('multipath_id')
+        if self._is_crypt_device_available(old_dev_name):
+            self.dev_name = old_dev_name
+            LOG.debug("Using old encrypted volume name: %s", self.dev_name)
+        elif wwn and wwn != old_dev_name:
+            # FibreChannel device could be named '/dev/mapper/<WWN>'.
+            if self._is_crypt_device_available(wwn):
+                self.dev_name = wwn
+                LOG.debug(
+                    "Using encrypted volume name from wwn: %s", self.dev_name)
+
+        # the device's actual path on the compute host -- e.g., /dev/sd_
+        self.dev_path = os.path.realpath(self.symlink_path)
+
+    def _is_crypt_device_available(self, dev_name):
+        if not os.path.exists('/dev/mapper/%s' % dev_name):
+            return False
+
+        try:
+            self._execute('cryptsetup', 'status', dev_name, run_as_root=True)
+        except processutils.ProcessExecutionError as e:
+            # If /dev/mapper/<dev_name> is a non-crypt block device (such as a
+            # normal disk or multipath device), exit_code will be 1. In the
+            # case, we will omit the warning message.
+            if e.exit_code != 1:
+                LOG.warning('cryptsetup status %(dev_name)s exited '
+                            'abnormally (status %(exit_code)s): %(err)s',
+                            {"dev_name": dev_name, "exit_code": e.exit_code,
+                             "err": e.stderr})
+            return False
+        return True
 
     def _format_volume(self, passphrase, **kwargs):
         """Creates a LUKS v1 header on the volume.
@@ -103,6 +160,10 @@ class LuksEncryptor(cryptsetup.CryptsetupEncryptor):
                       root_helper=self._root_helper,
                       attempts=3)
 
+    def _get_passphrase(self, key):
+        """Convert raw key to string."""
+        return binascii.hexlify(key).decode('utf-8')
+
     def _open_volume(self, passphrase, **kwargs):
         """Opens the LUKS partition on the volume using passphrase.
 
@@ -128,7 +189,7 @@ class LuksEncryptor(cryptsetup.CryptsetupEncryptor):
 
         try:
             self._open_volume(passphrase, **kwargs)
-        except putils.ProcessExecutionError as e:
+        except processutils.ProcessExecutionError as e:
             if e.exit_code == 1 and not is_luks(self._root_helper,
                                                 self.dev_path,
                                                 execute=self._execute):
@@ -159,6 +220,10 @@ class LuksEncryptor(cryptsetup.CryptsetupEncryptor):
                       run_as_root=True, check_exit_code=[0, 4],
                       root_helper=self._root_helper,
                       attempts=3)
+
+    def detach_volume(self, **kwargs):
+        """Removes the dm-crypt mapping for the device."""
+        self._close_volume(**kwargs)
 
     def extend_volume(self, context, **kwargs):
         """Extend an encrypted volume and return the decrypted volume size."""

@@ -13,16 +13,35 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import binascii
+import copy
 from unittest import mock
 
+from castellan.common.objects import symmetric_key as key
+from castellan.tests.unit.key_manager import fake
 from oslo_concurrency import processutils as putils
 
-from os_brick.encryptors import cryptsetup
 from os_brick.encryptors import luks
-from os_brick.tests.encryptors import test_cryptsetup
+from os_brick import exception
+from os_brick.tests.encryptors import test_base
 
 
-class LuksEncryptorTestCase(test_cryptsetup.CryptsetupEncryptorTestCase):
+def fake__get_key(context, passphrase):
+    raw = bytes(binascii.unhexlify(passphrase))
+    symmetric_key = key.SymmetricKey('AES', len(raw) * 8, raw)
+    return symmetric_key
+
+
+class LuksEncryptorTestCase(test_base.VolumeEncryptorTestCase):
+
+    def setUp(self):
+        super().setUp()
+
+        self.dev_path = self.connection_info['data']['device_path']
+        self.dev_name = 'crypt-%s' % self.dev_path.split('/')[-1]
+
+        self.symlink_path = self.dev_path
+
     def _create(self):
         return luks.LuksEncryptor(root_helper=self.root_helper,
                                   connection_info=self.connection_info,
@@ -82,8 +101,7 @@ class LuksEncryptorTestCase(test_cryptsetup.CryptsetupEncryptorTestCase):
     def test_attach_volume(self, mock_execute):
         fake_key = '0c84146034e747639b698368807286df'
         self.encryptor._get_key = mock.MagicMock()
-        self.encryptor._get_key.return_value = (
-            test_cryptsetup.fake__get_key(None, fake_key))
+        self.encryptor._get_key.return_value = fake__get_key(None, fake_key)
 
         self.encryptor.attach_volume(None)
 
@@ -102,8 +120,7 @@ class LuksEncryptorTestCase(test_cryptsetup.CryptsetupEncryptorTestCase):
     def test_attach_volume_not_formatted(self, mock_execute):
         fake_key = 'bc37c5eccebe403f9cc2d0dd20dac2bc'
         self.encryptor._get_key = mock.MagicMock()
-        self.encryptor._get_key.return_value = (
-            test_cryptsetup.fake__get_key(None, fake_key))
+        self.encryptor._get_key.return_value = fake__get_key(None, fake_key)
 
         mock_execute.side_effect = [
             putils.ProcessExecutionError(exit_code=1),  # luksOpen
@@ -142,8 +159,7 @@ class LuksEncryptorTestCase(test_cryptsetup.CryptsetupEncryptorTestCase):
     def test_attach_volume_fail(self, mock_execute):
         fake_key = 'ea6c2e1b8f7f4f84ae3560116d659ba2'
         self.encryptor._get_key = mock.MagicMock()
-        self.encryptor._get_key.return_value = (
-            test_cryptsetup.fake__get_key(None, fake_key))
+        self.encryptor._get_key.return_value = fake__get_key(None, fake_key)
 
         mock_execute.side_effect = [
             putils.ProcessExecutionError(exit_code=1),  # luksOpen
@@ -183,10 +199,63 @@ class LuksEncryptorTestCase(test_cryptsetup.CryptsetupEncryptorTestCase):
                       attempts=3, run_as_root=True, check_exit_code=[0, 4]),
         ])
 
+    def test_init_volume_encryption_not_supported(self):
+        # Tests that creating a CryptsetupEncryptor fails if there is no
+        # device_path key.
+        type = 'unencryptable'
+        data = dict(volume_id='a194699b-aa07-4433-a945-a5d23802043e')
+        connection_info = dict(driver_volume_type=type, data=data)
+        exc = self.assertRaises(exception.VolumeEncryptionNotSupported,
+                                luks.LuksEncryptor,
+                                root_helper=self.root_helper,
+                                connection_info=connection_info,
+                                keymgr=fake.fake_api())
+        self.assertIn(type, str(exc))
+
+    @mock.patch('os_brick.executor.Executor._execute')
+    @mock.patch('os.path.exists', return_value=True)
+    def test_init_volume_encryption_with_old_name(self, mock_exists,
+                                                  mock_execute):
+        # If an old name crypt device exists, dev_path should be the old name.
+        old_dev_name = self.dev_path.split('/')[-1]
+        encryptor = luks.LuksEncryptor(
+            root_helper=self.root_helper,
+            connection_info=self.connection_info,
+            keymgr=self.keymgr)
+        self.assertFalse(encryptor.dev_name.startswith('crypt-'))
+        self.assertEqual(old_dev_name, encryptor.dev_name)
+        self.assertEqual(self.dev_path, encryptor.dev_path)
+        self.assertEqual(self.symlink_path, encryptor.symlink_path)
+        mock_exists.assert_called_once_with('/dev/mapper/%s' % old_dev_name)
+        mock_execute.assert_called_once_with(
+            'cryptsetup', 'status', old_dev_name, run_as_root=True)
+
+    @mock.patch('os_brick.executor.Executor._execute')
+    @mock.patch('os.path.exists', side_effect=[False, True])
+    def test_init_volume_encryption_with_wwn(self, mock_exists, mock_execute):
+        # If an wwn name crypt device exists, dev_path should be based on wwn.
+        old_dev_name = self.dev_path.split('/')[-1]
+        wwn = 'fake_wwn'
+        connection_info = copy.deepcopy(self.connection_info)
+        connection_info['data']['multipath_id'] = wwn
+        encryptor = luks.LuksEncryptor(
+            root_helper=self.root_helper,
+            connection_info=connection_info,
+            keymgr=fake.fake_api())
+        self.assertFalse(encryptor.dev_name.startswith('crypt-'))
+        self.assertEqual(wwn, encryptor.dev_name)
+        self.assertEqual(self.dev_path, encryptor.dev_path)
+        self.assertEqual(self.symlink_path, encryptor.symlink_path)
+        mock_exists.assert_has_calls([
+            mock.call('/dev/mapper/%s' % old_dev_name),
+            mock.call('/dev/mapper/%s' % wwn)])
+        mock_execute.assert_called_once_with(
+            'cryptsetup', 'status', wwn, run_as_root=True)
+
     @mock.patch('os_brick.utils.get_device_size')
-    @mock.patch.object(cryptsetup.CryptsetupEncryptor, '_execute')
-    @mock.patch.object(cryptsetup.CryptsetupEncryptor, '_get_passphrase')
-    @mock.patch.object(cryptsetup.CryptsetupEncryptor, '_get_key')
+    @mock.patch.object(luks.LuksEncryptor, '_execute')
+    @mock.patch.object(luks.LuksEncryptor, '_get_passphrase')
+    @mock.patch.object(luks.LuksEncryptor, '_get_key')
     def test_extend_volume(self, mock_key, mock_pass, mock_exec, mock_size):
         encryptor = self.encryptor
         res = encryptor.extend_volume(mock.sentinel.context)
@@ -225,8 +294,7 @@ class Luks2EncryptorTestCase(LuksEncryptorTestCase):
     def test_attach_volume_not_formatted(self, mock_execute):
         fake_key = 'bc37c5eccebe403f9cc2d0dd20dac2bc'
         self.encryptor._get_key = mock.MagicMock()
-        self.encryptor._get_key.return_value = (
-            test_cryptsetup.fake__get_key(None, fake_key))
+        self.encryptor._get_key.return_value = fake__get_key(None, fake_key)
 
         mock_execute.side_effect = [
             putils.ProcessExecutionError(exit_code=1),  # luksOpen
