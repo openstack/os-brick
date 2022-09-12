@@ -358,8 +358,8 @@ class RBDConnectorTestCase(test_base_rbd.RBDConnectorTestMixin,
         rbd_connector.disconnect_volume(conn, None)
 
         # Assert that only showmapped is called when no mappings are found
-        mock_execute.called_once_with(*show_cmd, root_helper=None,
-                                      run_as_root=True)
+        mock_execute.assert_called_once_with(*show_cmd, root_helper=None,
+                                             run_as_root=True)
 
     @mock.patch.object(priv_rootwrap, 'execute', return_value=None)
     def test_disconnect_local_volume_no_mappings(self, mock_execute):
@@ -374,8 +374,8 @@ class RBDConnectorTestCase(test_base_rbd.RBDConnectorTestMixin,
         rbd_connector.disconnect_volume(conn, None)
 
         # Assert that only showmapped is called when no mappings are found
-        mock_execute.called_once_with(*show_cmd, root_helper=None,
-                                      run_as_root=True)
+        mock_execute.assert_called_once_with(*show_cmd, root_helper=None,
+                                             run_as_root=True)
 
     @mock.patch('oslo_utils.fileutils.delete_if_exists')
     @mock.patch.object(rbd.RBDConnector, '_get_rbd_handle')
