@@ -98,6 +98,10 @@ class RBDClientTestCase(base.TestCase):
         self.assertRaises(exception.BrickException, test)
 
 
+class InvalidArgument(Exception):
+    pass
+
+
 class RBDVolumeIOWrapperTestCase(base.TestCase):
 
     def setUp(self):
@@ -107,6 +111,8 @@ class RBDVolumeIOWrapperTestCase(base.TestCase):
             linuxrbd.RBDVolumeIOWrapper(self.mock_volume)
         self.data_length = 1024
         self.full_data = 'abcd' * 256
+        self._rbd_lib = self.patch('os_brick.initiator.linuxrbd.rbd')
+        self._rbd_lib.InvalidArgument = InvalidArgument
 
     def test_init(self):
         self.assertEqual(self.mock_volume,
@@ -187,12 +193,29 @@ class RBDVolumeIOWrapperTestCase(base.TestCase):
             self.mock_volume.image.flush = mock.Mock()
             self.mock_volume_wrapper.flush()
             self.assertEqual(1, self.mock_volume.image.flush.call_count)
+            self.mock_volume.image.require_not_closed.assert_called_once_with()
             self.mock_volume.image.flush.reset_mock()
+            self.mock_volume.image.require_not_closed.reset_mock()
             # this should be caught and logged silently.
             self.mock_volume.image.flush.side_effect = AttributeError
             self.mock_volume_wrapper.flush()
             self.assertEqual(1, self.mock_volume.image.flush.call_count)
             self.assertEqual(1, mock_logger.warning.call_count)
+            self.mock_volume.image.require_not_closed.assert_called_once_with()
+
+    def test_flush_closed_image(self):
+        """Test when image is closed but wrapper isn't"""
+        with mock.patch.object(linuxrbd, 'LOG') as mock_logger:
+            self.mock_volume.image.require_not_closed.side_effect = \
+                InvalidArgument
+            self.mock_volume.image.flush = mock.Mock()
+            self.mock_volume_wrapper.flush()
+            self.mock_volume.image.flush.assert_not_called()
+            self.assertEqual(1, mock_logger.warning.call_count)
+            log_msg = mock_logger.warning.call_args[0][0]
+            self.assertTrue(
+                log_msg.startswith("RBDVolumeIOWrapper's underlying image"))
+            self.mock_volume.image.require_not_closed.assert_called_once_with()
 
     def test_flush_on_closed(self):
         self.mock_volume_wrapper.close()
@@ -201,6 +224,15 @@ class RBDVolumeIOWrapperTestCase(base.TestCase):
         self.mock_volume.image.flush.reset_mock()
         self.assertRaises(ValueError, self.mock_volume_wrapper.flush)
         self.mock_volume.image.flush.assert_not_called()
+        self.mock_volume.image.require_not_closed.assert_called_once_with()
+
+    def test_flush_on_image_closed(self):
+        self.mock_volume.image.require_not_closed.side_effect = InvalidArgument
+        self.mock_volume_wrapper.close()
+        self.mock_volume.image.flush.assert_not_called()
+        self.assertTrue(self.mock_volume_wrapper.closed)
+        self.mock_volume.image.close.assert_called_once_with()
+        self.mock_volume.image.require_not_closed.assert_called_once_with()
 
     def test_fileno(self):
         self.assertRaises(IOError, self.mock_volume_wrapper.fileno)
@@ -213,7 +245,8 @@ class RBDVolumeIOWrapperTestCase(base.TestCase):
         rbd_volume = linuxrbd.RBDVolume(rbd_client, 'volume')
         rbd_handle = linuxrbd.RBDVolumeIOWrapper(
             linuxrbd.RBDImageMetadata(rbd_volume, 'pool', 'user', None))
-        rbd_handle.close()
+        with mock.patch.object(rbd_volume, 'closed', False):
+            rbd_handle.close()
         self.assertEqual(1, rbd_disconnect.call_count)
         # Confirm the handle now reports that is closed (this attribute cannot
         # be modified directly)

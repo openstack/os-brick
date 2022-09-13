@@ -235,8 +235,17 @@ class RBDVolumeIOWrapper(io.RawIOBase):
     def flush(self) -> None:
         # Raise ValueError if already closed
         super().flush()
+        # Don't fail on flush by calling it when underlying image is closed.
         try:
-            self._rbd_volume.image.flush()
+            self.rbd_image.require_not_closed()
+        except rbd.InvalidArgument:  # Image is closed
+            LOG.warning("RBDVolumeIOWrapper's underlying image %s was closed "
+                        "directly (probably by the GC) instead of through the "
+                        "wrapper", self.rbd_image.name)
+            return
+
+        try:
+            self.rbd_image.flush()
         except AttributeError:
             LOG.warning("flush() not supported in this version of librbd")
 
