@@ -87,7 +87,7 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
     def rescan_hosts(self,
                      hbas: Iterable,
                      connection_properties: dict) -> None:
-        LOG.debug('Rescaning HBAs %(hbas)s with connection properties '
+        LOG.debug('Rescanning HBAs %(hbas)s with connection properties '
                   '%(conn_props)s', {'hbas': hbas,
                                      'conn_props': connection_properties})
         # Use initiator_target_lun_map (generated from initiator_target_map by
