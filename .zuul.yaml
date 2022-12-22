@@ -1,4 +1,6 @@
 - project:
+    vars:
+      ensure_tox_version: '<4'
     templates:
       - check-requirements
       - lib-forward-testing-python3
