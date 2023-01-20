@@ -25,6 +25,7 @@ from oslo_concurrency import processutils
 from oslo_log import log as logging
 from oslo_utils import strutils
 
+from os_brick import executor
 from os_brick.i18n import _
 from os_brick.privileged import nvmeof as priv_nvme
 from os_brick.privileged import rootwrap as priv_rootwrap
@@ -400,7 +401,7 @@ def connect_volume_undo_prepare_result(
     return decorator
 
 
-def get_device_size(executor, device):
+def get_device_size(executor: executor.Executor, device: str) -> Optional[int]:
     """Get the size in bytes of a volume."""
     (out, _err) = executor._execute('blockdev', '--getsize64',
                                     device, run_as_root=True,

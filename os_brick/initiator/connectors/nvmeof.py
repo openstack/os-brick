@@ -1195,7 +1195,11 @@ class NVMeOFConnector(base.BaseLinuxConnector):
             LOG.info('Wait 5 seconds and return whatever size is present')
             time.sleep(5)
 
-        return utils.get_device_size(self, device_path)
+        size = utils.get_device_size(self, device_path)
+        if size is None:
+            raise exception.BrickException(
+                'get_device_size returned non-numeric size')
+        return size
 
     # #######  RAID methods ########
 
