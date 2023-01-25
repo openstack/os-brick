@@ -73,7 +73,7 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
                                                                  'path': path}
             try:
                 # We need to run command in shell to expand the * glob
-                out, _err = self._execute(cmd, shell=True)
+                out, _err = self._execute(cmd, shell=True)  # nosec: B604
                 ctls += [line.split('/')[4].split(':')[1:] + [lun]
                          for line in out.split('\n') if line.startswith(path)]
             except Exception as exc:
