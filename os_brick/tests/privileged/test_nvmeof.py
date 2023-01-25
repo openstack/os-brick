@@ -166,3 +166,13 @@ class PrivNVMeTestCase(base.TestCase):
         mock_open.assert_called_once_with('/sys/class/dmi/id/product_uuid',
                                           'r')
         mock_exec.assert_called_once_with('dmidecode', '-ssystem-uuid')
+
+    @mock.patch.object(builtins, 'open', side_effect=Exception)
+    @mock.patch.object(rootwrap, 'custom_execute',
+                       side_effect=FileNotFoundError)
+    def test_get_system_uuid_dmidecode_missing(self, mock_exec, mock_open):
+        res = privsep_nvme.get_system_uuid()
+        self.assertEqual('', res)
+        mock_open.assert_called_once_with('/sys/class/dmi/id/product_uuid',
+                                          'r')
+        mock_exec.assert_called_once_with('dmidecode', '-ssystem-uuid')

@@ -87,7 +87,7 @@ def get_system_uuid() -> str:
         out, err = rootwrap.custom_execute('dmidecode', '-ssystem-uuid')
         if not out:
             LOG.warning('dmidecode returned empty system-uuid')
-    except putils.ProcessExecutionError as e:
+    except (putils.ProcessExecutionError, FileNotFoundError) as e:
         LOG.debug("Unable to locate dmidecode. For Cinder RSD Backend,"
                   " please make sure it is installed: %s", e)
         out = ""
