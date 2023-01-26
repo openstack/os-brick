@@ -1,0 +1,11 @@
+---
+features:
+  - |
+    Support separate privsep logging levels. Now services using os-brick can
+    have different log levels for the service and os-brick's privsep calls.
+    The service usually uses the default "oslo_privsep.daemon" name while
+    os-brick now uses "os_brick.privileged".
+fixes:
+  - |
+    `Bug #1922052 <https://bugs.launchpad.net/nova/+bug/1922052>`_: Fixed
+    missing os-brick DEBUG logs on nova compute service.

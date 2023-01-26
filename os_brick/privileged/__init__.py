@@ -31,4 +31,5 @@ default = priv_context.PrivContext(
     cfg_section='privsep_osbrick',
     pypath=__name__ + '.default',
     capabilities=capabilities,
+    logger_name=__name__,
 )
