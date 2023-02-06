@@ -61,8 +61,6 @@ class RBDClient(object):
 
         self.rbd_conf: str = kwargs.get('conffile', '/etc/ceph/ceph.conf')
         self.rbd_cluster_name: str = kwargs.get('rbd_cluster_name', 'ceph')
-        self.rados_connect_timeout: int = kwargs.get('rados_connect_timeout',
-                                                     -1)
 
         self.client, self.ioctx = self.connect()
 
@@ -73,18 +71,13 @@ class RBDClient(object):
         self.disconnect()
 
     def connect(self) -> tuple['rados.Rados', 'rados.Ioctx']:
-        LOG.debug("opening connection to ceph cluster (timeout=%s).",
-                  self.rados_connect_timeout)
+        LOG.debug("opening connection to ceph cluster")
         client = self.rados.Rados(rados_id=self.rbd_user,
                                   clustername=self.rbd_cluster_name,
                                   conffile=self.rbd_conf)
 
         try:
-            if self.rados_connect_timeout >= 0:
-                client.connect(
-                    timeout=self.rados_connect_timeout)
-            else:
-                client.connect()
+            client.connect()
             ioctx = client.open_ioctx(self.rbd_pool)
             return client, ioctx
         except self.rados.Error:
