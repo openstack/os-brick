@@ -702,8 +702,8 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
             force=False, ignore_errors=False,
             device_info=mock.sentinel.device_info)
 
-        get_dev_path_mock.called_once_with(self.CON_PROPS,
-                                           mock.sentinel.device_info)
+        get_dev_path_mock.assert_called_once_with(self.CON_PROPS,
+                                                  mock.sentinel.device_info)
         con_devs_mock.assert_called_once_with(self.CON_PROPS,
                                               mock.sentinel.ips_iqns_luns,
                                               False)

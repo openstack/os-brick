@@ -1430,10 +1430,10 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         mock_find_dev.assert_called_once_with()
 
         portal = target.portals[-1]
-        mock_cli.called_once_with(['connect', '-a', portal.address,
-                                   '-s', portal.port, '-t', portal.transport,
-                                   '-n', target.nqn, '-Q', '128', '-l', '-1',
-                                   '-q', 'host_nqn'])
+        mock_cli.assert_called_once_with([
+            'connect', '-a', portal.address, '-s', portal.port, '-t',
+            portal.transport, '-n', target.nqn, '-Q', '128', '-l', '-1',
+            '-q', 'host_nqn'])
 
     @mock.patch.object(nvmeof.NVMeOFConnector, '_do_multipath',
                        mock.Mock(return_value=True))
@@ -1497,9 +1497,9 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         mock_find_dev.assert_called_once_with()
 
         portal = target.portals[-1]
-        mock_cli.called_once_with(['connect', '-a', portal.address,
-                                   '-s', portal.port, '-t', portal.transport,
-                                   '-n', target.nqn, '-Q', '128', '-l', '-1'])
+        mock_cli.assert_called_once_with([
+            'connect', '-a', portal.address, '-s', portal.port, '-t',
+            portal.transport, '-n', target.nqn, '-Q', '128', '-l', '-1'])
         self.assertEqual(1, mock_log.call_count)
 
     @mock.patch.object(nvmeof.NVMeOFConnector, 'stop_and_assemble_raid')
