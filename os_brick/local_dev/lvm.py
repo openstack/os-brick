@@ -245,7 +245,7 @@ class LVM(executor.Executor):
                         message='Cannot parse LVM version')
                 version_tuple = tuple(map(int, r.group(1, 2, 3)))
                 return version_tuple
-        raise
+        raise exception.BrickException(message='Cannot parse LVM version')
 
     @staticmethod
     def supports_thin_provisioning(root_helper: str) -> bool:
