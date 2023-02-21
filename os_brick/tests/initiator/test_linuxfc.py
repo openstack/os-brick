@@ -268,15 +268,18 @@ class LinuxFCTestCase(base.TestCase):
                               mock.call(hbas[1], con_props)]
             mock_get_chan.assert_has_calls(expected_calls)
 
-    def test_rescan_hosts_single_wwnn(self):
+    @mock.patch.object(linuxfc.LinuxFibreChannel, 'lun_for_addressing')
+    def test_rescan_hosts_single_wwnn(self, lun_addr_mock):
         """Test FC rescan with no initiator map and single WWNN for ports."""
+        lun_addr_mock.return_value = 16640
         get_chan_results = [
-            [[['2', '3', 1], ['4', '5', 1]], set()],
-            [[['6', '7', 1]], set()],
+            [[['2', '3', 256], ['4', '5', 256]], set()],
+            [[['6', '7', 256]], set()],
             [[], {1}],
         ]
 
         hbas, con_props = self.__get_rescan_info(zone_manager=False)
+        con_props['addressing_mode'] = 'SAM2'
 
         # This HBA is the one that is not included in the single WWNN.
         hbas.append({'device_path': ('/sys/devices/pci0000:00/0000:00:02.0/'
@@ -293,13 +296,13 @@ class LinuxFCTestCase(base.TestCase):
             self.lfc.rescan_hosts(hbas, con_props)
             expected_commands = [
                 mock.call('tee', '-a', '/sys/class/scsi_host/host6/scan',
-                          process_input='2 3 1',
+                          process_input='2 3 16640',
                           root_helper=None, run_as_root=True),
                 mock.call('tee', '-a', '/sys/class/scsi_host/host6/scan',
-                          process_input='4 5 1',
+                          process_input='4 5 16640',
                           root_helper=None, run_as_root=True),
                 mock.call('tee', '-a', '/sys/class/scsi_host/host7/scan',
-                          process_input='6 7 1',
+                          process_input='6 7 16640',
                           root_helper=None, run_as_root=True)]
 
             execute_mock.assert_has_calls(expected_commands)
@@ -308,6 +311,7 @@ class LinuxFCTestCase(base.TestCase):
             expected_calls = [mock.call(hbas[0], con_props),
                               mock.call(hbas[1], con_props)]
             mock_get_chan.assert_has_calls(expected_calls)
+        lun_addr_mock.assert_has_calls([mock.call(256, 'SAM2')] * 3)
 
     def test_rescan_hosts_initiator_map_single_wwnn(self):
         """Test FC rescan with initiator map and single WWNN."""

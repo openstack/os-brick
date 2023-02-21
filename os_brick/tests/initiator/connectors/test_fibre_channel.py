@@ -942,3 +942,53 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
                                             True, mock.ANY)
         self.assertEqual(len(expected), realpath_mock.call_count)
         realpath_mock.assert_has_calls(expected)
+
+    @ddt.data(None, mock.sentinel.addressing_mode)
+    @mock.patch.object(fibre_channel.FibreChannelConnector,
+                       '_get_host_devices')
+    @mock.patch.object(fibre_channel.FibreChannelConnector,
+                       '_get_possible_devices')
+    def test__get_possible_volume_paths(self, addressing_mode,
+                                        pos_devs_mock, host_devs_mock):
+        conn_props = {'targets': mock.sentinel.targets}
+        if addressing_mode:
+            conn_props['addressing_mode'] = addressing_mode
+        res = self.connector._get_possible_volume_paths(conn_props,
+                                                        mock.sentinel.hbas)
+        pos_devs_mock.assert_called_once_with(mock.sentinel.hbas,
+                                              mock.sentinel.targets,
+                                              addressing_mode)
+        host_devs_mock.assert_called_once_with(pos_devs_mock.return_value)
+        self.assertEqual(host_devs_mock.return_value, res)
+
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'lun_for_addressing')
+    @mock.patch.object(fibre_channel.FibreChannelConnector, '_get_pci_num')
+    def test__get_possible_devices(self, pci_mock, lun_mock):
+        pci_mock.side_effect = [
+            (mock.sentinel.platform1, mock.sentinel.pci_num1),
+            (mock.sentinel.platform2, mock.sentinel.pci_num2)]
+        hbas = [mock.sentinel.hba1, mock.sentinel.hba2]
+        lun_mock.side_effect = [mock.sentinel.lun1B, mock.sentinel.lun2B] * 2
+        targets = [('wwn1', mock.sentinel.lun1), ('wwn2', mock.sentinel.lun2)]
+
+        res = self.connector._get_possible_devices(
+            hbas, targets, mock.sentinel.addressing_mode)
+
+        self.assertEqual(2, pci_mock.call_count)
+        pci_mock.assert_has_calls([mock.call(mock.sentinel.hba1),
+                                   mock.call(mock.sentinel.hba2)])
+        self.assertEqual(4, lun_mock.call_count)
+        lun_mock.assert_has_calls([
+            mock.call(mock.sentinel.lun1, mock.sentinel.addressing_mode),
+            mock.call(mock.sentinel.lun2, mock.sentinel.addressing_mode)] * 2)
+        expected = [
+            (mock.sentinel.platform1, mock.sentinel.pci_num1, '0xwwn1',
+             mock.sentinel.lun1B),
+            (mock.sentinel.platform1, mock.sentinel.pci_num1, '0xwwn2',
+             mock.sentinel.lun2B),
+            (mock.sentinel.platform2, mock.sentinel.pci_num2, '0xwwn1',
+             mock.sentinel.lun1B),
+            (mock.sentinel.platform2, mock.sentinel.pci_num2, '0xwwn2',
+             mock.sentinel.lun2B),
+        ]
+        self.assertEqual(expected, res)
