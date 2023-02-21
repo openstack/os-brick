@@ -1380,3 +1380,27 @@ loop0                                     0"""
             if real_paths:
                 mocked.assert_has_calls([mock.call(path),
                                          mock.call(path_used)])
+
+    @ddt.data(None, 'SAM', 'transparent')
+    def test_lun_for_addressing_transparent_sam(self, mode):
+        lun = self.linuxscsi.lun_for_addressing(1, mode)
+        self.assertEqual(1, lun)
+        lun = self.linuxscsi.lun_for_addressing(256, mode)
+        self.assertEqual(256, lun)
+
+    @ddt.data(1, 'SAM3', 'TRANSPARENT', 'sam', 'sam2')
+    def test_lun_for_addressing_bad(self, mode):
+        self.assertRaises(exception.InvalidParameterValue,
+                          self.linuxscsi.lun_for_addressing, 1, mode)
+
+    @ddt.data((1, 1), (100, 100), (256, 16640), (1010, 17394))
+    @ddt.unpack
+    def test_lun_for_addressing_sam2(self, original_lun, expected_lun):
+        lun = self.linuxscsi.lun_for_addressing(original_lun, 'SAM2')
+        self.assertEqual(expected_lun, lun)
+
+    @ddt.data((0, 16384), (100, 16484), (256, 16640), (1010, 17394))
+    @ddt.unpack
+    def test_lun_for_addressing_sam3_flat(self, original_lun, expected_lun):
+        lun = self.linuxscsi.lun_for_addressing(original_lun, 'SAM3-flat')
+        self.assertEqual(expected_lun, lun)
