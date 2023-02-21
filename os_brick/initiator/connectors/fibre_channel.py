@@ -161,7 +161,9 @@ class FibreChannelConnector(base.BaseLinuxConnector):
             self,
             connection_properties: dict, hbas) -> list[str]:
         targets = connection_properties['targets']
-        possible_devs = self._get_possible_devices(hbas, targets)
+        addressing_mode = connection_properties.get('addressing_mode')
+        possible_devs = self._get_possible_devices(hbas, targets,
+                                                   addressing_mode)
         host_paths = self._get_host_devices(possible_devs)
         return host_paths
 
@@ -309,7 +311,8 @@ class FibreChannelConnector(base.BaseLinuxConnector):
             host_devices.append(host_device)
         return host_devices
 
-    def _get_possible_devices(self, hbas: list, targets: list) -> list:
+    def _get_possible_devices(self, hbas: list, targets: list,
+                              addressing_mode: Optional[str] = None) -> list:
         """Compute the possible fibre channel device options.
 
         :param hbas: available hba devices.
@@ -328,6 +331,8 @@ class FibreChannelConnector(base.BaseLinuxConnector):
             platform, pci_num = self._get_pci_num(hba)
             if pci_num is not None:
                 for wwn, lun in targets:
+                    lun = self._linuxscsi.lun_for_addressing(lun,
+                                                             addressing_mode)
                     target_wwn = "0x%s" % wwn.lower()
                     raw_devices.append((platform, pci_num, target_wwn, lun))
         return raw_devices

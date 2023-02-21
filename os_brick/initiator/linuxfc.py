@@ -136,8 +136,12 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
         # If we didn't find any target ports use wildcards if they are enabled
         process = process or skipped
 
+        addressing_mode = connection_properties.get('addressing_mode')
+
         for hba, ctls in process:
             for hba_channel, target_id, target_lun in ctls:
+                target_lun = self.lun_for_addressing(target_lun,
+                                                     addressing_mode)
                 LOG.debug('Scanning %(host)s (wwnn: %(wwnn)s, c: '
                           '%(channel)s, t: %(target)s, l: %(lun)s)',
                           {'host': hba['host_device'],
