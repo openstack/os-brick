@@ -86,12 +86,15 @@ class FibreChannelConnectorS390X(fibre_channel.FibreChannelConnector):
         ]
         return host_device
 
-    def _remove_devices(self, connection_properties, devices, device_info):
+    def _remove_devices(self, connection_properties, devices, device_info,
+                        force, exc):
         hbas = self._linuxfc.get_fc_hbas_info()
         targets = connection_properties['targets']
         possible_devs = self._get_possible_devices(hbas, targets)
         for platform, pci_num, target_wwn, lun in possible_devs:
             target_lun = self._get_lun_string(lun)
-            self._linuxfc.deconfigure_scsi_device(pci_num,
-                                                  target_wwn,
-                                                  target_lun)
+            with exc.context(force, 'Removing device %s:%s:%s failed',
+                             pci_num, target_wwn, target_lun):
+                self._linuxfc.deconfigure_scsi_device(pci_num,
+                                                      target_wwn,
+                                                      target_lun)
