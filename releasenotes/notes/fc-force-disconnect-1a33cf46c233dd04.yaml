@@ -1,0 +1,5 @@
+---
+features:
+  - |
+    FC connector: Added support to ``force`` and ``ignore_errors`` parameters
+    on ``disconnect_volume`` method.
