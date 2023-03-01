@@ -352,7 +352,7 @@ class FibreChannelConnector(base.BaseLinuxConnector):
         target_wwn - World Wide Name
         target_lun - LUN id of the volume
         """
-
+        exc = exception.ExceptionChainer()
         devices = []
         wwn = None
 
@@ -368,18 +368,35 @@ class FibreChannelConnector(base.BaseLinuxConnector):
                 wwn = self._linuxscsi.get_scsi_wwn(path)
                 mpath_path = self._linuxscsi.find_multipath_device_path(wwn)
                 if mpath_path:
-                    self._linuxscsi.flush_multipath_device(mpath_path)
+                    with exc.context(force, 'Flushing %s failed', mpath_path):
+                        self._linuxscsi.flush_multipath_device(mpath_path)
             real_path = typing.cast(str, real_path)
             dev_info = self._linuxscsi.get_device_info(real_path)
             devices.append(dev_info)
 
+        # If flush failed, then remove it forcefully since force=True
+        if mpath_path and exc:
+            with exc.context(force, 'Removing multipath %s failed',
+                             mpath_path):
+                mpath_name = os.path.basename(os.path.realpath(mpath_path))
+                self._linuxscsi.multipath_del_map(mpath_name)
+
         LOG.debug("devices to remove = %s", devices)
-        self._remove_devices(connection_properties, devices, device_info)
+        self._remove_devices(connection_properties, devices, device_info,
+                             force, exc)
+
+        if exc:  # type: ignore
+            LOG.warning('There were errors removing %s, leftovers may remain '
+                        'in the system', volume_paths)
+            if not ignore_errors:
+                raise exc  # type: ignore
 
     def _remove_devices(self,
                         connection_properties: dict,
                         devices: list,
-                        device_info: dict) -> None:
+                        device_info: dict,
+                        force: bool,
+                        exc) -> None:
         # There may have been more than 1 device mounted
         # by the kernel for this volume.  We have to remove
         # all of them
@@ -394,11 +411,12 @@ class FibreChannelConnector(base.BaseLinuxConnector):
         # paths, whereas for multipaths we have multiple link formats.
         was_multipath = '/pci-' not in path_used and was_symlink
         for device in devices:
-            device_path = device['device']
-            flush = self._linuxscsi.requires_flush(device_path,
-                                                   path_used,
-                                                   was_multipath)
-            self._linuxscsi.remove_scsi_device(device_path, flush=flush)
+            with exc.context(force, 'Removing device %s failed', device):
+                device_path = device['device']
+                flush = self._linuxscsi.requires_flush(device_path,
+                                                       path_used,
+                                                       was_multipath)
+                self._linuxscsi.remove_scsi_device(device_path, flush=flush)
 
     def _get_pci_num(self, hba: Optional[dict]) -> tuple:
         # NOTE(walter-boring)

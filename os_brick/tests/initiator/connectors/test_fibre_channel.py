@@ -743,16 +743,52 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch('os_brick.utils.get_dev_path')
     def test__remove_devices(self, path_used, was_multipath, get_dev_path_mock,
                              flush_mock, remove_mock):
+        exc = exception.ExceptionChainer()
         get_dev_path_mock.return_value = path_used
         self.connector._remove_devices(mock.sentinel.con_props,
                                        [{'device': '/dev/sda'}],
-                                       mock.sentinel.device_info)
+                                       mock.sentinel.device_info,
+                                       force=False, exc=exc)
+        self.assertFalse(bool(exc))
         get_dev_path_mock.assert_called_once_with(mock.sentinel.con_props,
                                                   mock.sentinel.device_info)
         flush_mock.assert_called_once_with('/dev/sda', path_used,
                                            was_multipath)
         remove_mock.assert_called_once_with('/dev/sda',
                                             flush=flush_mock.return_value)
+
+    @ddt.data(('/dev/mapper/<WWN>', True),
+              ('/dev/mapper/mpath0', True),
+              # Check real devices are properly detected as non multipaths
+              ('/dev/sda', False),
+              ('/dev/disk/by-path/pci-1-fc-1-lun-1', False))
+    @ddt.unpack
+    @mock.patch('os_brick.initiator.linuxscsi.LinuxSCSI.remove_scsi_device')
+    @mock.patch('os_brick.initiator.linuxscsi.LinuxSCSI.requires_flush')
+    @mock.patch('os_brick.utils.get_dev_path')
+    def test__remove_devices_fails(self, path_used, was_multipath,
+                                   get_dev_path_mock, flush_mock, remove_mock):
+        exc = exception.ExceptionChainer()
+        get_dev_path_mock.return_value = path_used
+        remove_mock.side_effect = Exception
+        self.connector._remove_devices(mock.sentinel.con_props,
+                                       [{'device': '/dev/sda'},
+                                        {'device': '/dev/sdb'}],
+                                       mock.sentinel.device_info,
+                                       force=True, exc=exc)
+        self.assertTrue(bool(exc))
+        get_dev_path_mock.assert_called_once_with(mock.sentinel.con_props,
+                                                  mock.sentinel.device_info)
+
+        expect_flush = [mock.call('/dev/sda', path_used, was_multipath),
+                        mock.call('/dev/sdb', path_used, was_multipath)]
+        self.assertEqual(len(expect_flush), flush_mock.call_count)
+        flush_mock.assert_has_calls(expect_flush)
+
+        expect_remove = [mock.call('/dev/sda', flush=flush_mock.return_value),
+                         mock.call('/dev/sdb', flush=flush_mock.return_value)]
+        self.assertEqual(len(expect_remove), remove_mock.call_count)
+        remove_mock.assert_has_calls(expect_remove)
 
     @mock.patch.object(linuxscsi.LinuxSCSI, 'find_multipath_device')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'wait_for_rw')
@@ -815,3 +851,94 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
             'tee -a /sys/block/sdc/device/delete',
         ]
         self.assertEqual(expected_commands, self.cmds)
+
+    @ddt.data((False, Exception), (True, Exception), (False, None))
+    @ddt.unpack
+    @mock.patch.object(fibre_channel.FibreChannelConnector, '_remove_devices')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'multipath_del_map')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'flush_multipath_device')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'wait_for_rw')
+    @mock.patch.object(os.path, 'exists', return_value=True)
+    @mock.patch.object(os.path, 'realpath')
+    @mock.patch.object(linuxfc.LinuxFibreChannel, 'get_fc_hbas')
+    @mock.patch.object(linuxfc.LinuxFibreChannel, 'get_fc_hbas_info')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_scsi_wwn')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'get_device_info')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'find_multipath_device_path')
+    @mock.patch.object(base.BaseLinuxConnector, 'check_valid_device')
+    def test_disconnect_volume_fails(self, ignore_exc, side_effect,
+                                     check_valid_device_mock,
+                                     find_mp_device_path_mock,
+                                     get_device_info_mock,
+                                     get_scsi_wwn_mock,
+                                     get_fc_hbas_info_mock,
+                                     get_fc_hbas_mock,
+                                     realpath_mock,
+                                     exists_mock,
+                                     wait_for_rw_mock,
+                                     flush_mock,
+                                     del_map_mock,
+                                     remove_mock):
+
+        flush_mock.side_effect = side_effect
+        del_map_mock.side_effect = side_effect
+
+        check_valid_device_mock.return_value = True
+        self.connector.use_multipath = True
+        get_fc_hbas_mock.side_effect = self.fake_get_fc_hbas
+        get_fc_hbas_info_mock.side_effect = self.fake_get_fc_hbas_info
+
+        wwn = '360002ac00000000000000b860000741c'
+        multipath_devname = f'/dev/disk/by-id/dm-uuid-mpath-{wwn}'
+        realpath_mock.return_value = '/dev/dm-1'
+        devices = {"device": multipath_devname,
+                   "id": wwn,
+                   "devices": [{'device': '/dev/sdb',
+                                'address': '1:0:0:1',
+                                'host': 1, 'channel': 0,
+                                'id': 0, 'lun': 1},
+                               {'device': '/dev/sdc',
+                                'address': '1:0:0:2',
+                                'host': 1, 'channel': 0,
+                                'id': 0, 'lun': 1}]}
+        get_device_info_mock.side_effect = devices['devices']
+        get_scsi_wwn_mock.return_value = wwn
+
+        location = '10.0.2.15:3260'
+        name = 'volume-00000001'
+        vol = {'id': 1, 'name': name}
+        initiator_wwn = ['1234567890123456', '1234567890123457']
+
+        find_mp_device_path_mock.return_value = '/dev/mapper/mpatha'
+
+        connection_info = self.fibrechan_connection(vol, location,
+                                                    initiator_wwn)
+        if side_effect and not ignore_exc:
+            self.assertRaises(exception.ExceptionChainer,
+                              self.connector.disconnect_volume,
+                              connection_info['data'], devices['devices'][0],
+                              force=True, ignore_errors=ignore_exc)
+        else:
+            self.connector.disconnect_volume(connection_info['data'],
+                                             devices['devices'][0],
+                                             force=True,
+                                             ignore_errors=ignore_exc)
+
+        flush_mock.assert_called_once_with(
+            find_mp_device_path_mock.return_value)
+
+        expected = [
+            mock.call(f'/dev/disk/by-path/pci-0000:05:00.2-fc-0x{wwn}-lun-1')
+            for wwn in initiator_wwn]
+        if side_effect:
+            del_map_mock.assert_called_once_with('dm-1')
+            expected.append(mock.call(find_mp_device_path_mock.return_value))
+        else:
+            del_map_mock.assert_not_called()
+
+        remove_mock.assert_called_once_with(connection_info['data'],
+                                            devices['devices'],
+                                            devices['devices'][0],
+                                            True, mock.ANY)
+        self.assertEqual(len(expected), realpath_mock.call_count)
+        realpath_mock.assert_has_calls(expected)
