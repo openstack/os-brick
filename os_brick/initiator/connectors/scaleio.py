@@ -328,8 +328,10 @@ class ScaleIOConnector(base.BaseLinuxConnector):
         self.server_ip = connection_properties['serverIP']
         self.server_port = connection_properties['serverPort']
         self.server_username = connection_properties['serverUsername']
-        self.server_password, self.server_token = self._get_password_token(
+        self.server_password, server_token = self._get_password_token(
             connection_properties)
+        if server_token:
+            self.server_token = server_token
         self.iops_limit = connection_properties['iopsLimit']
         self.bandwidth_limit = connection_properties['bandwidthLimit']
         device_info = {'type': 'block',
