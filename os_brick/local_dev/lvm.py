@@ -532,7 +532,7 @@ class LVM(executor.Executor):
         # make sure volume group information is current
         self.update_volume_group_info()
 
-        if LVM.supports_full_pool_create:
+        if self.supports_full_pool_create:
             return ["-l", "100%FREE"]
 
         # leave 5% free for metadata
