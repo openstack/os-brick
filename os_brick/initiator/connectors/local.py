@@ -76,6 +76,7 @@ class LocalConnector(base.BaseLinuxConnector):
         """
         pass
 
+    @utils.trace
     def extend_volume(self, connection_properties):
-        # TODO(walter-boring): is this possible?
-        raise NotImplementedError
+        return utils.get_device_size(self,
+                                     connection_properties['device_path'])
