@@ -24,7 +24,6 @@ import time
 from typing import (Callable, Optional, Sequence, Type, Union)  # noqa: H301
 import uuid as uuid_lib
 
-
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
 
@@ -768,10 +767,16 @@ class NVMeOFConnector(base.BaseLinuxConnector):
         ret = {}
 
         nqn = None
+        hostid = None
         uuid = nvmf._get_host_uuid()
         suuid = priv_nvmeof.get_system_uuid()
         if cls.nvme_present():
             nqn = utils.get_host_nqn()
+            # Ensure /etc/nvme/hostid exists and defaults to the system uuid,
+            # or a random value.
+            hostid = utils.get_nvme_host_id(suuid)
+        if hostid:
+            ret['nvme_hostid'] = hostid
         if uuid:
             ret['uuid'] = uuid
         if suuid:

@@ -1,0 +1,7 @@
+---
+fixes:
+  - |
+    NVMe-oF `bug #2016029 <https://bugs.launchpad.net/os-brick/+bug/2016029>`_:
+    The NVMe-oF connector now creates `/etc/nvme/hostid` when it's missing from
+    the system.  That way the Host ID will persist and always be the same,
+    instead of being randomly generated.
