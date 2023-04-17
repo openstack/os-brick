@@ -17,5 +17,5 @@ pycodestyle==2.8.0 # MIT
 doc8>=0.8.1 # Apache-2.0
 fixtures>=3.0.0 # Apache-2.0/BSD
 bandit>=1.7.0,<1.8.0 # Apache-2.0
-mypy>=0.982 # MIT
+mypy>=1.1.1 # MIT
 eventlet>=0.30.1,!=0.32.0 # MIT
