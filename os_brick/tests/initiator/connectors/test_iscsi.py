@@ -721,11 +721,12 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
                 mock.Mock(return_value=True))
     @mock.patch.object(iscsi.ISCSIConnector, '_disconnect_connection')
     @mock.patch.object(iscsi.ISCSIConnector, '_get_connection_devices')
-    @mock.patch.object(linuxscsi.LinuxSCSI, 'flush_multipath_device')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'remove_connection',
                        return_value=mock.sentinel.mp_name)
-    def test_cleanup_connection_force_failure(self, remove_mock, flush_mock,
-                                              con_devs_mock, discon_mock):
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'multipath_del_map')
+    def test_cleanup_connection_force_failure(self, remove_map_mock,
+                                              remove_mock, con_devs_mock,
+                                              discon_mock):
 
         # Return an ordered dicts instead of normal dict for discon_mock.assert
         con_devs_mock.return_value = collections.OrderedDict((
@@ -749,7 +750,7 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
             self.CON_PROPS,
             [('ip1:port1', 'tgt1'), ('ip3:port3', 'tgt3')],
             mock.sentinel.force, mock.ANY)
-        flush_mock.assert_called_once_with(mock.sentinel.mp_name)
+        remove_map_mock.assert_called_once_with(mock.sentinel.mp_name)
 
     def test_cleanup_connection_no_data_discoverydb(self):
         self.connector.use_multipath = True
