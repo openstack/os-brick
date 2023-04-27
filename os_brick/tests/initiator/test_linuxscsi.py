@@ -1299,11 +1299,6 @@ loop0                                     0"""
         self.linuxscsi.multipath_del_path('/dev/sda')
         self.assertEqual(['multipathd del path /dev/sda'], self.cmds)
 
-    @ddt.data('mpatha', '3600140598d2e10957eb444ab09805555')
-    def test_multipath_del_map(self, mpath_device):
-        self.linuxscsi.multipath_del_map(mpath_device)
-        self.assertEqual(['multipathd del map %s' % (mpath_device)], self.cmds)
-
     @ddt.data(('/dev/sda', '/dev/sda', False, True, None),
               # This checks that we ignore the was_multipath parameter if it
               # doesn't make sense (because the used path is the one we are

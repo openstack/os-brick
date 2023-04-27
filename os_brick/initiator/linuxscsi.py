@@ -759,12 +759,3 @@ class LinuxSCSI(executor.Executor):
                                        check_exit_code=False,
                                        root_helper=self._root_helper)
         return stdout.strip() == 'ok'
-
-    def multipath_del_map(self, mpath_device):
-        """Remove a map from multipathd for monitoring."""
-        stdout, stderr = self._execute('multipathd', 'del', 'map',
-                                       mpath_device,
-                                       run_as_root=True, timeout=5,
-                                       check_exit_code=False,
-                                       root_helper=self._root_helper)
-        return stdout.strip() == 'ok'
