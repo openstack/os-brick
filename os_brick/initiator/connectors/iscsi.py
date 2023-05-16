@@ -953,13 +953,18 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         self._disconnect_connection(connection_properties, disconnect, force,
                                     exc)
 
-        # If flushing the multipath failed before, try now after we have
-        # removed the devices and we may have even logged off (only reaches
-        # here with multipath_name if force=True).
+        # If flushing the multipath failed before, remove the multipath device
+        # map from multipathd monitoring (only reaches here with multipath_name
+        # if force=True).
         if multipath_name:
-            LOG.debug('Flushing again multipath %s now that we removed the '
-                      'devices.', multipath_name)
-            self._linuxscsi.flush_multipath_device(multipath_name)
+            LOG.debug('Removing multipath device map %s to stop multipathd '
+                      'from monitoring the device.', multipath_name)
+            # We are passing sysfs mpath name here (dm-*) which is used
+            # in the multipath_del_map method to fetch the DM name (multipath
+            # device name i.e. SCSI WWID if user friendly names are OFF else
+            # the configured user friendly name).
+            with exc.context(force, 'Deleting map %s failed', multipath_name):
+                self._linuxscsi.multipath_del_map(multipath_name)
 
         if exc:
             LOG.warning('There were errors removing %s, leftovers may remain '
