@@ -14,6 +14,7 @@
 #    under the License.
 
 import os
+import pathlib
 import time
 
 from oslo_log import log as logging
@@ -26,6 +27,23 @@ from os_brick import utils
 LOG = logging.getLogger(__name__)
 
 spopenstack = importutils.try_import('storpool.spopenstack')
+spapi = importutils.try_import('storpool.spapi')
+
+
+DEV_STORPOOL = pathlib.Path('/dev/storpool')
+DEV_STORPOOL_BYID = pathlib.Path('/dev/storpool-byid')
+
+
+def path_to_volname(path: pathlib.Path) -> str:
+    """Determine a volume name to pass to the StorPool API."""
+    if path.parent == DEV_STORPOOL_BYID:
+        return f"~{path.name}"
+
+    if path.parent == DEV_STORPOOL:
+        return path.name
+
+    raise exception.BrickException('Unexpected device path %(path)s' %
+                                   {'path': path})
 
 
 class StorPoolConnector(base.BaseLinuxConnector):
@@ -37,6 +55,10 @@ class StorPoolConnector(base.BaseLinuxConnector):
         super(StorPoolConnector, self).__init__(root_helper, driver=driver,
                                                 *args, **kwargs)
 
+        if spapi is None:
+            raise exception.BrickException(
+                'Could not import the StorPool API bindings')
+
         if spopenstack is not None:
             try:
                 self._attach = spopenstack.AttachDB(log=LOG)
@@ -45,6 +67,38 @@ class StorPoolConnector(base.BaseLinuxConnector):
                     'Could not initialize the StorPool API bindings: %s' % (e))
         else:
             self._attach = None
+
+    def _detach_retry(self, sp_ourid, volume):
+        """Retry detaching.
+
+        Retries attempt to handle LUKS tests-related failures:
+          busy: volume ... open at ...
+        """
+
+        count = 10
+        while True:
+            try:
+                force = count == 0
+                self._attach.api().volumesReassignWait(
+                    {
+                        "reassign": [{
+                            "volume": volume,
+                            "detach": [sp_ourid],
+                            "force": force,
+                        }]
+                    }
+                )
+                break
+            except spapi.ApiError as exc:
+                if (
+                    exc.name in ("busy", "invalidParam")
+                    and "is open at" in exc.desc
+                ):
+                    assert count > 0
+                    time.sleep(0.2)
+                    count -= 1
+                else:
+                    raise
 
     @staticmethod
     def get_connector_properties(root_helper, *args, **kwargs):
@@ -76,16 +130,30 @@ class StorPoolConnector(base.BaseLinuxConnector):
         if mode is None or mode not in ('rw', 'ro'):
             raise exception.BrickException(
                 'Invalid access_mode specified in the connection data.')
-        req_id = 'brick-%s-%s' % (client_id, volume_id)
-        self._attach.add(req_id, {
-            'volume': volume,
-            'type': 'brick',
-            'id': req_id,
-            'rights': 1 if mode == 'ro' else 2,
-            'volsnap': False
-        })
-        self._attach.sync(req_id, None)
-        return {'type': 'block', 'path': '/dev/storpool/' + volume}
+        try:
+            sp_ourid = self._attach.config()["SP_OURID"]
+        except KeyError:
+            raise exception.BrickException(
+                'SP_OURID missing, cannot connect volume %s' % volume_id)
+
+        try:
+            self._attach.api().volumesReassignWait(
+                {"reassign": [{"volume": volume, mode: [sp_ourid]}]})
+        except Exception as exc:
+            raise exception.BrickException(
+                'Communication with the StorPool API '
+                'failed: %s' % (exc)) from exc
+
+        try:
+            volume_info = self._attach.api().volumeInfo(volume)
+        except Exception as exc:
+            raise exception.BrickException(
+                'Communication with the StorPool API '
+                'failed: %s' % (exc)) from exc
+
+        sp_global_id = volume_info.globalId
+        return {'type': 'block',
+                'path': str(DEV_STORPOOL_BYID) + '/' + sp_global_id}
 
     @utils.connect_volume_undo_prepare_result(unlink_after=True)
     def disconnect_volume(self, connection_properties, device_info,
@@ -119,14 +187,27 @@ class StorPoolConnector(base.BaseLinuxConnector):
         if client_id is None:
             raise exception.BrickException(
                 'Invalid StorPool connection data, no client ID specified.')
-        volume_id = connection_properties.get('volume', None)
-        if volume_id is None:
+        device_path = connection_properties.get('device_path', None)
+        if device_path is None:
+            LOG.debug('connection_properties is missing "device_path",'
+                      ' looking for "path" inside device_info')
+            if device_info:
+                device_path = device_info.get('path', None)
+        if device_path is None:
             raise exception.BrickException(
-                'Invalid StorPool connection data, no volume ID specified.')
-        volume = self._attach.volumeName(volume_id)
-        req_id = 'brick-%s-%s' % (client_id, volume_id)
-        self._attach.sync(req_id, volume)
-        self._attach.remove(req_id)
+                'Invalid StorPool connection data, no device_path specified.')
+        volume_name = path_to_volname(pathlib.Path(device_path))
+        try:
+            sp_ourid = self._attach.config()["SP_OURID"]
+        except KeyError:
+            raise exception.BrickException(
+                'SP_OURID missing, cannot disconnect volume %s' % volume_name)
+        try:
+            self._detach_retry(sp_ourid, volume_name)
+        except Exception as exc:
+            raise exception.BrickException(
+                'Communication with the StorPool API '
+                'failed: %s' % (exc)) from exc
 
     def get_search_path(self):
         return '/dev/storpool'
@@ -153,9 +234,9 @@ class StorPoolConnector(base.BaseLinuxConnector):
         dpath = connection_properties.get('device_path', None)
         if dpath is not None and dpath != path:
             raise exception.BrickException(
-                'Internal error: StorPool volume path {path} does not '
-                'match device path {dpath}',
-                {path: path, dpath: dpath})
+                'Internal error: StorPool volume path %(path)s does not '
+                'match device path %(dpath)s' %
+                {'path': path, 'dpath': dpath})
         return [path]
 
     def get_all_available_volumes(self, connection_properties=None):

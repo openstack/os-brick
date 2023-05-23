@@ -1,0 +1,6 @@
+---
+fixes:
+  - |
+    `Bug #2033292 <https://bugs.launchpad.net/cinder/+bug/2033292>`_: Fixed
+    possible attachment of the wrong Cinder volume after a successful
+    migration of a live VM.
