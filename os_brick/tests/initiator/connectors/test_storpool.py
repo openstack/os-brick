@@ -110,6 +110,16 @@ class StorPoolConnectorTestCase(test_connector.ConnectorTestCase):
             None, execute=self.execute)
         self.adb = self.connector._attach
 
+    def test_raise_if_spopenstack_missing(self):
+        with mock.patch.object(connector, 'spopenstack', None):
+            self.assertRaises(exception.BrickException,
+                              connector.StorPoolConnector, "")
+
+    def test_raise_if_sp_ourid_missing(self):
+        with mock.patch.object(spopenstack.AttachDB, 'config', lambda x: {}):
+            self.assertRaises(exception.BrickException,
+                              connector.StorPoolConnector, "")
+
     def test_connect_volume(self):
         volume_name = volumeNameExt(self.fakeProp['volume'])
         api = mock.MagicMock(spec=['volumesReassignWait', 'volumeInfo'])

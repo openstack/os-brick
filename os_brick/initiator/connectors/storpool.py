@@ -59,14 +59,19 @@ class StorPoolConnector(base.BaseLinuxConnector):
             raise exception.BrickException(
                 'Could not import the StorPool API bindings')
 
-        if spopenstack is not None:
-            try:
-                self._attach = spopenstack.AttachDB(log=LOG)
-            except Exception as e:
-                raise exception.BrickException(
-                    'Could not initialize the StorPool API bindings: %s' % (e))
-        else:
-            self._attach = None
+        if spopenstack is None:
+            raise exception.BrickException(
+                'Could not import the required module "storpool.spopenstack"')
+
+        try:
+            self._attach = spopenstack.AttachDB(log=LOG)
+        except Exception as e:
+            raise exception.BrickException(
+                'Could not initialize the StorPool API bindings: %s' % (e))
+
+        if "SP_OURID" not in self._attach.config():
+            raise exception.BrickException(
+                'Could not read "SP_OURID" from the StorPool configuration"')
 
     def _detach_retry(self, sp_ourid, volume):
         """Retry detaching.
