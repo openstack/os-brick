@@ -22,6 +22,22 @@ brick
 OpenStack Cinder brick library for managing local volume attaches
 
 
+.. warning::
+   The stable/wallaby branch of os-brick does not contain a fix for
+   CVE-2023-2088_.  Be aware that such a fix must span cinder, os-brick,
+   nova, and, depending on your deployment configuration, glance_store
+   and ironic.  *The Cinder project team advises against using the code
+   in this branch unless a mitigation against CVE-2023-2088 is applied.*
+
+   .. _CVE-2023-2088: https://nvd.nist.gov/vuln/detail/CVE-2023-2088
+
+   References:
+
+   * https://nvd.nist.gov/vuln/detail/CVE-2023-2088
+   * https://bugs.launchpad.net/cinder/+bug/2004555
+   * https://security.openstack.org/ossa/OSSA-2023-003.html
+   * https://wiki.openstack.org/wiki/OSSN/OSSN-0092
+
 Features
 --------
 
