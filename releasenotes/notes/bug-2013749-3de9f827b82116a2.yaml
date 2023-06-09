@@ -1,0 +1,9 @@
+---
+fixes:
+  - |
+    PowerFlex driver `Bug #2013749
+    <https://bugs.launchpad.net/os-brick/+bug/2013749>`_: Added
+    new error code for powerflex 4.x which was causing this error.
+    Added handling for the new error code returned from
+    Powerflex 4.x when a we try to map a volume which is already
+    mapped.
