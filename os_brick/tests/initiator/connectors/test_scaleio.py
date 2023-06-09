@@ -286,6 +286,15 @@ class ScaleIOConnectorTestCase(test_connector.ConnectorTestCase):
 
         self.test_connect_volume()
 
+    def test_map_volume_already_mapped_v4(self):
+        """Ignore REST API failure for volume already mapped"""
+        self.mock_calls[self.action_format.format(
+            'addMappedSdc')] = self.MockHTTPSResponse(
+            dict(errorCode=self.connector.VOLUME_ALREADY_MAPPED_ERROR_v4,
+                 message='Test error map volume'), 500)
+
+        self.test_connect_volume()
+
     def test_error_disconnect_volume(self):
         """Fail to disconnect with REST API failure"""
         self.mock_calls[self.action_format.format(
