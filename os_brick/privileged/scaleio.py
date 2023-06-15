@@ -74,7 +74,7 @@ def rescan_vols(op_code):
         ioctl(fd, op_code, struct.pack('Q', 0))
 
 
-@privileged.default.entrypoint
+@privileged.brick_privsep_hide_output.entrypoint
 def get_connector_password(filename, config_group, failed_over):
     """Read ScaleIO connector configuration file and get appropriate password.
 
