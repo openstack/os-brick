@@ -385,11 +385,11 @@ class FibreChannelConnector(base.BaseLinuxConnector):
         self._remove_devices(connection_properties, devices, device_info,
                              force, exc)
 
-        if exc:  # type: ignore
+        if exc:
             LOG.warning('There were errors removing %s, leftovers may remain '
                         'in the system', volume_paths)
             if not ignore_errors:
-                raise exc  # type: ignore
+                raise exc
 
     def _remove_devices(self,
                         connection_properties: dict,
