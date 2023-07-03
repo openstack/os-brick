@@ -518,11 +518,7 @@ class LVM(executor.Executor):
     def _calculate_thin_pool_size(self) -> list[str]:
         """Calculates the correct size for a thin pool.
 
-        Ideally we would use 100% of the containing volume group and be done.
-        But the 100%VG notation to lvcreate is not implemented and thus cannot
-        be used.  See https://bugzilla.redhat.com/show_bug.cgi?id=998347
-
-        Further, some amount of free space must remain in the volume group for
+        Some amount of free space must remain in the volume group for
         metadata for the contained logical volumes.  The exact amount depends
         on how much volume sharing you expect.
 
