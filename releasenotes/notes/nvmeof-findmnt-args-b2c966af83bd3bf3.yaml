@@ -1,0 +1,5 @@
+---
+fixes:
+  - |
+    NVMe-oF connector `bug #2026257
+    <https://bugs.launchpad.net/os-brick/+bug/2026257>`_: Fixes _get_host_uuid for nvmeof failing when using a btrfs root fs.
