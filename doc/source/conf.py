@@ -50,6 +50,9 @@ openstackdocs_pdf_link = True
 openstackdocs_bug_project = 'os-brick'
 openstackdocs_bug_tag = ''
 
+# -- Options for autodoc ------------------------------------------------------
+autodoc_mock_imports = ['cryptography']
+
 # -- Options for LaTeX output -------------------------------------------------
 
 # The paper size ('letter' or 'a4').
