@@ -770,6 +770,7 @@ loop0                                     0"""
         expected_commands = ['multipathd resize map %s' % dm_path]
         self.assertEqual(expected_commands, self.cmds)
 
+    @mock.patch('os_brick.utils.check_valid_device')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'find_multipath_device_path')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_scsi_wwn')
     @mock.patch('os_brick.utils.get_device_size')
@@ -777,7 +778,8 @@ loop0                                     0"""
     def test_extend_volume_no_mpath(self, mock_device_info,
                                     mock_device_size,
                                     mock_scsi_wwn,
-                                    mock_find_mpath_path):
+                                    mock_find_mpath_path,
+                                    mock_valid_dev):
         """Test extending a volume where there is no multipath device."""
         fake_device = {'host': '0',
                        'channel': '0',
@@ -792,6 +794,7 @@ loop0                                     0"""
         wwn = '1234567890123456'
         mock_scsi_wwn.return_value = wwn
         mock_find_mpath_path.return_value = None
+        mock_valid_dev.return_value = True
 
         ret_size = self.linuxscsi.extend_volume(['/dev/fake'])
         self.assertEqual(second_size, ret_size)
@@ -800,6 +803,7 @@ loop0                                     0"""
         expected_cmds = ['tee -a /sys/bus/scsi/drivers/sd/0:0:0:1/rescan']
         self.assertEqual(expected_cmds, self.cmds)
 
+    @mock.patch('os_brick.utils.check_valid_device')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'find_multipath_device_path')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_scsi_wwn')
     @mock.patch('os_brick.utils.get_device_size')
@@ -809,7 +813,8 @@ loop0                                     0"""
                                       mock_device_info,
                                       mock_device_size,
                                       mock_scsi_wwn,
-                                      mock_find_mpath_path):
+                                      mock_find_mpath_path,
+                                      mock_valid_dev):
         """Test extending a volume where there is a multipath device."""
         mock_device_info.side_effect = [{'host': host,
                                          'channel': '0',
@@ -823,6 +828,7 @@ loop0                                     0"""
         mock_find_mpath_path.return_value = mpath_path
         dm_path = '/dev/dm-5'
         mock_realpath.return_value = dm_path
+        mock_valid_dev.return_value = True
 
         ret_size = self.linuxscsi.extend_volume(['/dev/fake1', '/dev/fake2'],
                                                 use_multipath=True)
@@ -836,6 +842,7 @@ loop0                                     0"""
         self.assertEqual(expected_cmds, self.cmds)
         mock_realpath.assert_called_once_with(mpath_path)
 
+    @mock.patch('os_brick.utils.check_valid_device')
     @mock.patch.object(linuxscsi.LinuxSCSI, '_multipath_resize_map')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'find_multipath_device_path')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_scsi_wwn')
@@ -845,7 +852,8 @@ loop0                                     0"""
                                            mock_device_size,
                                            mock_scsi_wwn,
                                            mock_find_mpath_path,
-                                           mock_mpath_resize_map):
+                                           mock_mpath_resize_map,
+                                           mock_valid_dev):
         """Test extending a volume where there is a multipath device fail."""
         mock_device_info.side_effect = [{'host': host,
                                          'channel': '0',
@@ -860,6 +868,7 @@ loop0                                     0"""
 
         mock_mpath_resize_map.side_effect = putils.ProcessExecutionError(
             stdout="fail")
+        mock_valid_dev.return_value = True
 
         self.assertRaises(
             putils.ProcessExecutionError,
@@ -873,6 +882,7 @@ loop0                                     0"""
                          'multipathd reconfigure']
         self.assertEqual(expected_cmds, self.cmds)
 
+    @mock.patch('os_brick.utils.check_valid_device')
     @mock.patch('time.sleep')
     @mock.patch.object(linuxscsi.LinuxSCSI, '_multipath_resize_map')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'find_multipath_device_path')
@@ -886,7 +896,8 @@ loop0                                     0"""
                                               mock_scsi_wwn,
                                               mock_find_mpath_path,
                                               mock_mpath_resize_map,
-                                              mock_sleep):
+                                              mock_sleep,
+                                              mock_valid_dev):
         """Test extending a volume where there is a multipath device fail."""
         mock_device_info.side_effect = [{'host': host,
                                          'channel': '0',
@@ -903,6 +914,7 @@ loop0                                     0"""
         mock_mpath_resize_map.side_effect = (
             putils.ProcessExecutionError(stdout="timeout"),
             "success")
+        mock_valid_dev.return_value = True
 
         ret_size = self.linuxscsi.extend_volume(['/dev/fake1', '/dev/fake2'],
                                                 use_multipath=True)
@@ -916,6 +928,7 @@ loop0                                     0"""
         mock_mpath_resize_map.assert_has_calls([mock.call(dm_path)] * 2)
         mock_realpath.assert_called_once_with(mpath_path)
 
+    @mock.patch('os_brick.utils.check_valid_device')
     @mock.patch('time.sleep')
     @mock.patch('time.time')
     @mock.patch.object(linuxscsi.LinuxSCSI, '_multipath_resize_map')
@@ -929,7 +942,8 @@ loop0                                     0"""
                                               mock_find_mpath_path,
                                               mock_mpath_resize_map,
                                               mock_currtime,
-                                              mock_sleep):
+                                              mock_sleep,
+                                              mock_valid_dev):
         """Test extending a volume where there is a multipath device fail."""
         mock_device_info.side_effect = [{'host': host,
                                          'channel': '0',
@@ -941,6 +955,7 @@ loop0                                     0"""
         mock_scsi_wwn.return_value = wwn
         mock_find_mpath_path.return_value = ('/dev/mapper/dm-uuid-mpath-%s' %
                                              wwn)
+        mock_valid_dev.return_value = True
 
         # time.time is used to check if our own timeout has been exceeded,
         # which is why it has to be mocked.
@@ -962,6 +977,20 @@ loop0                                     0"""
             self.linuxscsi.extend_volume,
             ['/dev/fake1', '/dev/fake2'],
             use_multipath=True)
+
+    @mock.patch('os_brick.utils.check_valid_device')
+    def test_extend_volume_with_mpath_path_down(self, mock_valid_dev):
+        """Test extending a volume where there is a path down."""
+        mock_valid_dev.return_value = False
+        dev1 = '/dev/fake1'
+        dev2 = '/dev/fake2'
+
+        self.assertRaises(
+            exception.BrickException,
+            self.linuxscsi.extend_volume,
+            [dev1, dev2],
+            use_multipath=True)
+        mock_valid_dev.assert_called_once_with(self.linuxscsi, dev1)
 
     def test_process_lun_id_list(self):
         lun_list = [2, 255, 88, 370, 5, 256]

@@ -83,6 +83,31 @@ class TestUtils(base.TestCase):
         mock_create.assert_not_called()
         self.assertIsNone(result)
 
+    @ddt.data(('fake_info', True), (None, False))
+    @ddt.unpack
+    def test_check_valid_device(self, fake_info, expected):
+        mock_execute = mock.Mock()
+        mock_execute._execute.return_value = ('fake_out', fake_info)
+
+        fake_path = '/dev/fake'
+        is_valid = utils.check_valid_device(mock_execute, fake_path)
+        self.assertEqual(expected, is_valid)
+        mock_execute._execute.assert_called_once_with(
+            'dd', 'if=/dev/fake', 'of=/dev/null', 'count=1',
+            run_as_root=True, root_helper=mock_execute._root_helper)
+
+    def test_check_valid_device_error(self):
+        mock_execute = mock.Mock()
+        p_exception = utils.processutils.ProcessExecutionError
+        mock_execute._execute.side_effect = p_exception
+
+        fake_path = '/dev/fake'
+        is_valid = utils.check_valid_device(mock_execute, fake_path)
+        self.assertEqual(False, is_valid)
+        mock_execute._execute.assert_called_once_with(
+            'dd', 'if=/dev/fake', 'of=/dev/null', 'count=1',
+            run_as_root=True, root_helper=mock_execute._root_helper)
+
 
 class TestRetryDecorator(base.TestCase):
 

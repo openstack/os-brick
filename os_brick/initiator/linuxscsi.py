@@ -679,6 +679,15 @@ class LinuxSCSI(executor.Executor):
         This function tries to signal the local system's kernel
         that an already attached volume might have been resized.
         """
+        # We need all paths up before extending the devices.
+        # see Launchpad Bug: #2032177 for more details.
+        LOG.debug("Checking paths are valid %s", volume_paths)
+        for volume_path in volume_paths:
+            if not utils.check_valid_device(self, volume_path):
+                LOG.error("Path status is down for path %s", volume_path)
+                raise exception.BrickException("All paths need to be up "
+                                               "to extend the device.")
+
         LOG.debug("extend volume %s", volume_paths)
 
         for volume_path in volume_paths:

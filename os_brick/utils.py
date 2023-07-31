@@ -431,6 +431,22 @@ def get_device_size(executor: executor.Executor, device: str) -> Optional[int]:
         return None
 
 
+def check_valid_device(executor: executor.Executor, path: str) -> bool:
+    cmd = ('dd', 'if=%(path)s' % {"path": path},
+           'of=/dev/null', 'count=1')
+    out, info = None, None
+    try:
+        out, info = executor._execute(*cmd, run_as_root=True,
+                                      root_helper=executor._root_helper)
+    except processutils.ProcessExecutionError as e:
+        LOG.error("Failed to access the device on the path "
+                  "%(path)s: %(error)s.",
+                  {"path": path, "error": e.stderr})
+        return False
+    # If the info is none, the path does not exist.
+    return info is not None
+
+
 class Anything(object):
     """Object equal to everything."""
     def __eq__(self, other):

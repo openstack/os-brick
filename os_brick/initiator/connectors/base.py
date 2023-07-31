@@ -22,7 +22,6 @@ import typing
 from typing import Optional
 
 from oslo_concurrency import lockutils
-from oslo_concurrency import processutils as putils
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_utils import reflection
@@ -33,6 +32,7 @@ from os_brick import initiator
 from os_brick.initiator import host_driver
 from os_brick.initiator import initiator_connector
 from os_brick.initiator import linuxscsi
+from os_brick import utils
 
 LOG = logging.getLogger(__name__)
 CONF = cfg.CONF
@@ -124,21 +124,7 @@ class BaseLinuxConnector(initiator_connector.InitiatorConnector):
         return props
 
     def check_valid_device(self, path: str, run_as_root: bool = True) -> bool:
-        cmd = ('dd', 'if=%(path)s' % {"path": path},
-               'of=/dev/null', 'count=1')
-        out, info = None, None
-        try:
-            out, info = self._execute(*cmd, run_as_root=run_as_root,
-                                      root_helper=self._root_helper)
-        except putils.ProcessExecutionError as e:
-            LOG.error("Failed to access the device on the path "
-                      "%(path)s: %(error)s.",
-                      {"path": path, "error": e.stderr})
-            return False
-        # If the info is none, the path does not exist.
-        if info is None:
-            return False
-        return True
+        return utils.check_valid_device(self, path)
 
     def get_all_available_volumes(
             self,
