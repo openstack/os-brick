@@ -74,12 +74,14 @@ class BrickLvmTestCase(base.TestCase):
                 cmd_string):
             data = "  fake-vg\n"
             data += "  some-other-vg\n"
-        elif (_lvm_prefix + 'vgs, --noheadings, -o, name, fake-vg' ==
-                cmd_string):
+        elif (_lvm_prefix +
+              'vgs, --noheadings, -o, name, --readonly, fake-vg' ==
+              cmd_string):
             data = "  fake-vg\n"
         elif _lvm_prefix + 'vgs, --version' in cmd_string:
             data = "  LVM version:     2.02.95(2) (2012-03-06)\n"
-        elif (_lvm_prefix + 'vgs, --noheadings, -o, uuid, fake-vg' in
+        elif (_lvm_prefix +
+              'vgs, --noheadings, -o, uuid, --readonly, fake-vg' in
               cmd_string):
             data = "  kVxztV-dKpG-Rz7E-xtKY-jeju-QsYU-SLG6Z1\n"
         elif _lvm_prefix + 'vgs, --noheadings, --unit=g, ' \
@@ -102,17 +104,17 @@ class BrickLvmTestCase(base.TestCase):
             data += "  fake-vg-3:10.00:10.00:0:"\
                     "mXzbuX-dKpG-Rz7E-xtKY-jeju-QsYU-SLG8Z3\n"
         elif (_lvm_prefix + 'lvs, --noheadings, '
-              '--unit=g, -o, vg_name,name,size, --nosuffix, '
+              '--unit=g, -o, vg_name,name,size, --nosuffix, --readonly, '
               'fake-vg/lv-nothere' in cmd_string):
             raise processutils.ProcessExecutionError(
                 stderr="One or more specified logical volume(s) not found.")
         elif (_lvm_prefix + 'lvs, --noheadings, '
-              '--unit=g, -o, vg_name,name,size, --nosuffix, '
+              '--unit=g, -o, vg_name,name,size, --nosuffix, --readonly, '
               'fake-vg/lv-newerror' in cmd_string):
             raise processutils.ProcessExecutionError(
                 stderr="Failed to find logical volume \"fake-vg/lv-newerror\"")
         elif (_lvm_prefix + 'lvs, --noheadings, '
-              '--unit=g, -o, vg_name,name,size' in cmd_string):
+              '--unit=g, -o, vg_name,name,size, ' in cmd_string):
             if 'fake-unknown' in cmd_string:
                 raise processutils.ProcessExecutionError(
                     stderr="One or more volume(s) not found."
@@ -255,7 +257,7 @@ class BrickLvmTestCase(base.TestCase):
         self.assertEqual(2, exec_mock.call_count)
         args = ['env', 'LC_ALL=C', 'lvs', '--noheadings', '--unit=g', '-o',
                 'size,data_percent', '--separator', ':', '--nosuffix',
-                '/dev/vg/thinpool']
+                '--readonly', '/dev/vg/thinpool']
         if self.configuration.lvm_suppress_fd_warnings:
             args.insert(2, 'LVM_SUPPRESS_FD_WARNINGS=1')
         lvs_call = mock.call(*args, root_helper='sudo', run_as_root=True)

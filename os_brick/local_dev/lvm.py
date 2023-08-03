@@ -132,7 +132,7 @@ class LVM(executor.Executor):
         """
         exists = False
         cmd = LVM.LVM_CMD_PREFIX + ['vgs', '--noheadings',
-                                    '-o', 'name', self.vg_name]
+                                    '-o', 'name', '--readonly', self.vg_name]
         (out, _err) = self._execute(*cmd,
                                     root_helper=self._root_helper,
                                     run_as_root=True)
@@ -168,7 +168,7 @@ class LVM(executor.Executor):
 
     def _get_vg_uuid(self) -> list:
         cmd = LVM.LVM_CMD_PREFIX + ['vgs', '--noheadings',
-                                    '-o', 'uuid', self.vg_name]
+                                    '-o', 'uuid', '--readonly', self.vg_name]
         (out, _err) = self._execute(*cmd,
                                     root_helper=self._root_helper,
                                     run_as_root=True)
@@ -188,7 +188,7 @@ class LVM(executor.Executor):
         """
         cmd = LVM.LVM_CMD_PREFIX + ['lvs', '--noheadings', '--unit=g',
                                     '-o', 'size,data_percent', '--separator',
-                                    ':', '--nosuffix']
+                                    ':', '--nosuffix', '--readonly']
         # NOTE(gfidente): data_percent only applies to some types of LV so we
         # make sure to append the actual thin pool name
         cmd.append("/dev/%s/%s" % (vg_name, thin_pool_name))
@@ -321,7 +321,8 @@ class LVM(executor.Executor):
         """
 
         cmd = LVM.LVM_CMD_PREFIX + ['lvs', '--noheadings', '--unit=g',
-                                    '-o', 'vg_name,name,size', '--nosuffix']
+                                    '-o', 'vg_name,name,size', '--nosuffix',
+                                    '--readonly']
         if lv_name is not None and vg_name is not None:
             cmd.append("%s/%s" % (vg_name, lv_name))
         elif vg_name is not None:
@@ -430,7 +431,8 @@ class LVM(executor.Executor):
                                     '--unit=g', '-o',
                                     'name,size,free,lv_count,uuid',
                                     '--separator', ':',
-                                    '--nosuffix']
+                                    '--nosuffix',
+                                    '--readonly']
         if vg_name is not None:
             cmd.append(vg_name)
 
