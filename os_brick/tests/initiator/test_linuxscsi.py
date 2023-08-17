@@ -765,9 +765,9 @@ loop0                                     0"""
         self.assertEqual(expected_commands, self.cmds)
 
     def test_multipath_resize_map(self):
-        wwn = '1234567890123456'
-        self.linuxscsi.multipath_resize_map(wwn)
-        expected_commands = ['multipathd resize map %s' % wwn]
+        dm_path = '/dev/dm-5'
+        self.linuxscsi.multipath_resize_map(dm_path)
+        expected_commands = ['multipathd resize map %s' % dm_path]
         self.assertEqual(expected_commands, self.cmds)
 
     @mock.patch.object(linuxscsi.LinuxSCSI, 'find_multipath_device_path')
@@ -804,7 +804,9 @@ loop0                                     0"""
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_scsi_wwn')
     @mock.patch('os_brick.utils.get_device_size')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_device_info')
-    def test_extend_volume_with_mpath(self, mock_device_info,
+    @mock.patch('os.path.realpath')
+    def test_extend_volume_with_mpath(self, mock_realpath,
+                                      mock_device_info,
                                       mock_device_size,
                                       mock_scsi_wwn,
                                       mock_find_mpath_path):
@@ -817,8 +819,10 @@ loop0                                     0"""
         mock_device_size.side_effect = [1024, 2048, 1024, 2048, 1024, 2048]
         wwn = '1234567890123456'
         mock_scsi_wwn.return_value = wwn
-        mock_find_mpath_path.return_value = ('/dev/mapper/dm-uuid-mpath-%s' %
-                                             wwn)
+        mpath_path = ('/dev/mapper/dm-uuid-mpath-%s' % wwn)
+        mock_find_mpath_path.return_value = mpath_path
+        dm_path = '/dev/dm-5'
+        mock_realpath.return_value = dm_path
 
         ret_size = self.linuxscsi.extend_volume(['/dev/fake1', '/dev/fake2'],
                                                 use_multipath=True)
@@ -828,8 +832,9 @@ loop0                                     0"""
         expected_cmds = ['tee -a /sys/bus/scsi/drivers/sd/0:0:0:1/rescan',
                          'tee -a /sys/bus/scsi/drivers/sd/1:0:0:1/rescan',
                          'multipathd reconfigure',
-                         'multipathd resize map %s' % wwn]
+                         'multipathd resize map %s' % dm_path]
         self.assertEqual(expected_cmds, self.cmds)
+        mock_realpath.assert_called_once_with(mpath_path)
 
     @mock.patch.object(linuxscsi.LinuxSCSI, '_multipath_resize_map')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'find_multipath_device_path')
@@ -874,7 +879,9 @@ loop0                                     0"""
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_scsi_wwn')
     @mock.patch('os_brick.utils.get_device_size')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_device_info')
-    def test_extend_volume_with_mpath_pending(self, mock_device_info,
+    @mock.patch('os.path.realpath')
+    def test_extend_volume_with_mpath_pending(self, mock_realpath,
+                                              mock_device_info,
                                               mock_device_size,
                                               mock_scsi_wwn,
                                               mock_find_mpath_path,
@@ -889,8 +896,10 @@ loop0                                     0"""
         mock_device_size.side_effect = [1024, 2048, 1024, 2048, 1024, 2048]
         wwn = '1234567890123456'
         mock_scsi_wwn.return_value = wwn
-        mock_find_mpath_path.return_value = ('/dev/mapper/dm-uuid-mpath-%s' %
-                                             wwn)
+        mpath_path = ('/dev/mapper/dm-uuid-mpath-%s' % wwn)
+        mock_find_mpath_path.return_value = mpath_path
+        dm_path = '/dev/dm-5'
+        mock_realpath.return_value = dm_path
         mock_mpath_resize_map.side_effect = (
             putils.ProcessExecutionError(stdout="timeout"),
             "success")
@@ -904,7 +913,8 @@ loop0                                     0"""
                          'tee -a /sys/bus/scsi/drivers/sd/1:0:0:1/rescan',
                          'multipathd reconfigure']
         self.assertEqual(expected_cmds, self.cmds)
-        mock_mpath_resize_map.assert_has_calls([mock.call(wwn)] * 2)
+        mock_mpath_resize_map.assert_has_calls([mock.call(dm_path)] * 2)
+        mock_realpath.assert_called_once_with(mpath_path)
 
     @mock.patch('time.sleep')
     @mock.patch('time.time')

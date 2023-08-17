@@ -565,8 +565,8 @@ class LinuxSCSI(executor.Executor):
                                     root_helper=self._root_helper)
         return out
 
-    def _multipath_resize_map(self, mpath_id):
-        cmd = ('multipathd', 'resize', 'map', mpath_id)
+    def _multipath_resize_map(self, dm_path):
+        cmd = ('multipathd', 'resize', 'map', dm_path)
         (out, _err) = self._execute(*cmd,
                                     run_as_root=True,
                                     root_helper=self._root_helper)
@@ -577,11 +577,13 @@ class LinuxSCSI(executor.Executor):
 
         return out
 
-    def multipath_resize_map(self, mpath_id):
+    def multipath_resize_map(self, dm_path):
         """Issue a multipath resize map on device.
 
         This forces the multipath daemon to update it's
         size information a particular multipath device.
+
+        :param dm_path: Real path of the DM device (eg: /dev/dm-5)
         """
 
         # "multipathd reconfigure" is async since 0.6.1. While the
@@ -590,7 +592,7 @@ class LinuxSCSI(executor.Executor):
         tstart = time.time()
         while True:
             try:
-                self._multipath_resize_map(mpath_id)
+                self._multipath_resize_map(dm_path)
                 break
             except putils.ProcessExecutionError as err:
                 with excutils.save_and_reraise_exception(reraise=True) as ctx:
@@ -646,7 +648,7 @@ class LinuxSCSI(executor.Executor):
                 LOG.info("mpath(%(device)s) current size %(size)s",
                          {'device': mpath_device, 'size': size})
 
-                self.multipath_resize_map(scsi_wwn)
+                self.multipath_resize_map(os.path.realpath(mpath_device))
 
                 new_size = utils.get_device_size(self, mpath_device)
                 LOG.info("mpath(%(device)s) new size %(size)s",

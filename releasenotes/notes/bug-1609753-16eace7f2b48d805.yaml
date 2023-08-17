@@ -1,0 +1,5 @@
+---
+fixes:
+  - |
+    `Bug #1609753 <https://bugs.launchpad.net/os-brick/+bug/1609753>`_: Fixed
+    resizing multipath device when user friendly names are ON.
