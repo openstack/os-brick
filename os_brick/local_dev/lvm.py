@@ -245,19 +245,6 @@ class LVM(executor.Executor):
                 return version_tuple
         raise exception.BrickException(message='Cannot parse LVM version')
 
-    @property
-    def supports_full_pool_create(self) -> bool:
-        """Property indicating whether 100% pool creation is supported.
-
-        Check for LVM version >= 2.02.115.
-        Ref: https://bugzilla.redhat.com/show_bug.cgi?id=998347
-        """
-
-        if self.get_lvm_version(self._root_helper) >= (2, 2, 115):
-            return True
-        else:
-            return False
-
     @staticmethod
     @utils.retry(retry=utils.retry_if_exit_code, retry_param=139, interval=0.5,
                  backoff_rate=0.5)  # Bug#1901783
@@ -481,11 +468,7 @@ class LVM(executor.Executor):
         # make sure volume group information is current
         self.update_volume_group_info()
 
-        if self.supports_full_pool_create:
-            return ["-l", "100%FREE"]
-
-        # leave 5% free for metadata
-        return ["-L", "%sg" % (self.vg_free_space * 0.95)]
+        return ["-l", "100%FREE"]
 
     def create_thin_pool(self, name: Optional[str] = None) -> None:
         """Creates a thin provisioning pool for this VG.
