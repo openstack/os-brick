@@ -126,6 +126,35 @@ class PrivNVMeTestCase(base.TestCase):
         mock_exec.assert_called_once_with('nvme', 'show-hostnqn')
         self.assertEqual('', res)
 
+    @mock.patch('os.chmod')
+    @mock.patch.object(builtins, 'open', new_callable=mock.mock_open)
+    @mock.patch('os.makedirs')
+    def test_create_hostid(self, mock_mkdirs, mock_open, mock_chmod):
+        res = privsep_nvme.create_hostid('uuid')
+
+        mock_mkdirs.assert_called_once_with('/etc/nvme',
+                                            mode=0o755,
+                                            exist_ok=True)
+        mock_open.assert_called_once_with('/etc/nvme/hostid', 'w')
+        mock_open().write.assert_called_once_with('uuid\n')
+        mock_chmod.assert_called_once_with('/etc/nvme/hostid', 0o644)
+        self.assertEqual('uuid', res)
+
+    @mock.patch('os.chmod')
+    @mock.patch.object(builtins, 'open', new_callable=mock.mock_open)
+    @mock.patch('os.makedirs')
+    def test_create_hostid_fails(self, mock_mkdirs, mock_open, mock_chmod):
+        mock_mkdirs.side_effect = OSError
+
+        res = privsep_nvme.create_hostid(None)
+
+        mock_mkdirs.assert_called_once_with('/etc/nvme',
+                                            mode=0o755,
+                                            exist_ok=True)
+        mock_open.assert_not_called()
+        mock_chmod.assert_not_called()
+        self.assertIsNone(res)
+
     @mock.patch.object(builtins, 'open', new_callable=mock.mock_open)
     def test_get_system_uuid_product_uuid(self, mock_open):
         uuid = 'dbc6ba60-36ae-4b96-9310-628832bdfc3d'

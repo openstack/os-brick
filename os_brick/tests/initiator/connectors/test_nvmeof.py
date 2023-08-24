@@ -921,6 +921,8 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         uuid = self.connector._get_host_uuid()
         self.assertIsNone(uuid)
 
+    @mock.patch.object(utils, 'get_nvme_host_id',
+                       return_value=SYS_UUID)
     @mock.patch.object(nvmeof.NVMeOFConnector,
                        '_is_native_multipath_supported',
                        return_value=True)
@@ -935,11 +937,17 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
     def test_get_connector_properties_without_sysuuid(self, mock_host_uuid,
                                                       mock_sysuuid, mock_nqn,
                                                       mock_nvme_present,
-                                                      mock_nat_mpath_support):
+                                                      mock_nat_mpath_support,
+                                                      mock_get_host_id):
         props = self.connector.get_connector_properties('sudo')
-        expected_props = {'nqn': 'fakenqn', 'nvme_native_multipath': False}
+        expected_props = {'nqn': 'fakenqn',
+                          'nvme_native_multipath': False,
+                          'nvme_hostid': SYS_UUID}
         self.assertEqual(expected_props, props)
+        mock_get_host_id.assert_called_once_with(None)
 
+    @mock.patch.object(utils, 'get_nvme_host_id',
+                       return_value=SYS_UUID)
     @mock.patch.object(nvmeof.NVMeOFConnector,
                        '_is_native_multipath_supported',
                        return_value=True)
@@ -951,15 +959,18 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
     def test_get_connector_properties_with_sysuuid(self, mock_host_uuid,
                                                    mock_sysuuid, mock_nqn,
                                                    mock_nvme_present,
-                                                   mock_native_mpath_support):
+                                                   mock_native_mpath_support,
+                                                   mock_get_host_id):
         mock_host_uuid.return_value = HOST_UUID
         mock_sysuuid.return_value = SYS_UUID
         mock_nqn.return_value = HOST_NQN
         mock_nvme_present.return_value = True
         props = self.connector.get_connector_properties('sudo')
         expected_props = {"system uuid": SYS_UUID, "nqn": HOST_NQN,
-                          "uuid": HOST_UUID, 'nvme_native_multipath': False}
+                          "uuid": HOST_UUID, 'nvme_native_multipath': False,
+                          'nvme_hostid': SYS_UUID}
         self.assertEqual(expected_props, props)
+        mock_get_host_id.assert_called_once_with(SYS_UUID)
 
     def test_get_volume_paths_device_info(self):
         """Device info path has highest priority."""
