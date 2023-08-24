@@ -90,7 +90,9 @@ class FibreChannelConnectorS390X(fibre_channel.FibreChannelConnector):
                         force, exc):
         hbas = self._linuxfc.get_fc_hbas_info()
         targets = connection_properties['targets']
-        possible_devs = self._get_possible_devices(hbas, targets)
+        addressing_mode = connection_properties.get('addressing_mode')
+        possible_devs = self._get_possible_devices(hbas, targets,
+                                                   addressing_mode)
         for platform, pci_num, target_wwn, lun in possible_devs:
             target_lun = self._get_lun_string(lun)
             with exc.context(force, 'Removing device %s:%s:%s failed',

@@ -1,0 +1,8 @@
+---
+features:
+  - |
+    iSCSI and FCP: Support for different SCSI addressing modes: SAM, SAM-2, and
+    SAM-3 flat addressing.  Defaults to SAM/transparent, but cinder drivers can
+    set key ``addressing_mode`` in the connection properties to indicate other
+    addressing modes using one of the constants from
+    ``os_brick.constants.SCSI_ADDRESSING_*`` as the value.
