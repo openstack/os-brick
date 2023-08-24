@@ -60,6 +60,7 @@ class ConnectorUtilsTestCase(test_base.TestCase):
                        return_value=None)
     @mock.patch.object(platform, 'machine', mock.Mock(return_value='s390x'))
     @mock.patch('sys.platform', 'linux2')
+    @mock.patch.object(utils, 'get_nvme_host_id', mock.Mock(return_value=None))
     def _test_brick_get_connector_properties(self, multipath,
                                              enforce_multipath,
                                              multipath_result,

@@ -20,6 +20,7 @@ import logging as py_logging
 import os
 import time
 from typing import Any, Callable, Optional, Type, Union   # noqa: H301
+import uuid as uuid_lib
 
 from oslo_concurrency import processutils
 from oslo_log import log as logging
@@ -229,6 +230,23 @@ def get_host_nqn() -> Optional[str]:
     except Exception:
         host_nqn = None
     return host_nqn
+
+
+def get_nvme_host_id(uuid: Optional[str]) -> Optional[str]:
+    """Get the nvme host id
+
+    If the hostid file doesn't exist create it either with the passed uuid or
+    a random one.
+    """
+    try:
+        with open('/etc/nvme/hostid', 'r') as f:
+            host_id = f.read().strip()
+    except IOError:
+        uuid = uuid or str(uuid_lib.uuid4())
+        host_id = priv_nvme.create_hostid(uuid)
+    except Exception:
+        host_id = None
+    return host_id
 
 
 def _symlink_name_from_device_path(device_path):
