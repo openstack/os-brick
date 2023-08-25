@@ -1,0 +1,9 @@
+---
+fixes:
+  - |
+    `Bug #2032177 <https://bugs.launchpad.net/os-brick/+bug/2032177>`_:
+    Handled the issue when one or more paths of a multipath device are down and
+    we try to extend the device. This is addressed by adding an additional check
+    to verify that all devices are up before extending the multipath device to
+    avoid leaving devices with inconsistent sizes.
+
