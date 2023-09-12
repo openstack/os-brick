@@ -398,8 +398,9 @@ class Target(object):
         # Unlike "nvme list-subsys -o json" sysfs addr is separated by a comma
         sysfs_portals: list[tuple[Optional[str],
                                   Optional[str],
+                                  Optional[Union[str, utils.Anything]],
                                   Optional[Union[str, utils.Anything]]]] = [
-            (f'traddr={p.address},trsvcid={p.port}', p.transport, hostnqn)
+            (p.address, p.port, p.transport, hostnqn)
             for p in self.portals
         ]
         known_names: list[str] = [p.controller for p in self.portals
@@ -421,7 +422,19 @@ class Target(object):
 
             # The right subsystem, but must also be the right portal
             ctrl_transport = sysfs_property('transport', ctrl_path)
-            ctrl_addr = sysfs_property('address', ctrl_path)
+
+            # Address in sysfs may contain src_addr in some systems. Parse and
+            # only use destination addr and port
+            address = sysfs_property('address', ctrl_path)
+            if not address:
+                LOG.error("Couldn't read address for %s", ctrl_path)
+                continue
+            ctrl_address = dict((x.split('=')
+                                 for x in address.split(',')))
+
+            ctrl_addr = ctrl_address['traddr']
+            ctrl_port = ctrl_address['trsvcid']
+
             # hostnqn value not present in all OSs.  Ignore when not present
             ctrl_hostnqn = sysfs_property('hostnqn', ctrl_path) or utils.ANY
             # Warn once per target for OS not presenting the hostnqn on sysfs
@@ -430,7 +443,7 @@ class Target(object):
                             "Controller may be incorrectly matched.")
                 warned = True
 
-            ctrl_portal = (ctrl_addr, ctrl_transport, ctrl_hostnqn)
+            ctrl_portal = (ctrl_addr, ctrl_port, ctrl_transport, ctrl_hostnqn)
             try:
                 index = sysfs_portals.index(ctrl_portal)
 
