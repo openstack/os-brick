@@ -469,9 +469,11 @@ class TargetTestCase(test_base.TestCase):
         self.target.set_portals_controllers()
         mock_glob.assert_not_called()
 
+    @ddt.data('traddr=portal2,trsvcid=port2',
+              'traddr=portal2,trsvcid=port2,src_addr=myip')
     @mock.patch.object(nvmeof, 'sysfs_property')
     @mock.patch('glob.glob')
-    def test_set_portals_controllers(self, mock_glob, mock_sysfs):
+    def test_set_portals_controllers(self, addr, mock_glob, mock_sysfs):
         """Look in sysfs for the device paths."""
         portal = nvmeof.Portal(self.target, 'portal4', 'port4', 'tcp')
         portal.controller = 'nvme0'
@@ -494,7 +496,7 @@ class TargetTestCase(test_base.TestCase):
             # nvme3 matches first portal but not the host_nqn
             self.target.nqn, 'rdma', 'traddr=portal2,trsvcid=port2', 'badnqn',
             # nvme4 matches first portal
-            self.target.nqn, 'tcp', 'traddr=portal2,trsvcid=port2', 'nqn',
+            self.target.nqn, 'tcp', addr, 'nqn',
             # nvme5 simulates OS doesn't have the hostnqn attribute
             self.target.nqn, 'tcp', 'traddr=portal5,trsvcid=port5', None,
         ]
