@@ -1505,7 +1505,11 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
                         '-n', target.nqn, '-Q', '128', '-l', '-1'])
              for portal in target.portals])
 
-    @ddt.data(70, errno.EALREADY)
+    @ddt.data((70, '', ''),
+              (errno.EALREADY, '', ''),
+              (1, '', 'already connected'),
+              (1, 'already connected', ''))
+    @ddt.unpack
     @mock.patch.object(nvmeof.LOG, 'warning')
     @mock.patch.object(nvmeof.Target, 'find_device')
     @mock.patch.object(nvmeof.Target, 'set_portals_controllers')
@@ -1513,14 +1517,14 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(nvmeof.NVMeOFConnector, 'rescan')
     @mock.patch.object(nvmeof.Portal, 'state', new_callable=mock.PropertyMock)
     def test__connect_target_race(
-            self, exit_code, mock_state, mock_rescan, mock_cli,
+            self, exit_code, stdout, stderr, mock_state, mock_rescan, mock_cli,
             mock_set_ctrls, mock_find_dev, mock_log):
         """Treat race condition with sysadmin as success."""
         mock_state.side_effect = ['connecting', 'connecting', None, 'live']
         dev_path = '/dev/nvme0n1'
         mock_find_dev.return_value = dev_path
         mock_cli.side_effect = putils.ProcessExecutionError(
-            exit_code=exit_code)
+            exit_code=exit_code, stdout=stdout, stderr=stderr)
 
         target = self.conn_props.targets[0]
 
@@ -1539,7 +1543,11 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
             portal.transport, '-n', target.nqn, '-Q', '128', '-l', '-1'])
         self.assertEqual(1, mock_log.call_count)
 
-    @ddt.data(70, errno.EALREADY)
+    @ddt.data((70, '', ''),
+              (errno.EALREADY, '', ''),
+              (1, '', 'already connected'),
+              (1, 'already connected', ''))
+    @ddt.unpack
     @mock.patch.object(nvmeof.LOG, 'warning')
     @mock.patch('time.sleep')
     @mock.patch('time.time', side_effect=[0, 0.1, 0.6])
@@ -1553,12 +1561,12 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(nvmeof.NVMeOFConnector, 'rescan')
     @mock.patch.object(nvmeof.Portal, 'state', new_callable=mock.PropertyMock)
     def test__connect_target_race_connecting(
-            self, exit_code, mock_state, mock_rescan, mock_cli, mock_set_ctrls,
-            mock_find_dev, mock_is_live, mock_delay, mock_time, mock_sleep,
-            mock_log):
+            self, exit_code, stdout, stderr, mock_state, mock_rescan, mock_cli,
+            mock_set_ctrls, mock_find_dev, mock_is_live, mock_delay, mock_time,
+            mock_sleep, mock_log):
         """Test connect target when portal is reconnecting after race."""
         mock_cli.side_effect = putils.ProcessExecutionError(
-            exit_code=exit_code)
+            exit_code=exit_code, stdout=stdout, stderr=stderr)
         mock_state.side_effect = ['connecting', 'connecting', None,
                                   'connecting']
         mock_is_live.side_effect = [False, False, False, False, True]
@@ -1581,7 +1589,11 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
             portal.transport, '-n', target.nqn, '-Q', '128', '-l', '-1'])
         self.assertEqual(1, mock_log.call_count)
 
-    @ddt.data(70, errno.EALREADY)
+    @ddt.data((70, '', ''),
+              (errno.EALREADY, '', ''),
+              (1, '', 'already connected'),
+              (1, 'already connected', ''))
+    @ddt.unpack
     @mock.patch.object(nvmeof.LOG, 'warning')
     @mock.patch.object(nvmeof.LOG, 'error')
     @mock.patch('time.sleep')
@@ -1596,12 +1608,12 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(nvmeof.NVMeOFConnector, 'rescan')
     @mock.patch.object(nvmeof.Portal, 'state', new_callable=mock.PropertyMock)
     def test__connect_target_race_unknown(
-            self, exit_code, mock_state, mock_rescan, mock_cli, mock_set_ctrls,
-            mock_find_dev, mock_is_live, mock_delay, mock_time, mock_sleep,
-            mock_log_err, mock_log_warn):
+            self, exit_code, stdout, stderr, mock_state, mock_rescan, mock_cli,
+            mock_set_ctrls, mock_find_dev, mock_is_live, mock_delay, mock_time,
+            mock_sleep, mock_log_err, mock_log_warn):
         """Test connect target when portal is unknown after race."""
         mock_cli.side_effect = putils.ProcessExecutionError(
-            exit_code=exit_code)
+            exit_code=exit_code, stdout=stdout, stderr=stderr)
         mock_state.side_effect = ['connecting', 'connecting', None,
                                   'unknown']
         mock_is_live.side_effect = [False, False, False, True]
