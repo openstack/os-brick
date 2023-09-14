@@ -926,8 +926,12 @@ class NVMeOFConnector(base.BaseLinuxConnector):
                     # c-vol running on same node with different lock paths) or
                     # an admin is touching things manually. Not passing these
                     # exit codes in check_exit_code parameter to _execute so we
-                    # can log it.
-                    if exc.exit_code not in (70, errno.EALREADY):
+                    # can log it.  nvme cli v2 returns 1, so we parse the
+                    # message. Some nvme cli versions return errors in stdout,
+                    # so we look in stderr and stdout.
+                    if not (exc.exit_code in (70, errno.EALREADY) or
+                            (exc.exit_code == 1 and
+                             'already connected' in exc.stderr + exc.stdout)):
                         LOG.error('Could not connect to %s: exit_code: %s, '
                                   'stdout: "%s", stderr: "%s",', portal,
                                   exc.exit_code, exc.stdout, exc.stderr)
