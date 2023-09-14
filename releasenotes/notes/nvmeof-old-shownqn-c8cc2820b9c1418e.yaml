@@ -1,0 +1,6 @@
+---
+fixes:
+  - |
+    NVMe-oF connector `bug #2035606
+    <https://bugs.launchpad.net/os-brick/+bug/2035606>`_: Fixed generation of
+    hostnqn file on old nvme-cli versions.
