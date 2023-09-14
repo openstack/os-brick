@@ -1,0 +1,9 @@
+---
+features:
+  - |
+    NVMe-oF connector: Improved speed of creation of the ``/etc/nvme/hostnqn``
+    file.
+  - |
+    NVMe-oF connector: Always write the same value in the same system for the
+    ``/etc/nvme/hostnqn`` file in older nvme-cli versions when system UUID can
+    be read from DMI.
