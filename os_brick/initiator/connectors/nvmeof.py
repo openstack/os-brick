@@ -133,6 +133,9 @@ class Portal(object):
     """Representation of an NVMe-oF Portal with some related operations."""
     LIVE = 'live'
     MISSING = None  # Unkown or not present in the system
+    CONNECTING = 'connecting'
+    # Default value of reconnect_delay in sysfs
+    DEFAULT_RECONNECT_DELAY = 10
     controller: Optional[str] = None  # Don't know controller name on start
 
     def __str__(self) -> str:
@@ -175,6 +178,15 @@ class Portal(object):
         if self.controller:
             return ctrl_property('state', self.controller)
         return None
+
+    @property
+    def reconnect_delay(self) -> int:
+        # 10 seconds is the default value of reconnect_delay
+        if self.controller:
+            res = ctrl_property('reconnect_delay', self.controller)
+            if res is not None:
+                return int(res)
+        return self.DEFAULT_RECONNECT_DELAY
 
     def get_device(self) -> Optional[str]:
         """Get a device path using available volume identification markers.
@@ -683,6 +695,8 @@ class NVMeOFConnector(base.BaseLinuxConnector):
 
     # Use a class attribute since a restart is needed to change it on the host
     native_multipath_supported = None
+    # Time we think is more than reasonable to establish an NVMe-oF connection
+    TIME_TO_CONNECT = 10
 
     def __init__(self,
                  root_helper: str,
@@ -861,6 +875,7 @@ class NVMeOFConnector(base.BaseLinuxConnector):
         """
         connected = False
         missing_portals = []
+        reconnecting_portals = []
 
         for portal in target.portals:
             state = portal.state  # store it so we read only once from sysfs
@@ -871,6 +886,9 @@ class NVMeOFConnector(base.BaseLinuxConnector):
             # Remember portals that are not present in the system
             elif state == portal.MISSING:
                 missing_portals.append(portal)
+            elif state == portal.CONNECTING:
+                LOG.debug('%s is reconnecting', portal)
+                reconnecting_portals.append(portal)
             # Ignore reconnecting/dead portals
             else:
                 LOG.debug('%s exists but is %s', portal, state)
@@ -905,10 +923,31 @@ class NVMeOFConnector(base.BaseLinuxConnector):
                     LOG.warning('Race condition with some other application '
                                 'when connecting to %s, please check your '
                                 'system configuration.', portal)
-                    connected = True
+                    state = portal.state
+                    if state == portal.LIVE:
+                        connected = True
+                    elif state == portal.CONNECTING:
+                        reconnecting_portals.append(portal)
+                    else:
+                        LOG.error('Ignoring %s due to unknown state (%s)',
+                                  portal, state)
 
                 if not do_multipath:
                     break  # We are connected
+
+        if not connected and reconnecting_portals:
+            delay = self.TIME_TO_CONNECT + max(p.reconnect_delay
+                                               for p in reconnecting_portals)
+            LOG.debug('Waiting %s seconds for some nvme controllers to '
+                      'reconnect', delay)
+            timeout = time.time() + delay
+            while time.time() < timeout:
+                time.sleep(1)
+                if any(p.is_live for p in reconnecting_portals):
+                    LOG.debug('Reconnected')
+                    connected = True
+                    break
+            LOG.debug('No controller reconnected')
 
         if not connected:
             raise exception.VolumeDeviceNotFound(device=target.nqn)
