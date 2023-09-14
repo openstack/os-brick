@@ -221,12 +221,21 @@ def convert_str(text: Union[bytes, str]) -> str:
         return text
 
 
-def get_host_nqn() -> Optional[str]:
+def get_host_nqn(system_uuid: Optional[str] = None) -> Optional[str]:
+    """Ensure that hostnqn exists, creating if necessary.
+
+    This method tries to return contents from /etc/nvme/hostnqn and if not
+    possible then creates the file calling create_hostnqn and passing provided
+    system_uuid and returns the contents of the newly created file.
+
+    Method create_hostnqn gives priority to the provided system_uuid parameter
+    for the contents of the file over other alternatives it has.
+    """
     try:
         with open('/etc/nvme/hostnqn', 'r') as f:
             host_nqn = f.read().strip()
     except IOError:
-        host_nqn = priv_nvme.create_hostnqn()
+        host_nqn = priv_nvme.create_hostnqn(system_uuid)
     except Exception:
         host_nqn = None
     return host_nqn

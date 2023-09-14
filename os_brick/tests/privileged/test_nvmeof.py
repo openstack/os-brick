@@ -59,6 +59,27 @@ class PrivNVMeTestCase(base.TestCase):
     @mock.patch.object(builtins, 'open', new_callable=mock.mock_open)
     @mock.patch('os.makedirs')
     @mock.patch.object(rootwrap, 'custom_execute')
+    def test_create_hostnqn_from_system_uuid(self, mock_exec, mock_mkdirs,
+                                             mock_open, mock_chmod):
+
+        system_uuid = 'ea841a98-444c-4abb-bd99-092b20518542'
+        hostnqn = 'nqn.2014-08.org.nvmexpress:uuid:' + system_uuid
+
+        res = privsep_nvme.create_hostnqn(system_uuid)
+
+        mock_mkdirs.assert_called_once_with('/etc/nvme',
+                                            mode=0o755,
+                                            exist_ok=True)
+        mock_exec.assert_not_called()
+        mock_open.assert_called_once_with('/etc/nvme/hostnqn', 'w')
+        mock_open().write.assert_called_once_with(hostnqn)
+        mock_chmod.assert_called_once_with('/etc/nvme/hostnqn', 0o644)
+        self.assertEqual(hostnqn, res)
+
+    @mock.patch('os.chmod')
+    @mock.patch.object(builtins, 'open', new_callable=mock.mock_open)
+    @mock.patch('os.makedirs')
+    @mock.patch.object(rootwrap, 'custom_execute')
     def test_create_hostnqn_generate(self, mock_exec, mock_mkdirs, mock_open,
                                      mock_chmod):
         hostnqn = mock.Mock()

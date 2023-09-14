@@ -771,7 +771,7 @@ class NVMeOFConnector(base.BaseLinuxConnector):
         uuid = nvmf._get_host_uuid()
         suuid = priv_nvmeof.get_system_uuid()
         if cls.nvme_present():
-            nqn = utils.get_host_nqn()
+            nqn = utils.get_host_nqn(suuid)
             # Ensure /etc/nvme/hostid exists and defaults to the system uuid,
             # or a random value.
             hostid = utils.get_nvme_host_id(suuid)
