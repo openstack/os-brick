@@ -17,6 +17,8 @@ from os_brick import opts
 
 
 LOG = logging.getLogger(__name__)
+SECURE_LOG = logging.getLogger('brick-privsep-hide-output')
+SECURE_LOG.setLevel(logging.ERROR)
 
 
 def setup(conf, **kwargs):
