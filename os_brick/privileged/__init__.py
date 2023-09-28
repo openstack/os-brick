@@ -33,11 +33,3 @@ default = priv_context.PrivContext(
     capabilities=capabilities,
     logger_name=__name__,
 )
-
-brick_privsep_hide_output = priv_context.PrivContext(
-    __name__,
-    cfg_section='privsep_osbrick',
-    pypath=__name__ + '.default',
-    capabilities=capabilities,
-    logger_name='brick_privsep_hide_output',
-)

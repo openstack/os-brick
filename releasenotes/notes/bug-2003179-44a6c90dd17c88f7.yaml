@@ -1,7 +1,0 @@
----
-fixes:
-  - |
-    `Bug #2003179  <https://bugs.launchpad.net/cinder/+bug/2003179>`_: Fixed
-    issue with the ScaleIO connector where privsep was logging
-    password in plaintext. This was fixed by creating a new logger for the
-    ScaleIO connector with default log level set to ERROR.
