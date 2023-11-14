@@ -13,6 +13,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import warnings
+
 from os_win import utilsfactory
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
@@ -33,6 +35,8 @@ class BaseWindowsConnector(initiator_connector.InitiatorConnector):
     DEFAULT_DEVICE_SCAN_INTERVAL = 2
 
     def __init__(self, root_helper=None, *args, **kwargs):
+        warnings.warn('Support for Windows OS has been deprecated.',
+                      category=DeprecationWarning, stacklevel=2)
         kwargs['executor'] = kwargs.get('executor') or putils.execute
         super(BaseWindowsConnector, self).__init__(root_helper,
                                                    *args, **kwargs)

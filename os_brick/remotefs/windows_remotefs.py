@@ -17,6 +17,7 @@
 
 import os
 import re
+import warnings
 
 from os_win import utilsfactory
 from oslo_log import log as logging
@@ -35,6 +36,8 @@ class WindowsRemoteFsClient(remotefs.RemoteFsClient):
 
     def __init__(self, mount_type, root_helper=None,
                  execute=None, *args, **kwargs):
+        warnings.warn('Support for Windows OS has been deprecated.',
+                      category=DeprecationWarning, stacklevel=2)
         mount_type_to_option_prefix = {
             'cifs': 'smbfs',
             'smbfs': 'smbfs',
