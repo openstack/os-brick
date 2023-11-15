@@ -14,7 +14,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable  # noqa: H301
+from typing import Any, Callable
 
 from oslo_log import log as logging
 

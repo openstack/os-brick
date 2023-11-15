@@ -20,7 +20,7 @@ import glob
 import os
 import re
 import time
-from typing import Any, Iterable, Optional, Union  # noqa: H301
+from typing import Any, Iterable, Optional, Union
 
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging

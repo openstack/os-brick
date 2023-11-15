@@ -19,7 +19,7 @@ import inspect
 import logging as py_logging
 import os
 import time
-from typing import Any, Callable, Optional, Type, Union   # noqa: H301
+from typing import Any, Callable, Optional, Type, Union
 import uuid as uuid_lib
 
 from oslo_concurrency import processutils
