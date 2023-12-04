@@ -1,0 +1,4 @@
+---
+fixes:
+  - |
+    Fixes an warning seen when running in a container using ``overlayfs``.
