@@ -918,8 +918,10 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
 
     @mock.patch.object(nvmeof.NVMeOFConnector, '_execute', autospec=True)
     def test_get_sysuuid_without_newline(self, mock_execute):
-        mock_execute.return_value = (
-            "9126E942-396D-11E7-B0B7-A81E84C186D1\n", "")
+        mock_execute.side_effect = [
+            ("/dev/sda1", ""),
+            ("9126E942-396D-11E7-B0B7-A81E84C186D1\n", "")
+        ]
         uuid = self.connector._get_host_uuid()
         expected_uuid = "9126E942-396D-11E7-B0B7-A81E84C186D1"
         self.assertEqual(expected_uuid, uuid)
@@ -927,6 +929,12 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(nvmeof.NVMeOFConnector, '_execute', autospec=True)
     def test_get_sysuuid_err(self, mock_execute):
         mock_execute.side_effect = putils.ProcessExecutionError()
+        uuid = self.connector._get_host_uuid()
+        self.assertIsNone(uuid)
+
+    @mock.patch.object(nvmeof.NVMeOFConnector, '_execute', autospec=True)
+    def test_get_sysuuid_overlay(self, mock_execute):
+        mock_execute.return_value = ("overlay\n", "")
         uuid = self.connector._get_host_uuid()
         self.assertIsNone(uuid)
 
