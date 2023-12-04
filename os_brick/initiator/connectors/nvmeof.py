@@ -792,8 +792,13 @@ class NVMeOFConnector(base.BaseLinuxConnector):
         try:
             lines, err = self._execute(
                 *cmd, run_as_root=True, root_helper=self._root_helper)
+            source = lines.split('\n')[0]
+            # In a container this could be 'overlay', which causes the blkid
+            # command to fail.
+            if source == "overlay":
+                return None
             blkid_cmd = (
-                'blkid', lines.split('\n')[0], '-s', 'UUID', '-o', 'value')
+                'blkid', source, '-s', 'UUID', '-o', 'value')
             lines, _err = self._execute(
                 *blkid_cmd, run_as_root=True, root_helper=self._root_helper)
             return lines.split('\n')[0]
