@@ -783,7 +783,7 @@ class NVMeOFConnector(base.BaseLinuxConnector):
 
     def _get_host_uuid(self) -> Optional[str]:
         """Get the UUID of the first mounted filesystem."""
-        cmd = ('findmnt', '/', '-n', '-o', 'SOURCE')
+        cmd = ('findmnt', '-v', '/', '-n', '-o', 'SOURCE')
         try:
             lines, err = self._execute(
                 *cmd, run_as_root=True, root_helper=self._root_helper)
