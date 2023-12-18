@@ -1,0 +1,9 @@
+---
+fixes:
+  - |
+    Dell PowerFlex driver `Bug #2046810
+    <https://bugs.launchpad.net/os-brick/+bug/2046810>`_: Added
+    new error code for PowerFlex 4.x which was causing this error.
+    Added handling for the new error code returned from PowerFlex
+    v4.x and allow the driver to ignore and skip a disconnect
+    operation when the volume is not mapped.
