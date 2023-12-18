@@ -270,6 +270,15 @@ class ScaleIOConnectorTestCase(test_connector.ConnectorTestCase):
 
         self.assertRaises(exception.BrickException, self.test_connect_volume)
 
+    def test_error_map_volume_v4(self):
+        """Fail to connect with REST API failure (v4)"""
+        self.mock_calls[self.action_format.format(
+            'addMappedSdc')] = self.MockHTTPSResponse(
+            dict(errorCode=self.connector.VOLUME_NOT_MAPPED_ERROR_v4,
+                 message='Test error map volume'), 500)
+
+        self.assertRaises(exception.BrickException, self.test_connect_volume)
+
     @mock.patch('os_brick.utils._time_sleep')
     def test_error_path_not_found(self, sleep_mock):
         """Timeout waiting for volume to map to local file system"""
@@ -301,6 +310,15 @@ class ScaleIOConnectorTestCase(test_connector.ConnectorTestCase):
         self.mock_calls[self.action_format.format(
             'removeMappedSdc')] = self.MockHTTPSResponse(
             dict(errorCode=self.connector.VOLUME_NOT_MAPPED_ERROR,
+                 message='Test error map volume'), 500)
+
+        self.test_disconnect_volume()
+
+    def test_disconnect_volume_not_mapped_v4(self):
+        """Ignore REST API failure for volume not mapped (v4)"""
+        self.mock_calls[self.action_format.format(
+            'removeMappedSdc')] = self.MockHTTPSResponse(
+            dict(errorCode=self.connector.VOLUME_NOT_MAPPED_ERROR_v4,
                  message='Test error map volume'), 500)
 
         self.test_disconnect_volume()
