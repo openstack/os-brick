@@ -37,7 +37,8 @@ class BaseISCSIConnector(initiator_connector.InitiatorConnector):
 
     def _get_all_targets(self, connection_properties):
         if all(key in connection_properties for key in ('target_portals',
-                                                        'target_iqns')):
+                                                        'target_iqns',
+                                                        'target_luns')):
             return list(zip(connection_properties['target_portals'],
                             connection_properties['target_iqns'],
                             self._get_luns(connection_properties)))
