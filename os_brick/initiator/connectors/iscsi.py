@@ -928,10 +928,10 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
             devices_map = self._get_connection_devices(connection_properties,
                                                        ips_iqns_luns,
                                                        is_disconnect_call)
-        except exception.TargetPortalNotFound as exc:
+        except exception.TargetPortalNotFound as target_exc:
             # When discovery sendtargets failed on connect there is no
             # information in the discoverydb, so there's nothing to clean.
-            LOG.debug('Skipping cleanup %s', exc)
+            LOG.debug('Skipping cleanup %s', target_exc)
             return
 
         # Remove devices and multipath from this connection
@@ -944,15 +944,14 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                          'mpath' in path_used)
         multipath_name = self._linuxscsi.remove_connection(
             remove_devices, force,
-            exc, path_used, was_multipath)  # type: ignore
+            exc, path_used, was_multipath)
 
         # Disconnect sessions and remove nodes that are left without devices
         disconnect = [conn for conn, (__, keep) in devices_map.items()
                       if not keep]
 
-        # The "type:" comment works around mypy issue #6647
         self._disconnect_connection(connection_properties, disconnect, force,
-                                    exc)  # type:ignore
+                                    exc)
 
         # If flushing the multipath failed before, try now after we have
         # removed the devices and we may have even logged off (only reaches
@@ -962,11 +961,11 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                       'devices.', multipath_name)
             self._linuxscsi.flush_multipath_device(multipath_name)
 
-        if exc:  # type: ignore
+        if exc:
             LOG.warning('There were errors removing %s, leftovers may remain '
                         'in the system', remove_devices)
             if not ignore_errors:
-                raise exc  # type: ignore
+                raise exc
 
     def _munge_portal(
             self,
