@@ -945,6 +945,7 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
                           'nvme_hostid': SYS_UUID}
         self.assertEqual(expected_props, props)
         mock_get_host_id.assert_called_once_with(None)
+        mock_nqn.assert_called_once_with(None)
 
     @mock.patch.object(utils, 'get_nvme_host_id',
                        return_value=SYS_UUID)
@@ -971,6 +972,7 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
                           'nvme_hostid': SYS_UUID}
         self.assertEqual(expected_props, props)
         mock_get_host_id.assert_called_once_with(SYS_UUID)
+        mock_nqn.assert_called_once_with(SYS_UUID)
 
     def test_get_volume_paths_device_info(self):
         """Device info path has highest priority."""
@@ -1794,7 +1796,7 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
     def test_get_host_nqn_file_available(self, mock_open):
         mock_open.return_value.__enter__.return_value.read = (
             lambda: HOST_NQN + "\n")
-        host_nqn = self._get_host_nqn()
+        host_nqn = utils.get_host_nqn()
         mock_open.assert_called_once_with('/etc/nvme/hostnqn', 'r')
         self.assertEqual(HOST_NQN, host_nqn)
 
@@ -1805,7 +1807,17 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         mock_open.side_effect = IOError()
         result = utils.get_host_nqn()
         mock_open.assert_called_once_with('/etc/nvme/hostnqn', 'r')
-        mock_create.assert_called_once_with()
+        mock_create.assert_called_once_with(None)
+        self.assertEqual(mock.sentinel.nqn, result)
+
+    @mock.patch.object(utils.priv_nvme, 'create_hostnqn')
+    @mock.patch.object(builtins, 'open')
+    def test_get_host_nqn_io_err_sys_uuid(self, mock_open, mock_create):
+        mock_create.return_value = mock.sentinel.nqn
+        mock_open.side_effect = IOError()
+        result = utils.get_host_nqn(mock.sentinel.system_uuid)
+        mock_open.assert_called_once_with('/etc/nvme/hostnqn', 'r')
+        mock_create.assert_called_once_with(mock.sentinel.system_uuid)
         self.assertEqual(mock.sentinel.nqn, result)
 
     @mock.patch.object(utils.priv_nvme, 'create_hostnqn')
@@ -1862,16 +1874,6 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         result = self.connector._is_raid_device(NVME_DEVICE_PATH)
         self.assertFalse(result)
         mock_get_fs_type.assert_called_once_with(NVME_DEVICE_PATH)
-
-    def _get_host_nqn(self):
-        host_nqn = None
-        try:
-            with open('/etc/nvme/hostnqn', 'r') as f:
-                host_nqn = f.read().strip()
-                f.close()
-        except IOError:
-            host_nqn = HOST_NQN
-        return host_nqn
 
     @ddt.data(True, False)
     @mock.patch.object(nvmeof.NVMeOFConnector, 'native_multipath_supported',
