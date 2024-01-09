@@ -160,6 +160,13 @@ class PortalTestCase(test_base.TestCase):
         self.assertIs(expected, self.portal.is_live)
         mock_state.assert_called_once_with()
 
+    @mock.patch.object(nvmeof, 'ctrl_property', return_value='10')
+    def test_reconnect_delay(self, mock_property):
+        """Reconnect delay returns an int."""
+        self.portal.controller = 'nvme0'
+        self.assertIs(10, self.portal.reconnect_delay)
+        mock_property.assert_called_once_with('reconnect_delay', 'nvme0')
+
     @mock.patch.object(nvmeof, 'ctrl_property')
     def test_state(self, mock_property):
         """State uses sysfs to check the value."""
@@ -1362,6 +1369,11 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         else:
             mock_cli.assert_not_called()
 
+    @mock.patch('time.time', side_effect=[0, 1, 20] * 3)
+    @mock.patch.object(nvmeof.Portal, 'reconnect_delay',
+                       new_callable=mock.PropertyMock, return_value=10)
+    @mock.patch.object(nvmeof.Portal, 'is_live',
+                       new_callable=mock.PropertyMock, return_value=False)
     @mock.patch.object(nvmeof.Target, 'find_device')
     @mock.patch.object(nvmeof.Target, 'set_portals_controllers')
     @mock.patch.object(nvmeof.NVMeOFConnector, 'run_nvme_cli')
@@ -1369,7 +1381,7 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(nvmeof.Portal, 'state', new_callable=mock.PropertyMock)
     def test__connect_target_portals_down(
             self, mock_state, mock_rescan, mock_cli, mock_set_ctrls,
-            mock_find_dev):
+            mock_find_dev, mock_is_live, mock_delay, mock_time):
         """Test connect target has all portal connections down."""
         retries = 3
         mock_state.side_effect = retries * 3 * ['connecting']
@@ -1379,12 +1391,19 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
                           self.conn_props.targets[0])
 
         self.assertEqual(retries * 3, mock_state.call_count)
+        self.assertEqual(retries * 3, mock_is_live.call_count)
+        self.assertEqual(retries * 3, mock_delay.call_count)
         mock_state.assert_has_calls(retries * 3 * [mock.call()])
         mock_rescan.assert_not_called()
         mock_set_ctrls.assert_not_called()
         mock_find_dev.assert_not_called()
         mock_cli.assert_not_called()
 
+    @mock.patch('time.time', side_effect=[0, 1, 20] * 3)
+    @mock.patch.object(nvmeof.Portal, 'reconnect_delay',
+                       new_callable=mock.PropertyMock, return_value=10)
+    @mock.patch.object(nvmeof.Portal, 'is_live',
+                       new_callable=mock.PropertyMock, return_value=False)
     @mock.patch.object(nvmeof.LOG, 'error')
     @mock.patch.object(nvmeof.Target, 'find_device')
     @mock.patch.object(nvmeof.Target, 'set_portals_controllers')
@@ -1393,7 +1412,7 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(nvmeof.Portal, 'state', new_callable=mock.PropertyMock)
     def test__connect_target_no_portals_connect(
             self, mock_state, mock_rescan, mock_cli, mock_set_ctrls,
-            mock_find_dev, mock_log):
+            mock_find_dev, mock_log, mock_is_live, mock_delay, mock_time):
         """Test connect target when fails to connect to any portal."""
         retries = 3
         mock_state.side_effect = retries * ['connecting', 'connecting', None]
@@ -1416,6 +1435,9 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
             retries * [mock.call(['connect', '-a', portal.address,
                                   '-s', portal.port, '-t', portal.transport,
                                   '-n', target.nqn, '-Q', '128', '-l', '-1'])])
+        # There are 2 in connecting state
+        self.assertEqual(retries * 2, mock_is_live.call_count)
+        self.assertEqual(retries * 2, mock_delay.call_count)
 
     @mock.patch.object(nvmeof.Target, 'find_device')
     @mock.patch.object(nvmeof.Target, 'set_portals_controllers')
@@ -1492,7 +1514,7 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
             self, exit_code, mock_state, mock_rescan, mock_cli,
             mock_set_ctrls, mock_find_dev, mock_log):
         """Treat race condition with sysadmin as success."""
-        mock_state.side_effect = ['connecting', 'connecting', None]
+        mock_state.side_effect = ['connecting', 'connecting', None, 'live']
         dev_path = '/dev/nvme0n1'
         mock_find_dev.return_value = dev_path
         mock_cli.side_effect = putils.ProcessExecutionError(
@@ -1503,8 +1525,8 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         res = self.connector._connect_target(target)
         self.assertEqual(dev_path, res)
 
-        self.assertEqual(3, mock_state.call_count)
-        mock_state.assert_has_calls(3 * [mock.call()])
+        self.assertEqual(4, mock_state.call_count)
+        mock_state.assert_has_calls(4 * [mock.call()])
         mock_rescan.assert_not_called()
         mock_set_ctrls.assert_called_once_with()
         mock_find_dev.assert_called_once_with()
@@ -1514,6 +1536,126 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
             'connect', '-a', portal.address, '-s', portal.port, '-t',
             portal.transport, '-n', target.nqn, '-Q', '128', '-l', '-1'])
         self.assertEqual(1, mock_log.call_count)
+
+    @ddt.data(70, errno.EALREADY)
+    @mock.patch.object(nvmeof.LOG, 'warning')
+    @mock.patch('time.sleep')
+    @mock.patch('time.time', side_effect=[0, 0.1, 0.6])
+    @mock.patch.object(nvmeof.Portal, 'reconnect_delay',
+                       new_callable=mock.PropertyMock, return_value=10)
+    @mock.patch.object(nvmeof.Portal, 'is_live',
+                       new_callable=mock.PropertyMock)
+    @mock.patch.object(nvmeof.Target, 'find_device')
+    @mock.patch.object(nvmeof.Target, 'set_portals_controllers')
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'run_nvme_cli')
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'rescan')
+    @mock.patch.object(nvmeof.Portal, 'state', new_callable=mock.PropertyMock)
+    def test__connect_target_race_connecting(
+            self, exit_code, mock_state, mock_rescan, mock_cli, mock_set_ctrls,
+            mock_find_dev, mock_is_live, mock_delay, mock_time, mock_sleep,
+            mock_log):
+        """Test connect target when portal is reconnecting after race."""
+        mock_cli.side_effect = putils.ProcessExecutionError(
+            exit_code=exit_code)
+        mock_state.side_effect = ['connecting', 'connecting', None,
+                                  'connecting']
+        mock_is_live.side_effect = [False, False, False, False, True]
+
+        target = self.conn_props.targets[0]
+        res = self.connector._connect_target(target)
+
+        self.assertEqual(mock_find_dev.return_value, res)
+        self.assertEqual(4, mock_state.call_count)
+        self.assertEqual(5, mock_is_live.call_count)
+        self.assertEqual(3, mock_delay.call_count)
+        self.assertEqual(2, mock_sleep.call_count)
+        mock_sleep.assert_has_calls(2 * [mock.call(1)])
+        mock_rescan.assert_not_called()
+        mock_set_ctrls.assert_called_once()
+        mock_find_dev.assert_called_once()
+        portal = target.portals[-1]
+        mock_cli.assert_called_once_with([
+            'connect', '-a', portal.address, '-s', portal.port, '-t',
+            portal.transport, '-n', target.nqn, '-Q', '128', '-l', '-1'])
+        self.assertEqual(1, mock_log.call_count)
+
+    @ddt.data(70, errno.EALREADY)
+    @mock.patch.object(nvmeof.LOG, 'warning')
+    @mock.patch.object(nvmeof.LOG, 'error')
+    @mock.patch('time.sleep')
+    @mock.patch('time.time', side_effect=[0, 0.1, 0.6])
+    @mock.patch.object(nvmeof.Portal, 'reconnect_delay',
+                       new_callable=mock.PropertyMock, return_value=10)
+    @mock.patch.object(nvmeof.Portal, 'is_live',
+                       new_callable=mock.PropertyMock)
+    @mock.patch.object(nvmeof.Target, 'find_device')
+    @mock.patch.object(nvmeof.Target, 'set_portals_controllers')
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'run_nvme_cli')
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'rescan')
+    @mock.patch.object(nvmeof.Portal, 'state', new_callable=mock.PropertyMock)
+    def test__connect_target_race_unknown(
+            self, exit_code, mock_state, mock_rescan, mock_cli, mock_set_ctrls,
+            mock_find_dev, mock_is_live, mock_delay, mock_time, mock_sleep,
+            mock_log_err, mock_log_warn):
+        """Test connect target when portal is unknown after race."""
+        mock_cli.side_effect = putils.ProcessExecutionError(
+            exit_code=exit_code)
+        mock_state.side_effect = ['connecting', 'connecting', None,
+                                  'unknown']
+        mock_is_live.side_effect = [False, False, False, True]
+
+        target = self.conn_props.targets[0]
+        res = self.connector._connect_target(target)
+
+        self.assertEqual(mock_find_dev.return_value, res)
+        self.assertEqual(4, mock_state.call_count)
+        self.assertEqual(4, mock_is_live.call_count)
+        self.assertEqual(2, mock_delay.call_count)
+        self.assertEqual(2, mock_sleep.call_count)
+        mock_sleep.assert_has_calls(2 * [mock.call(1)])
+        mock_rescan.assert_not_called()
+        mock_set_ctrls.assert_called_once()
+        mock_find_dev.assert_called_once()
+        portal = target.portals[-1]
+        mock_cli.assert_called_once_with([
+            'connect', '-a', portal.address, '-s', portal.port, '-t',
+            portal.transport, '-n', target.nqn, '-Q', '128', '-l', '-1'])
+        self.assertEqual(1, mock_log_err.call_count)
+        self.assertEqual(1, mock_log_warn.call_count)
+
+    @mock.patch('time.sleep')
+    @mock.patch('time.time', side_effect=[0, 0.1, 0.6])
+    @mock.patch.object(nvmeof.Portal, 'reconnect_delay',
+                       new_callable=mock.PropertyMock, return_value=10)
+    @mock.patch.object(nvmeof.Portal, 'is_live',
+                       new_callable=mock.PropertyMock)
+    @mock.patch.object(nvmeof.Target, 'find_device')
+    @mock.patch.object(nvmeof.Target, 'set_portals_controllers')
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'run_nvme_cli')
+    @mock.patch.object(nvmeof.NVMeOFConnector, 'rescan')
+    @mock.patch.object(nvmeof.Portal, 'state', new_callable=mock.PropertyMock,
+                       return_value='connecting')
+    def test__connect_target_portals_connecting(
+            self, mock_state, mock_rescan, mock_cli, mock_set_ctrls,
+            mock_find_dev, mock_is_live, mock_delay, mock_time, mock_sleep):
+        """Test connect target when portals reconnect."""
+        # First pass everything connecting, second pass the second portal is up
+        mock_is_live.side_effect = [False, False, False, False, True]
+
+        # Connecting state changing after 2 sleeps
+        target = self.conn_props.targets[0]
+        res = self.connector._connect_target(target)
+
+        self.assertEqual(mock_find_dev.return_value, res)
+        self.assertEqual(3, mock_state.call_count)
+        self.assertEqual(5, mock_is_live.call_count)
+        self.assertEqual(3, mock_delay.call_count)
+        self.assertEqual(2, mock_sleep.call_count)
+        mock_sleep.assert_has_calls(2 * [mock.call(1)])
+        mock_rescan.assert_not_called()
+        mock_set_ctrls.assert_called_once()
+        mock_find_dev.assert_called_once()
+        mock_cli.assert_not_called()
 
     @mock.patch.object(nvmeof.NVMeOFConnector, 'stop_and_assemble_raid')
     @mock.patch.object(nvmeof.NVMeOFConnector, '_is_device_in_raid')
