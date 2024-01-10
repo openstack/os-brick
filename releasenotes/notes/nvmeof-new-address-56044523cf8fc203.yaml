@@ -1,0 +1,8 @@
+---
+fixes:
+  - |
+    NVMe-oF connector `bug #2035811
+    <https://bugs.launchpad.net/os-brick/+bug/2035811>`_: Fixed
+    attaching volumes on systems using newer NVMe kernel modules that present
+    additional information in ``/sys/class/nvme/nvme#/address``.
+
