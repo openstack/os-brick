@@ -1,0 +1,6 @@
+---
+fixes:
+  - |
+    NVMe-oF connector `bug #1961222
+    <https://bugs.launchpad.net/os-brick/+bug/1961222>`_: Fixed
+    support of newer NVMe CLI v2.
