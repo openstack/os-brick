@@ -64,7 +64,8 @@ class PrivNVMeTestCase(base.TestCase):
         hostnqn = mock.Mock()
         mock_exec.side_effect = [
             putils.ProcessExecutionError(exit_code=errno.ENOENT,
-                                         stdout="totally exist sub-command"),
+                                         stdout="totally exist sub-command",
+                                         stderr=''),
             (hostnqn, mock.sentinel.err)
         ]
 
@@ -83,17 +84,23 @@ class PrivNVMeTestCase(base.TestCase):
         mock_chmod.assert_called_once_with('/etc/nvme/hostnqn', 0o644)
         self.assertEqual(stripped_hostnqn, res)
 
+    @ddt.data((231, 'error: Invalid sub-command\n', ''),
+              (254, '', 'hostnqn is not available -- use nvme gen-hostnqn\n'))
+    @ddt.unpack
     @mock.patch('os.chmod')
     @mock.patch.object(builtins, 'open', new_callable=mock.mock_open)
     @mock.patch('os.makedirs')
     @mock.patch.object(rootwrap, 'custom_execute')
-    def test_create_hostnqn_generate_old_nvme_cli(self, mock_exec, mock_mkdirs,
-                                                  mock_open, mock_chmod):
+    def test_create_hostnqn_generate_old_nvme_cli(
+            self, exit_code, stdout, stderr, mock_exec, mock_mkdirs, mock_open,
+            mock_chmod):
+
         hostnqn = mock.Mock()
         mock_exec.side_effect = [
             putils.ProcessExecutionError(
-                exit_code=231,
-                stdout="error: Invalid sub-command\n"),
+                exit_code=exit_code,
+                stdout=stdout,
+                stderr=stderr),
             (hostnqn, mock.sentinel.err)
         ]
 
