@@ -15,11 +15,13 @@
 import os.path
 from unittest import mock
 
+import ddt
 
 from os_brick.initiator import linuxfc
 from os_brick.tests import base
 
 
+@ddt.ddt
 class LinuxFCTestCase(base.TestCase):
 
     def setUp(self):
@@ -70,85 +72,124 @@ class LinuxFCTestCase(base.TestCase):
             del connection_properties['initiator_target_lun_map']
         return hbas, connection_properties
 
-    def test__get_hba_channel_scsi_target_lun_single_wwpn(self):
-        execute_results = ('/sys/class/fc_transport/target6:0:1/port_name\n',
-                           '')
+    @staticmethod
+    def _get_expected_info(wwpns=["514f0c50023f6c00", "514f0c50023f6c01"],
+                           targets=1, remote_scan=False):
+
+        execute_results = []
+        expected_cmds = []
+        for i in range(0, targets):
+            expected_cmds += [
+                mock.call(f'grep -Gil "{wwpns[i]}" '
+                          '/sys/class/fc_transport/target6:*/port_name',
+                          shell=True)
+            ]
+            if remote_scan:
+                execute_results += [
+                    # We can only perform remote ports scan if the
+                    # fc_transport path returns empty output
+                    ('', ''),
+                    # This is returned from the fc_remote_ports path
+                    (f'/sys/class/fc_remote_ports/rport-6:0-{i+1}'
+                     '/port_name\n', ''),
+                ]
+                expected_cmds += [
+                    mock.call(f'grep -Gil "{wwpns[i]}" '
+                              '/sys/class/fc_remote_ports/rport-6:*/port_name',
+                              shell=True),
+                ]
+            else:
+                execute_results += [
+                    (f'/sys/class/fc_transport/target6:0:{i+1}/port_name\n',
+                     '')
+                ]
+
+        return execute_results, expected_cmds
+
+    @mock.patch('builtins.open')
+    @ddt.data(True, False)
+    def test__get_hba_channel_scsi_target_lun_single_wwpn(
+            self, remote_scan, mock_open):
+        execute_results, expected_cmds = self._get_expected_info(
+            remote_scan=remote_scan)
+        if remote_scan:
+            mock_open = mock_open.return_value.__enter__.return_value
+            mock_open.read.return_value = ('1\n')
         hbas, con_props = self.__get_rescan_info()
         con_props['target_wwn'] = con_props['target_wwn'][0]
         con_props['targets'] = con_props['targets'][0:1]
         with mock.patch.object(self.lfc, '_execute',
-                               return_value=execute_results) as execute_mock:
+                               side_effect=execute_results) as execute_mock:
             res = self.lfc._get_hba_channel_scsi_target_lun(hbas[0], con_props)
-            execute_mock.assert_called_once_with(
-                'grep -Gil "514f0c50023f6c00" '
-                '/sys/class/fc_transport/target6:*/port_name',
-                shell=True)
+            execute_mock.assert_has_calls(expected_cmds)
         expected = ([['0', '1', 1]], set())
         self.assertEqual(expected, res)
 
-    def test__get_hba_channel_scsi_target_lun_with_initiator_target_map(self):
-        execute_results = ('/sys/class/fc_transport/target6:0:1/port_name\n',
-                           '')
+    @mock.patch('builtins.open')
+    @ddt.data(True, False)
+    def test__get_hba_channel_scsi_target_lun_with_initiator_target_map(
+            self, remote_scan, mock_open):
+        execute_results, expected_cmds = self._get_expected_info(
+            wwpns=["514f0c50023f6c01"])
+        if remote_scan:
+            mock_open = mock_open.return_value.__enter__.return_value
+            mock_open.read.return_value = ('1\n')
         hbas, con_props = self.__get_rescan_info(zone_manager=True)
         con_props['target_wwn'] = con_props['target_wwn'][0]
         con_props['targets'] = con_props['targets'][0:1]
         hbas[0]['port_name'] = '50014380186af83e'
         with mock.patch.object(self.lfc, '_execute',
-                               return_value=execute_results) as execute_mock:
+                               side_effect=execute_results) as execute_mock:
             res = self.lfc._get_hba_channel_scsi_target_lun(hbas[0], con_props)
-            execute_mock.assert_called_once_with(
-                'grep -Gil "514f0c50023f6c01" '
-                '/sys/class/fc_transport/target6:*/port_name',
-                shell=True)
+            execute_mock.assert_has_calls(expected_cmds)
         expected = ([['0', '1', 1]], set())
         self.assertEqual(expected, res)
 
+    @mock.patch('builtins.open')
+    @ddt.data(True, False)
     def test__get_hba_channel_scsi_target_lun_with_initiator_target_map_none(
-            self):
-        execute_results = ('/sys/class/fc_transport/target6:0:1/port_name\n',
-                           '')
+            self, remote_scan, mock_open):
+        execute_results, expected_cmds = self._get_expected_info()
+        if remote_scan:
+            mock_open = mock_open.return_value.__enter__.return_value
+            mock_open.read.return_value = ('1\n')
         hbas, con_props = self.__get_rescan_info()
         con_props['target_wwn'] = con_props['target_wwn'][0]
         con_props['targets'] = con_props['targets'][0:1]
         con_props['initiator_target_map'] = None
         hbas[0]['port_name'] = '50014380186af83e'
         with mock.patch.object(self.lfc, '_execute',
-                               return_value=execute_results) as execute_mock:
+                               side_effect=execute_results) as execute_mock:
             res = self.lfc._get_hba_channel_scsi_target_lun(hbas[0], con_props)
-            execute_mock.assert_called_once_with(
-                'grep -Gil "514f0c50023f6c00" '
-                '/sys/class/fc_transport/target6:*/port_name',
-                shell=True)
+            execute_mock.assert_has_calls(expected_cmds)
         expected = ([['0', '1', 1]], set())
         self.assertEqual(expected, res)
 
-    def test__get_hba_channel_scsi_target_lun_multiple_wwpn(self):
-        execute_results = [
-            ['/sys/class/fc_transport/target6:0:1/port_name\n', ''],
-            ['/sys/class/fc_transport/target6:0:2/port_name\n', ''],
-        ]
+    @mock.patch('builtins.open')
+    @ddt.data(True, False)
+    def test__get_hba_channel_scsi_target_lun_multiple_wwpn(
+            self, remote_scan, mock_open):
+        execute_results, expected_cmds = self._get_expected_info(targets=2)
+        if remote_scan:
+            mock_open = mock_open.return_value.__enter__.return_value
+            mock_open.read.return_value = ('1\n')
         hbas, con_props = self.__get_rescan_info()
         with mock.patch.object(self.lfc, '_execute',
                                side_effect=execute_results) as execute_mock:
             res = self.lfc._get_hba_channel_scsi_target_lun(hbas[0], con_props)
-            expected_cmds = [
-                mock.call('grep -Gil "514f0c50023f6c00" '
-                          '/sys/class/fc_transport/target6:*/port_name',
-                          shell=True),
-                mock.call('grep -Gil "514f0c50023f6c01" '
-                          '/sys/class/fc_transport/target6:*/port_name',
-                          shell=True),
-            ]
             execute_mock.assert_has_calls(expected_cmds)
 
         expected = ([['0', '1', 1], ['0', '2', 1]], set())
         self.assertEqual(expected, res)
 
-    def test__get_hba_channel_scsi_target_lun_multiple_wwpn_and_luns(self):
-        execute_results = [
-            ['/sys/class/fc_transport/target6:0:1/port_name\n', ''],
-            ['/sys/class/fc_transport/target6:0:2/port_name\n', ''],
-        ]
+    @mock.patch('builtins.open')
+    @ddt.data(True, False)
+    def test__get_hba_channel_scsi_target_lun_multiple_wwpn_and_luns(
+            self, remote_scan, mock_open):
+        execute_results, expected_cmds = self._get_expected_info(targets=2)
+        if remote_scan:
+            mock_open = mock_open.return_value.__enter__.return_value
+            mock_open.read.return_value = ('1\n')
         hbas, con_props = self.__get_rescan_info()
         con_props['target_lun'] = [1, 7]
         con_props['targets'] = [
@@ -158,68 +199,51 @@ class LinuxFCTestCase(base.TestCase):
         with mock.patch.object(self.lfc, '_execute',
                                side_effect=execute_results) as execute_mock:
             res = self.lfc._get_hba_channel_scsi_target_lun(hbas[0], con_props)
-            expected_cmds = [
-                mock.call('grep -Gil "514f0c50023f6c00" '
-                          '/sys/class/fc_transport/target6:*/port_name',
-                          shell=True),
-                mock.call('grep -Gil "514f0c50023f6c01" '
-                          '/sys/class/fc_transport/target6:*/port_name',
-                          shell=True),
-            ]
             execute_mock.assert_has_calls(expected_cmds)
 
         expected = ([['0', '1', 1], ['0', '2', 7]], set())
         self.assertEqual(expected, res)
 
-    def test__get_hba_channel_scsi_target_lun_zone_manager(self):
-        execute_results = ('/sys/class/fc_transport/target6:0:1/port_name\n',
-                           '')
+    @mock.patch('builtins.open')
+    @ddt.data(True, False)
+    def test__get_hba_channel_scsi_target_lun_zone_manager(
+            self, remote_scan, mock_open):
+        execute_results, expected_cmds = self._get_expected_info()
+        if remote_scan:
+            mock_open = mock_open.return_value.__enter__.return_value
+            mock_open.read.return_value = ('1\n')
         hbas, con_props = self.__get_rescan_info(zone_manager=True)
         with mock.patch.object(self.lfc, '_execute',
-                               return_value=execute_results) as execute_mock:
+                               side_effect=execute_results) as execute_mock:
             res = self.lfc._get_hba_channel_scsi_target_lun(hbas[0], con_props)
-            execute_mock.assert_called_once_with(
-                'grep -Gil "514f0c50023f6c00" '
-                '/sys/class/fc_transport/target6:*/port_name',
-                shell=True)
+            execute_mock.assert_has_calls(expected_cmds)
         expected = ([['0', '1', 1]], set())
         self.assertEqual(expected, res)
 
-    def test__get_hba_channel_scsi_target_lun_not_found(self):
+    def test__get_hba_channel_scsi_target_lun_both_paths_not_found(self):
+        _, expected_cmds = self._get_expected_info()
         hbas, con_props = self.__get_rescan_info(zone_manager=True)
         with mock.patch.object(self.lfc, '_execute',
                                return_value=('', '')) as execute_mock:
             res = self.lfc._get_hba_channel_scsi_target_lun(hbas[0], con_props)
-            execute_mock.assert_called_once_with(
-                'grep -Gil "514f0c50023f6c00" '
-                '/sys/class/fc_transport/target6:*/port_name',
-                shell=True)
+            execute_mock.assert_has_calls(expected_cmds)
         self.assertEqual(([], set()), res)
 
     def test__get_hba_channel_scsi_target_lun_exception(self):
+        _, expected_cmds = self._get_expected_info()
         hbas, con_props = self.__get_rescan_info(zone_manager=True)
         with mock.patch.object(self.lfc, '_execute',
                                side_effect=Exception) as execute_mock:
             res = self.lfc._get_hba_channel_scsi_target_lun(hbas[0], con_props)
-            execute_mock.assert_called_once_with(
-                'grep -Gil "514f0c50023f6c00" '
-                '/sys/class/fc_transport/target6:*/port_name',
-                shell=True)
+            execute_mock.assert_has_calls(expected_cmds)
         self.assertEqual(([], {1}), res)
 
-    def test__get_hba_channel_scsi_target_lun_some_exception(self):
+    def test__get_hba_channel_scsi_target_lun_fc_transport_exception(self):
         execute_effects = [
             ('/sys/class/fc_transport/target6:0:1/port_name\n', ''),
             Exception()
         ]
-        expected_cmds = [
-            mock.call('grep -Gil "514f0c50023f6c00" '
-                      '/sys/class/fc_transport/target6:*/port_name',
-                      shell=True),
-            mock.call('grep -Gil "514f0c50023f6c01" '
-                      '/sys/class/fc_transport/target6:*/port_name',
-                      shell=True),
-        ]
+        _, expected_cmds = self._get_expected_info()
         hbas, con_props = self.__get_rescan_info()
 
         with mock.patch.object(self.lfc, '_execute',
@@ -228,6 +252,86 @@ class LinuxFCTestCase(base.TestCase):
             execute_mock.assert_has_calls(expected_cmds)
         expected = ([['0', '1', 1]], {1})
         self.assertEqual(expected, res)
+
+    @mock.patch('builtins.open')
+    def test__get_hba_channel_scsi_target_lun_fc_remote_ports_exception(
+            self, mock_open):
+        execute_effects = [
+            ('', ''),
+            ('/sys/class/fc_remote_ports/rport-6:0-1/port_name\n', ''),
+            ('', ''),
+            Exception()
+        ]
+        mock_open = mock_open.return_value.__enter__.return_value
+        mock_open.read.return_value = ('1\n')
+        _, expected_cmds = self._get_expected_info()
+        hbas, con_props = self.__get_rescan_info()
+
+        with mock.patch.object(self.lfc, '_execute',
+                               side_effect=execute_effects) as execute_mock:
+            res = self.lfc._get_hba_channel_scsi_target_lun(hbas[0], con_props)
+            execute_mock.assert_has_calls(expected_cmds)
+        expected = ([['0', '1', 1]], {1})
+        self.assertEqual(expected, res)
+
+    @mock.patch('builtins.open')
+    def test__get_hba_channel_scsi_target_open_oserror(
+            self, mock_open):
+        execute_effects, expected_cmds = self._get_expected_info(
+            targets=2, remote_scan=True)
+        mock_open = mock_open.return_value.__enter__.return_value
+        mock_open.read.side_effect = ['1\n', OSError()]
+        hbas, con_props = self.__get_rescan_info()
+
+        with mock.patch.object(self.lfc, '_execute',
+                               side_effect=execute_effects) as execute_mock:
+            res = self.lfc._get_hba_channel_scsi_target_lun(hbas[0], con_props)
+            execute_mock.assert_has_calls(expected_cmds)
+        expected = ([['0', '1', 1]], set())
+        self.assertEqual(expected, res)
+
+    def test__get_target_fc_transport_path(self):
+        path = '/sys/class/fc_transport/target6:'
+        execute_results = ('/sys/class/fc_transport/target6:0:1/port_name\n',
+                           '')
+
+        _, con_props = self.__get_rescan_info()
+        with mock.patch.object(self.lfc, '_execute',
+                               return_value=execute_results) as execute_mock:
+            ctl = self.lfc._get_target_fc_transport_path(
+                path, con_props['target_wwn'][0], 1)
+            execute_mock.assert_called_once_with(
+                'grep -Gil "514f0c50023f6c00" '
+                '/sys/class/fc_transport/target6:*/port_name',
+                shell=True)
+        self.assertEqual(['0', '1', 1], ctl)
+
+    @mock.patch('builtins.open')
+    def test__get_target_fc_remote_ports_path(self, mock_open):
+        path = '/sys/class/fc_remote_ports/rport-6:'
+        execute_results = [
+            ('/sys/class/fc_remote_ports/rport-6:0-1/port_name\n', ''),
+            ('1\n', ''),
+        ]
+        scsi_target_path = (
+            '/sys/class/fc_remote_ports/rport-6:0-1/scsi_target_id')
+        mock_open.return_value.__enter__.return_value.read.return_value = (
+            '1\n')
+        hbas, con_props = self.__get_rescan_info()
+        with mock.patch.object(self.lfc, '_execute',
+                               side_effect=execute_results) as execute_mock:
+            ctl = self.lfc._get_target_fc_remote_ports_path(
+                path, con_props['target_wwn'][0], 1)
+            expected_cmds = [
+                mock.call(
+                    'grep -Gil "514f0c50023f6c00" '
+                    '/sys/class/fc_remote_ports/rport-6:*/port_name',
+                    shell=True),
+            ]
+            execute_mock.assert_has_calls(expected_cmds)
+            mock_open.assert_called_once_with(scsi_target_path)
+
+        self.assertEqual(['0', '1', 1], ctl)
 
     def test_rescan_hosts_initiator_map(self):
         """Test FC rescan with initiator map and not every HBA connected."""
