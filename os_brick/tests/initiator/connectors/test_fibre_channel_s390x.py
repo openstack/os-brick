@@ -74,7 +74,7 @@ class FibreChannelConnectorS390XTestCase(test_connector.ConnectorTestCase):
         mock_deconfigure_scsi_device.assert_called_with(3, 5,
                                                         "0x0002000000000000")
         mock_get_fc_hbas_info.assert_called_once_with()
-        mock_get_possible_devices.assert_called_once_with([], [5, 2])
+        mock_get_possible_devices.assert_called_once_with([], [5, 2], None)
         self.assertFalse(bool(exc))
 
     @mock.patch.object(fibre_channel_s390x.FibreChannelConnectorS390X,
@@ -94,5 +94,5 @@ class FibreChannelConnectorS390XTestCase(test_connector.ConnectorTestCase):
         mock_deconfigure_scsi_device.assert_called_with(3, 5,
                                                         "0x0002000000000000")
         mock_get_fc_hbas_info.assert_called_once_with()
-        mock_get_possible_devices.assert_called_once_with([], [5, 2])
+        mock_get_possible_devices.assert_called_once_with([], [5, 2], None)
         self.assertTrue(bool(exc))

@@ -168,6 +168,17 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         # entry: [tcp, [1], 192.168.121.250:3260,1 ...]
         return [entry[2] for entry in self._get_iscsi_sessions_full()]
 
+    def _get_all_targets(
+            self,
+            connection_properties: dict) -> list[tuple[str, str, list]]:
+        addressing_mode = connection_properties.get('addressing_mode')
+        res = super()._get_all_targets(connection_properties)
+
+        return [(portal,
+                 iqn,
+                 self._linuxscsi.lun_for_addressing(lun, addressing_mode))
+                for portal, iqn, lun in res]
+
     def _get_ips_iqns_luns(
             self,
             connection_properties: dict,
