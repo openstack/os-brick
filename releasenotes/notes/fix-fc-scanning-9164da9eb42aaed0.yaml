@@ -1,0 +1,8 @@
+---
+fixes:
+  - |
+    FC connector `bug #2051237
+    <https://bugs.launchpad.net/os-brick/+bug/2051237>`_: Fix
+    issue with fibre channel connector scanning partial targets.
+    We search for target information in sysfs, first in fc_transport
+    and then in fc_report_ports.
