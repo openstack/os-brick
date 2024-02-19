@@ -71,8 +71,6 @@ class LVM(executor.Executor):
         self.vg_thin_pool = None
         self.vg_thin_pool_size = 0.0
         self.vg_thin_pool_free_space = 0.0
-        self._supports_snapshot_lv_activation: Optional[bool] = None
-        self._supports_lvchange_ignoreskipactivation: Optional[bool] = None
         self.vg_provisioned_capacity = 0.0
 
         # Ensure LVM_SYSTEM_DIR has been added to LVM.LVM_CMD_PREFIX
@@ -246,51 +244,6 @@ class LVM(executor.Executor):
                 version_tuple = tuple(map(int, r.group(1, 2, 3)))
                 return version_tuple
         raise exception.BrickException(message='Cannot parse LVM version')
-
-    @staticmethod
-    def supports_thin_provisioning(root_helper: str) -> bool:
-        """Static method to check for thin LVM support on a system.
-
-        :param root_helper: root_helper to use for execute
-        :returns: True if supported, False otherwise
-
-        """
-
-        return LVM.get_lvm_version(root_helper) >= (2, 2, 95)
-
-    @property
-    def supports_snapshot_lv_activation(self) -> bool:
-        """Property indicating whether snap activation changes are supported.
-
-        Check for LVM version >= 2.02.91.
-        (LVM2 git: e8a40f6 Allow to activate snapshot)
-
-        :returns: True/False indicating support
-        """
-
-        if self._supports_snapshot_lv_activation is not None:
-            return self._supports_snapshot_lv_activation
-
-        self._supports_snapshot_lv_activation = (
-            self.get_lvm_version(self._root_helper) >= (2, 2, 91))
-
-        return self._supports_snapshot_lv_activation
-
-    @property
-    def supports_lvchange_ignoreskipactivation(self) -> bool:
-        """Property indicating whether lvchange can ignore skip activation.
-
-        Check for LVM version >= 2.02.99.
-        (LVM2 git: ab789c1bc add --ignoreactivationskip to lvchange)
-        """
-
-        if self._supports_lvchange_ignoreskipactivation is not None:
-            return self._supports_lvchange_ignoreskipactivation
-
-        self._supports_lvchange_ignoreskipactivation = (
-            self.get_lvm_version(self._root_helper) >= (2, 2, 99))
-
-        return self._supports_lvchange_ignoreskipactivation
 
     @property
     def supports_full_pool_create(self) -> bool:
@@ -546,12 +499,6 @@ class LVM(executor.Executor):
 
         """
 
-        if not LVM.supports_thin_provisioning(self._root_helper):
-            LOG.error('Requested to setup thin provisioning, '
-                      'however current LVM version does not '
-                      'support it.')
-            return None
-
         if name is None:
             name = '%s-pool' % self.vg_name
 
@@ -709,12 +656,6 @@ class LVM(executor.Executor):
         :raises: putils.ProcessExecutionError
         """
 
-        # This is a no-op if requested for a snapshot on a version
-        # of LVM that doesn't support snapshot activation.
-        # (Assume snapshot LV is always active.)
-        if is_snapshot and not self.supports_snapshot_lv_activation:
-            return
-
         lv_path = self.vg_name + '/' + self._mangle_lv_name(name)
 
         # Must pass --yes to activate both the snap LV and its origin LV.
@@ -722,12 +663,11 @@ class LVM(executor.Executor):
         # and fails.
         cmd = ['lvchange', '-a', 'y', '--yes']
 
-        if self.supports_lvchange_ignoreskipactivation:
-            cmd.append('-K')
-            # If permanent=True is specified, drop the skipactivation flag in
-            # order to make this LV automatically activated after next reboot.
-            if permanent:
-                cmd += ['-k', 'n']
+        cmd.append('-K')
+        # If permanent=True is specified, drop the skipactivation flag in
+        # order to make this LV automatically activated after next reboot.
+        if permanent:
+            cmd += ['-k', 'n']
 
         cmd.append(lv_path)
 

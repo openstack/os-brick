@@ -279,55 +279,6 @@ class BrickLvmTestCase(base.TestCase):
         self.assertEqual(1,
                          len(self.vg.get_all_volume_groups('sudo', 'fake-vg')))
 
-    def test_thin_support(self):
-        # lvm.supports_thin() is a static method and doesn't
-        # use the self._executor fake we pass in on init
-        # so we need to stub processutils.execute appropriately
-
-        with mock.patch.object(priv_rootwrap, 'execute',
-                               side_effect=self.fake_execute):
-            self.assertTrue(self.vg.supports_thin_provisioning('sudo'))
-
-        with mock.patch.object(priv_rootwrap, 'execute',
-                               side_effect=self.fake_pretend_lvm_version):
-            self.assertTrue(self.vg.supports_thin_provisioning('sudo'))
-
-        with mock.patch.object(priv_rootwrap, 'execute',
-                               side_effect=self.fake_old_lvm_version):
-            self.assertFalse(self.vg.supports_thin_provisioning('sudo'))
-
-        with mock.patch.object(priv_rootwrap, 'execute',
-                               side_effect=self.fake_customised_lvm_version):
-            self.assertTrue(self.vg.supports_thin_provisioning('sudo'))
-
-    def test_snapshot_lv_activate_support(self):
-        self.vg._supports_snapshot_lv_activation = None
-        with mock.patch.object(priv_rootwrap, 'execute',
-                               side_effect=self.fake_execute):
-            self.assertTrue(self.vg.supports_snapshot_lv_activation)
-
-        self.vg._supports_snapshot_lv_activation = None
-        with mock.patch.object(priv_rootwrap, 'execute',
-                               side_effect=self.fake_old_lvm_version):
-            self.assertFalse(self.vg.supports_snapshot_lv_activation)
-
-        self.vg._supports_snapshot_lv_activation = None
-
-    def test_lvchange_ignskipact_support_yes(self):
-        """Tests if lvchange -K is available via a lvm2 version check."""
-
-        self.vg._supports_lvchange_ignoreskipactivation = None
-        with mock.patch.object(priv_rootwrap, 'execute',
-                               side_effect=self.fake_pretend_lvm_version):
-            self.assertTrue(self.vg.supports_lvchange_ignoreskipactivation)
-
-        self.vg._supports_lvchange_ignoreskipactivation = None
-        with mock.patch.object(priv_rootwrap, 'execute',
-                               side_effect=self.fake_old_lvm_version):
-            self.assertFalse(self.vg.supports_lvchange_ignoreskipactivation)
-
-        self.vg._supports_lvchange_ignoreskipactivation = None
-
     def test_thin_pool_creation_manual(self):
         # The size of fake-vg volume group is 10g, so the calculated thin
         # pool size should be 9.5g (95% of 10g).
