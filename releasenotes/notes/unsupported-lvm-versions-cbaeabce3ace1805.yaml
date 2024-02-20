@@ -1,0 +1,14 @@
+---
+upgrade:
+  - |
+    Starting with this release, we removed checks for the
+    LVM features having versions < 2.02.115. It includes
+    the following:
+
+    * LV activation support (2.02.91)
+    * Thin provisioning (2.02.95)
+    * --ignoreactivationskip (2.02.99)
+    * lvcreate -l 100%FREE (2.02.115)
+
+    Now the minimum supported LVM version is 2.02.115 which
+    was released in 2015.
