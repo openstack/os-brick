@@ -339,8 +339,9 @@ class RBDConnectorTestCase(test_base_rbd.RBDConnectorTestMixin,
 
         mock_execute.assert_called_once_with(
             'rbd', 'unmap', '/dev/rbd0', '--id', 'fake_user', '--mon_host',
-            '192.168.10.2:6789', '--conf', mock.sentinel.conf,
-            root_helper=connector._root_helper, run_as_root=True)
+            '192.168.10.2:6789,192.168.10.3:6789', '--conf',
+            mock.sentinel.conf, root_helper=connector._root_helper,
+            run_as_root=True)
         mock_delete.assert_called_once_with(mock.sentinel.conf)
 
     @mock.patch.object(priv_rootwrap, 'execute', return_value=None)

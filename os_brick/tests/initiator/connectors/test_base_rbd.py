@@ -30,8 +30,8 @@ class RBDConnectorTestMixin(object):
         self.pool = 'fake_pool'
         self.volume = 'fake_volume'
         self.clustername = 'fake_ceph'
-        self.hosts = ['192.168.10.2']
-        self.ports = ['6789']
+        self.hosts = ['192.168.10.2', '192.168.10.3']
+        self.ports = ['6789', '6789']
         self.keyring = "[client.cinder]\n  key = test\n"
         self.image_name = '%s/%s' % (self.pool, self.volume)
 
@@ -72,13 +72,15 @@ class TestRBDConnectorMixin(RBDConnectorTestMixin, base.TestCase):
     def test_get_rbd_args(self):
         res = self._conn._get_rbd_args(self.connection_properties, None)
         expected = ['--id', self.user,
-                    '--mon_host', self.hosts[0] + ':' + self.ports[0]]
+                    '--mon_host', self.hosts[0] + ':' + self.ports[0] + ","
+                    + self.hosts[1] + ':' + self.ports[1]]
         self.assertEqual(expected, res)
 
     def test_get_rbd_args_with_conf(self):
         res = self._conn._get_rbd_args(self.connection_properties,
                                        mock.sentinel.conf_path)
         expected = ['--id', self.user,
-                    '--mon_host', self.hosts[0] + ':' + self.ports[0],
+                    '--mon_host', self.hosts[0] + ':' + self.ports[0] + ","
+                    + self.hosts[1] + ':' + self.ports[1],
                     '--conf', mock.sentinel.conf_path]
         self.assertEqual(expected, res)

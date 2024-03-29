@@ -50,8 +50,7 @@ class RBDConnectorMixin(object):
                         zip(
                             cls._sanitize_mon_hosts(monitor_ips),
                             monitor_ports)]
-            for monitor in monitors:
-                args += ['--mon_host', monitor]
+            args += ['--mon_host', (','.join(monitors))]
 
         if conf:
             args += ['--conf', conf]
