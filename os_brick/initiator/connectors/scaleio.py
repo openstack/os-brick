@@ -531,6 +531,10 @@ class ScaleIOConnector(base.BaseLinuxConnector):
                         'err': response['message']})
                 LOG.error(msg)
                 raise exception.BrickException(message=msg)
+        else:
+            if 'device_path' in connection_properties:
+                path = connection_properties['device_path']
+                self._wait_for_remove_volume_path(path)
 
     @utils.connect_volume_undo_prepare_result
     def extend_volume(self, connection_properties):
@@ -549,3 +553,21 @@ class ScaleIOConnector(base.BaseLinuxConnector):
         msg = (_("Error extending ScaleIO volume"))
         LOG.error(msg)
         raise exception.BrickException(message=msg)
+
+    # NOTE: Usually 5 retries is enough to find the volume.
+    # If there are network issues, it could take much longer. Set
+    # the max retries to 15 to make sure we can find the volume.
+    @utils.retry(exception.BrickException,
+                 retries=15,
+                 backoff_rate=1)
+    def _wait_for_remove_volume_path(self, path):
+        if os.path.exists(path):
+            msg = (_("ScaleIO volume %(volume_id)s found "
+                     "after disconnect operation at path %(path)s") %
+                   {'volume_id': self.volume_id, 'path': path})
+            LOG.debug(msg)
+            raise exception.BrickException(message=msg)
+        else:
+            LOG.info("ScaleIO disconnect volume %(volume_id)s "
+                     "removed at path %(path)s.",
+                     {'volume_id': self.volume_id, 'path': path})
