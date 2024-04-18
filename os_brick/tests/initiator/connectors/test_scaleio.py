@@ -357,3 +357,30 @@ class ScaleIOConnectorTestCase(test_connector.ConnectorTestCase):
             scaleio.CONNECTOR_CONF_PATH,
             connection_properties['config_group'],
             False)
+
+    @mock.patch('tenacity.wait_exponential')
+    @mock.patch.object(os.path, 'exists', return_value=True)
+    def test_disconnect_volume_wait_for_path_not_removed(self,
+                                                         path_mock,
+                                                         wait_mock):
+        self.fake_connection_properties['device_path'] = ('/dev/'
+                                                          'disk/by-id/'
+                                                          'emc-vol-'
+                                                          '00df72815d3b900f'
+                                                          '-d4f7289200000023')
+        self.assertRaises(exception.BrickException,
+                          self.test_disconnect_volume)
+        wait_mock.assert_called_once_with(multiplier=1, min=0, exp_base=1)
+
+    @mock.patch('tenacity.wait_exponential')
+    @mock.patch.object(os.path, 'exists', return_value=False)
+    def test_disconnect_volume_wait_for_path_removed(self,
+                                                     path_mock,
+                                                     wait_mock):
+        self.fake_connection_properties['device_path'] = ('/dev/'
+                                                          'disk/by-id/'
+                                                          'emc-vol-'
+                                                          '00df72815d3b900f'
+                                                          '-d4f7289200000023')
+        self.test_disconnect_volume()
+        wait_mock.assert_called_once_with(multiplier=1, min=0, exp_base=1)
