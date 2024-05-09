@@ -90,8 +90,8 @@ class LinuxFCTestCase(base.TestCase):
                     # fc_transport path returns empty output
                     ('', ''),
                     # This is returned from the fc_remote_ports path
-                    (f'/sys/class/fc_remote_ports/rport-6:0-{i+1}'
-                     '/port_name\n', ''),
+                    ('/sys/class/fc_remote_ports/'
+                     f'rport-6:0-{i+1}/port_name\n', ''),  # noqa: E226
                 ]
                 expected_cmds += [
                     mock.call(f'grep -Gil "{wwpns[i]}" '
@@ -100,8 +100,8 @@ class LinuxFCTestCase(base.TestCase):
                 ]
             else:
                 execute_results += [
-                    (f'/sys/class/fc_transport/target6:0:{i+1}/port_name\n',
-                     '')
+                    ('/sys/class/fc_transport/'
+                     f'target6:0:{i+1}/port_name\n', '')  # noqa: E226
                 ]
 
         return execute_results, expected_cmds
