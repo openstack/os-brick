@@ -787,8 +787,11 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         if not mpath:
             LOG.warning('No dm was created, connection to volume is probably '
                         'bad and will perform poorly.')
-        elif not wwn:
-            wwn = self._linuxscsi.get_sysfs_wwn(found, mpath)
+        else:
+            # Wait for multipath device to be ready for I/O
+            self._linuxscsi.wait_for_mpath_device(mpath)
+            if not wwn:
+                wwn = self._linuxscsi.get_sysfs_wwn(found, mpath)
 
         assert wwn is not None
         return self._get_connect_result(connection_properties, wwn, found,

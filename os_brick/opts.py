@@ -23,6 +23,24 @@ _opts = [
                     'for compute nodes, but not for HCI deployments or '
                     'controllers where Glance uses Cinder as a backend, as '
                     'locks should use the same directory.'),
+    cfg.IntOpt('wait_mpath_device_attempts',
+               default=4,
+               min=1,
+               help='Number of attempts for the multipath device to be ready '
+                    'for I/O after it was created. Readiness is checked with '
+                    '``multipath -C``. See related '
+                    '``wait_mpath_device_interval`` config option. Default '
+                    'value is 4.'),
+    cfg.IntOpt('wait_mpath_device_interval',
+               default=1,
+               min=1,
+               help='Interval value to wait for multipath device to be ready '
+                    'for I/O. Max number of attempts is set in '
+                    '``wait_mpath_device_attempts``. Time in seconds to wait '
+                    'for each retry is ``base ^ attempt * interval``, so for '
+                    '4 attempts (1 attempt 3 retries) and 1 second interval '
+                    'will yield: 2, 4 and 8 seconds. Note that there is no '
+                    'wait before first attempt. Default value is 1.'),
 ]
 
 cfg.CONF.register_opts(_opts, group='os_brick')

@@ -1443,3 +1443,39 @@ loop0                                     0"""
     def test_lun_for_addressing_sam3_flat(self, original_lun, expected_lun):
         lun = self.linuxscsi.lun_for_addressing(original_lun, 'SAM3-flat')
         self.assertEqual(expected_lun, lun)
+
+    @mock.patch.object(linuxscsi, 'LOG')
+    @mock.patch.object(linuxscsi.LinuxSCSI, '_execute')
+    def test_wait_for_mpath_device(self, exec_mock, mock_log):
+        exec_mock.return_value = (
+            "3293379.070675 | /dev/dm-7: path sdb is usable",
+            None,
+        )
+        mpath_name = 'dm-7'
+        self.linuxscsi.wait_for_mpath_device(mpath_name)
+
+        self.assertEqual(1, exec_mock.call_count)
+        exec_mock.assert_called_once_with(
+            'multipath', '-C', mpath_name,
+            attempts=4, interval=1,
+            run_as_root=True,
+            root_helper=self.linuxscsi._root_helper)
+        mock_log.error.assert_not_called()
+
+    @mock.patch.object(linuxscsi, 'LOG')
+    @mock.patch.object(linuxscsi.LinuxSCSI, '_execute')
+    def test_wait_for_mpath_device_fails(self, exec_mock, mock_log):
+        exec_mock.side_effect = putils.ProcessExecutionError
+
+        mpath_name = 'dm-7'
+        exc = self.assertRaises(putils.ProcessExecutionError,
+                                self.linuxscsi.wait_for_mpath_device, 'dm-7')
+
+        exec_mock.assert_called_once_with(
+            'multipath', '-C', mpath_name,
+            attempts=4, interval=1,
+            run_as_root=True,
+            root_helper=self.linuxscsi._root_helper)
+        mock_log.error.assert_called_once_with(
+            "Failed to get mpath device %(mpath)s ready for "
+            "I/O: %(except)s", {'mpath': mpath_name, 'except': exc})
