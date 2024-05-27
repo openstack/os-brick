@@ -286,7 +286,12 @@ class FibreChannelConnector(base.BaseLinuxConnector):
             if multipath_id:
                 # only set the multipath_id if we found one
                 device_info['multipath_id'] = multipath_id
-
+            if self.device_name:
+                device = os.path.basename(self.device_name)
+                mpath = self._linuxscsi.find_sysfs_multipath_dm(
+                    [device])
+                # Wait for multipath device to be ready for I/O
+                self._linuxscsi.wait_for_mpath_device(mpath)
         else:
             device_path = self.host_device
 
