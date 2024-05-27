@@ -1,0 +1,16 @@
+---
+fixes:
+  - |
+    `Bug #2067949 <https://bugs.launchpad.net/cinder/+bug/2067949>`_:
+    Fixed issue where we try to write into a multipath device and fail
+    since it is not ready for I/O. Now we wait until the I/O is likely
+    to succeed.
+    We introduced 2 new config options to make the wait time
+    configurable:
+
+    * ``wait_mpath_device_attempts``
+    * ``wait_mpath_device_interval``
+
+    These options defaults to 4 attempts and 1 second interval
+    respectively. See help text of the config options for more
+    information.
