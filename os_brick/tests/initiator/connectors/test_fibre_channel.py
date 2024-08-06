@@ -291,6 +291,7 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
                           connection_info['data'])
 
     @mock.patch.object(linuxscsi.LinuxSCSI, 'find_multipath_device_path')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'wait_for_mpath_device')
     def _test_connect_volume_multipath(self, get_device_info_mock,
                                        get_scsi_wwn_mock,
                                        get_fc_hbas_info_mock,
@@ -301,6 +302,7 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
                                        find_mp_dev_mock,
                                        access_mode,
                                        should_wait_for_rw,
+                                       wait_mpath_device_mock,
                                        find_mp_device_path_mock):
         self.connector.use_multipath = True
         get_fc_hbas_mock.side_effect = self.fake_get_fc_hbas
