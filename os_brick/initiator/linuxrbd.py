@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 import io
-from typing import NoReturn, Optional  # noqa: H301
+from typing import NoReturn, Optional
 
 from oslo_log import log as logging
 

@@ -20,7 +20,7 @@ from __future__ import annotations
 import math
 import os
 import re
-from typing import Any, Callable, Optional  # noqa: H301
+from typing import Any, Callable, Optional
 
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging

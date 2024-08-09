@@ -17,7 +17,7 @@
 from __future__ import annotations
 
 import traceback
-from typing import Any, Optional  # noqa: H301
+from typing import Any, Optional
 
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging

@@ -21,7 +21,7 @@ import glob
 import json
 import os.path
 import time
-from typing import (Callable, Optional, Sequence, Type, Union)  # noqa: H301
+from typing import (Callable, Optional, Sequence, Type, Union)
 import uuid as uuid_lib
 
 from oslo_concurrency import processutils as putils

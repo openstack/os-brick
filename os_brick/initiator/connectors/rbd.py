@@ -15,7 +15,7 @@ from __future__ import annotations
 import os
 import tempfile
 import typing
-from typing import Any, Optional, Union  # noqa: H301
+from typing import Any, Optional, Union
 
 if typing.TYPE_CHECKING:
     import io

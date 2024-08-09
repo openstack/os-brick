@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import errno
 import os
-from typing import Optional  # noqa: H301
+from typing import Optional
 
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
