@@ -18,6 +18,8 @@ import queue
 from unittest import mock
 from unittest.mock import mock_open
 
+import psutil
+
 from os_brick import exception
 from os_brick.initiator.connectors import lightos
 from os_brick.initiator import linuxscsi
@@ -26,6 +28,9 @@ from os_brick.tests.initiator import test_connector
 from os_brick import utils
 
 FAKE_NQN = "nqn.fake.qnq"
+FAKE_HOST_IPS = [
+    "1234:5678:9abc:def0:1234:5678:9abc:def0",
+    "1234:5678:0:42::8a2e:370:7334", '172.17.0.1']
 
 FAKE_LIGHTOS_CLUSTER_NODES = {
     "nodes": [
@@ -80,13 +85,16 @@ class LightosConnectorTestCase(test_connector.ConnectorTestCase):
             lightos_nodes=lightos_nodes
         )
 
+    @mock.patch.object(lightos.LightOSConnector, 'get_ip_addresses',
+                       return_value=FAKE_HOST_IPS)
     @mock.patch.object(utils, 'get_host_nqn',
                        return_value=FAKE_NQN)
     @mock.patch.object(lightos.LightOSConnector, 'find_dsc',
                        return_value=True)
-    def test_get_connector_properties(self, mock_nqn, mock_dsc):
+    def test_get_connector_properties(self, mock_nqn, mock_dsc, mock_host_ips):
         props = self.connector.get_connector_properties(None)
-        expected_props = {"nqn": FAKE_NQN, "found_dsc": True}
+        expected_props = {"nqn": FAKE_NQN, "found_dsc": True,
+                          "host_ips": FAKE_HOST_IPS}
         self.assertEqual(expected_props, props)
 
     @mock.patch.object(lightos.http.client.HTTPConnection, "request",
@@ -201,6 +209,28 @@ class LightosConnectorTestCase(test_connector.ConnectorTestCase):
         connection_properties = {'uuid': FAKE_VOLUME_UUID}
         self.assertEqual(self.connector.extend_volume(connection_properties),
                          NUM_BLOCKS_IN_GIB * BLOCK_SIZE)
+
+    def mock_net_if_addr():
+        class MockSnicAdd:
+            def __init__(self, address):
+                self.address = address
+
+        return {
+            'lo': [
+                MockSnicAdd(address='127.0.0.1'),
+                MockSnicAdd(address='::1')
+            ],
+            'wlp0s20f3': [
+                MockSnicAdd(address=FAKE_HOST_IPS[2]),
+                MockSnicAdd(address=FAKE_HOST_IPS[1]),
+                MockSnicAdd(address=f'{FAKE_HOST_IPS[0]}%wlp0s20f3')
+            ]
+        }
+
+    @mock.patch.object(psutil, 'net_if_addrs', new=mock_net_if_addr)
+    def test_get_ips(self):
+        self.assertEqual(sorted(self.connector.get_ip_addresses()),
+                         sorted(FAKE_HOST_IPS))
 
     def test_monitor_message_queue_delete(self):
         message_queue = queue.Queue()

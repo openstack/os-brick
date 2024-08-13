@@ -24,6 +24,8 @@ import traceback
 
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
+from oslo_utils import netutils
+import psutil
 
 from os_brick import exception
 from os_brick.i18n import _
@@ -63,6 +65,37 @@ class LightOSConnector(base.BaseLinuxConnector):
         self.DISCOVERY_DIR_PATH = '/etc/discovery-client/discovery.d/'
 
     @staticmethod
+    def get_ip_addresses():
+        """Find all IPs for the host machine, return list of IP addresses."""
+        def get_ip_addresses_psutil():
+            ip_addresses = []
+            for interface, snics in psutil.net_if_addrs().items():
+                for snic in snics:
+                    # Collect each (interface, address) tuple
+                    ip_addresses.append((interface, snic.address))
+            return ip_addresses
+
+        loop_back = ['lo']
+        ips = []
+        is_ipv6_enabled = netutils.is_ipv6_enabled()
+        iface_with_ips = get_ip_addresses_psutil()
+        for iface_ip_tuple in iface_with_ips:
+            iface = iface_ip_tuple[0]
+            ip = iface_ip_tuple[1]
+            if iface in loop_back:
+                continue
+            if ip == "":
+                continue
+            if is_ipv6_enabled and netutils.is_valid_ipv6(ip):
+                parts = ip.split("%")
+                ip = parts[0]
+                ips.append(ip)
+
+            elif netutils.is_valid_ipv4(ip):
+                ips.append(ip)
+        return ips
+
+    @staticmethod
     def get_connector_properties(root_helper, *args, **kwargs):
         """The LightOS connector properties."""
         props = {}
@@ -71,6 +104,9 @@ class LightOSConnector(base.BaseLinuxConnector):
                                              execute=kwargs.get('execute'))
         hostnqn = utils.get_host_nqn()
         found_dsc = lightos_connector.find_dsc()
+        host_ips = lightos_connector.get_ip_addresses()
+        LOG.info('Current host hostNQN %s and IP(s) are %s ', hostnqn,
+                 host_ips)
 
         if not found_dsc:
             LOG.debug('LIGHTOS: did not find dsc, continuing anyway.')
@@ -80,6 +116,7 @@ class LightOSConnector(base.BaseLinuxConnector):
                       hostnqn, found_dsc)
             props['nqn'] = hostnqn
             props['found_dsc'] = found_dsc
+            props['host_ips'] = host_ips
         else:
             LOG.debug('LIGHTOS: no hostnqn found.')
 
