@@ -17,6 +17,7 @@
 import abc
 
 from os_brick import executor
+from os_brick import utils
 
 
 class VolumeEncryptor(executor.Executor, metaclass=abc.ABCMeta):
@@ -46,6 +47,10 @@ class VolumeEncryptor(executor.Executor, metaclass=abc.ABCMeta):
         :param: the connection information used to attach the volume
         """
         return self._key_manager.get(context, self.encryption_key_id)
+
+    def _get_encryption_key_as_passphrase(self, context):
+        key = self._get_key(context)
+        return utils.get_passphrase_from_secret(key)
 
     @abc.abstractmethod
     def attach_volume(self, context, **kwargs):

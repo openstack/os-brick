@@ -13,12 +13,39 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import binascii
 from unittest import mock
 
+from castellan.common import objects as castellan_objects
 from castellan.tests.unit.key_manager import fake
 
 from os_brick import encryptors
 from os_brick.tests import base
+
+
+def fake__get_key_symmetric(passphrase):
+    raw = bytes(binascii.unhexlify(passphrase))
+    symmetric_key = castellan_objects.symmetric_key.SymmetricKey(
+        'AES', len(raw) * 8, raw)
+    return symmetric_key
+
+
+def fake__get_key_passphrase(passphrase):
+    raw = passphrase.encode('utf-8')
+    passphrase_key = castellan_objects.passphrase.Passphrase(raw)
+    return passphrase_key
+
+
+class BaseVolumeEncryptor(encryptors.base.VolumeEncryptor):
+
+    def attach_volume(self, context, **kwargs):
+        pass
+
+    def detach_volume(self, **kwargs):
+        pass
+
+    def extend_volume(self, context, **kwargs):
+        pass
 
 
 class VolumeEncryptorTestCase(base.TestCase):
@@ -84,6 +111,45 @@ class BaseEncryptorTestCase(VolumeEncryptorTestCase):
                                  encryptors.nop.NoOpEncryptor)
         self._test_get_encryptor('nova.volume.encryptors.nop.NoopEncryptor',
                                  encryptors.nop.NoOpEncryptor)
+
+    @mock.patch('os_brick.encryptors.base.VolumeEncryptor._get_key')
+    def test__get_encryption_key_as_passphrase_hexlify(self, mock_key):
+        """Test passphrase retrieval for secret type 'symmetric'.
+
+        This should hexlify the secret in _get_encryption_key_as_passphrase.
+        """
+        base_enc = BaseVolumeEncryptor(
+            root_helper=self.root_helper,
+            connection_info=self.connection_info,
+            keymgr=self.keymgr
+        )
+        fake_key_plain = 'passphrase-in-clear-text'
+        fake_key_hexlified = binascii.hexlify(fake_key_plain.encode('utf-8'))
+
+        mock_key.return_value = fake__get_key_symmetric(fake_key_hexlified)
+        passphrase = base_enc._get_encryption_key_as_passphrase(
+            mock.sentinel.context)
+        mock_key.assert_called_once_with(mock.sentinel.context)
+        self.assertEqual(passphrase, fake_key_hexlified.decode('utf-8'))
+
+    @mock.patch('os_brick.encryptors.base.VolumeEncryptor._get_key')
+    def test__get_encryption_key_as_passphrase(self, mock_key):
+        """Test passphrase retrieval for secret type 'passphrase'.
+
+        This should skip the hexlify step in _get_encryption_key_as_passphrase.
+        """
+        base_enc = BaseVolumeEncryptor(
+            root_helper=self.root_helper,
+            connection_info=self.connection_info,
+            keymgr=self.keymgr
+        )
+        fake_key_plain = 'passphrase-in-clear-text'
+
+        mock_key.return_value = fake__get_key_passphrase(fake_key_plain)
+        passphrase = base_enc._get_encryption_key_as_passphrase(
+            mock.sentinel.context)
+        mock_key.assert_called_once_with(mock.sentinel.context)
+        self.assertEqual(passphrase, fake_key_plain)
 
     def test_get_error_encryptors(self):
         encryption = {'control_location': 'front-end',

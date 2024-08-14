@@ -13,7 +13,6 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import binascii
 import os
 
 from oslo_concurrency import processutils
@@ -97,10 +96,6 @@ class CryptsetupEncryptor(base.VolumeEncryptor):
             return False
         return True
 
-    def _get_passphrase(self, key):
-        """Convert raw key to string."""
-        return binascii.hexlify(key).decode('utf-8')
-
     def _open_volume(self, passphrase, **kwargs):
         """Open the LUKS partition on the volume using passphrase.
 
@@ -143,8 +138,7 @@ class CryptsetupEncryptor(base.VolumeEncryptor):
             "any existing volumes using this encryptor to the 'luks' "
             "LuksEncryptor or 'luks2' Luks2Encryptor encryptors as soon as "
             "possible.")
-        key = self._get_key(context).get_encoded()
-        passphrase = self._get_passphrase(key)
+        passphrase = self._get_encryption_key_as_passphrase(context)
 
         self._open_volume(passphrase, **kwargs)
 

@@ -254,17 +254,13 @@ class LuksEncryptorTestCase(test_base.VolumeEncryptorTestCase):
 
     @mock.patch('os_brick.utils.get_device_size')
     @mock.patch.object(luks.LuksEncryptor, '_execute')
-    @mock.patch.object(luks.LuksEncryptor, '_get_passphrase')
-    @mock.patch.object(luks.LuksEncryptor, '_get_key')
-    def test_extend_volume(self, mock_key, mock_pass, mock_exec, mock_size):
+    @mock.patch.object(luks.LuksEncryptor, '_get_encryption_key_as_passphrase')
+    def test_extend_volume(self, mock_pass, mock_exec, mock_size):
         encryptor = self.encryptor
         res = encryptor.extend_volume(mock.sentinel.context)
         self.assertEqual(mock_size.return_value, res)
 
-        mock_key.assert_called_once_with(mock.sentinel.context)
-        mock_key.return_value.get_encoded.assert_called_once_with()
-        key = mock_key.return_value.get_encoded.return_value
-        mock_pass.assert_called_once_with(key)
+        mock_pass.assert_called_once_with(mock.sentinel.context)
         mock_exec.assert_called_once_with(
             'cryptsetup', 'resize', encryptor.dev_path,
             process_input=mock_pass.return_value, run_as_root=True,
