@@ -1,0 +1,6 @@
+---
+fixes:
+  - |
+    `Bug #2012251 <https://bugs.launchpad.net/os-brick/+bug/2012251>`_: Fixed
+    issue when disconnecting iSCSI volume when ``force`` and ``ignore_errors``
+    are set to ``True`` and flushing multipath device fails.
