@@ -26,6 +26,7 @@ import time
 from typing import Optional
 
 from oslo_concurrency import processutils as putils
+from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_utils import excutils
 
@@ -36,6 +37,7 @@ from os_brick.privileged import rootwrap as priv_rootwrap
 from os_brick import utils
 
 LOG = logging.getLogger(__name__)
+CONF = cfg.CONF
 
 MULTIPATH_ERROR_REGEX = re.compile(r"\w{3} \d+ \d\d:\d\d:\d\d \|.*$")
 MULTIPATH_WWID_REGEX = re.compile(r"\((?P<wwid>.+)\)")
@@ -853,3 +855,20 @@ class LinuxSCSI(executor.Executor):
         if map_name and self.get_dm_name(mpath):
             raise exception.BrickException("Multipath doesn't go away")
         LOG.debug('Multipath %s no longer present', mpath)
+
+    def wait_for_mpath_device(self, mpath):
+        """Wait for multipath device to become ready for I/O.
+
+        mpath is the kernel name of the device (dm-*) which is the
+        expected argument for multipath -C command.
+        """
+        try:
+            self._execute('multipath', '-C', mpath,
+                          attempts=CONF.os_brick.wait_mpath_device_attempts,
+                          interval=CONF.os_brick.wait_mpath_device_interval,
+                          run_as_root=True,
+                          root_helper=self._root_helper)
+        except putils.ProcessExecutionError as exc:
+            LOG.error("Failed to get mpath device %(mpath)s ready for "
+                      "I/O: %(except)s", {'mpath': mpath, 'except': exc})
+            raise
