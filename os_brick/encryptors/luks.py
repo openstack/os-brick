@@ -13,7 +13,6 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import binascii
 import os
 
 from oslo_concurrency import processutils
@@ -160,10 +159,6 @@ class LuksEncryptor(base.VolumeEncryptor):
                       root_helper=self._root_helper,
                       attempts=3)
 
-    def _get_passphrase(self, key):
-        """Convert raw key to string."""
-        return binascii.hexlify(key).decode('utf-8')
-
     def _open_volume(self, passphrase, **kwargs):
         """Opens the LUKS partition on the volume using passphrase.
 
@@ -184,8 +179,7 @@ class LuksEncryptor(base.VolumeEncryptor):
         original symbolic link to refer to the device mounted by dm-crypt.
         """
 
-        key = self._get_key(context).get_encoded()
-        passphrase = self._get_passphrase(key)
+        passphrase = self._get_encryption_key_as_passphrase(context)
 
         try:
             self._open_volume(passphrase, **kwargs)
@@ -229,8 +223,7 @@ class LuksEncryptor(base.VolumeEncryptor):
         """Extend an encrypted volume and return the decrypted volume size."""
         symlink = self.symlink_path
         LOG.debug('Resizing mapping %s to match underlying device', symlink)
-        key = self._get_key(context).get_encoded()
-        passphrase = self._get_passphrase(key)
+        passphrase = self._get_encryption_key_as_passphrase(context)
         self._execute('cryptsetup', 'resize', symlink,
                       process_input=passphrase,
                       run_as_root=True, check_exit_code=True,

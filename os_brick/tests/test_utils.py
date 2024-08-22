@@ -18,6 +18,7 @@ import io
 import time
 from unittest import mock
 
+from castellan.common import objects as castellan_objects
 import ddt
 
 from os_brick import exception
@@ -107,6 +108,35 @@ class TestUtils(base.TestCase):
         mock_execute._execute.assert_called_once_with(
             'dd', 'if=/dev/fake', 'of=/dev/null', 'count=1',
             run_as_root=True, root_helper=mock_execute._root_helper)
+
+    @mock.patch('binascii.hexlify')
+    @ddt.data(
+        castellan_objects.passphrase.Passphrase(b'test-passphrase'),
+        castellan_objects.symmetric_key.SymmetricKey('AES',
+                                                     mock.sentinel.bitlength,
+                                                     mock.sentinel.key),
+        castellan_objects.opaque_data.OpaqueData(mock.sentinel.key),
+        castellan_objects.private_key.PrivateKey('RSA',
+                                                 mock.sentinel.bitlength,
+                                                 mock.sentinel.key),
+        castellan_objects.public_key.PublicKey('RSA',
+                                               mock.sentinel.bitlength,
+                                               mock.sentinel.key),
+        castellan_objects.x_509.X509(mock.sentinel.key)
+    )
+    def test_get_passphrase_from_secret(self, secret, mock_hexlify):
+        """Test proper passphrase processing of different secret types."""
+        if secret.managed_type() == 'passphrase':
+            passphrase = utils.get_passphrase_from_secret(secret)
+            mock_hexlify.assert_not_called()
+            self.assertEqual('test-passphrase', passphrase)
+        else:
+            hexlified_bytes = mock.MagicMock()
+            hexlified_bytes.decode.return_value = mock.sentinel.passphrase
+            mock_hexlify.return_value = hexlified_bytes
+            passphrase = utils.get_passphrase_from_secret(secret)
+            mock_hexlify.assert_called_once_with(mock.sentinel.key)
+            self.assertEqual(mock.sentinel.passphrase, passphrase)
 
 
 class TestRetryDecorator(base.TestCase):

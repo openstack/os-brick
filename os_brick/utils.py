@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import binascii
 import functools
 import inspect
 import logging as py_logging
@@ -454,6 +455,41 @@ def check_valid_device(executor: executor.Executor, path: str) -> bool:
         return False
     # If the info is none, the path does not exist.
     return info is not None
+
+
+def get_passphrase_from_secret(key) -> str:
+    """Convert encryption key retrieved from the Key Manager into a passphrase.
+
+    If the secret type is 'passphrase', assume that the key is already in
+    a suitable string format and simply return it.
+    In any other case, assume a binary key that needs to be converted into
+    an ASCII representation using binascii.hexlify().
+
+    Cinder uses 'symmetric' in conjunction with binascii.hexlify() to
+    handle encryption keys for its own volumes and resulting volume images.
+    Nova uses the 'passphrase' type instead for its qcow2+LUKS images which
+    are directly passed to LUKS as passphrase input. User-defined Glance
+    images may reference secrets of any type (defaulting to 'opaque') which
+    we optimistically assume to represent binary keys too (unless their
+    type is 'passphrase' explicitly).
+
+    :param key: Key Manager Secret containing the encryption key
+    :type key: castellan.common.objects.managed_object.ManagedObject
+    :return: passphrase
+    :rtype: str
+    """
+    if key.managed_type() == 'passphrase':
+        LOG.debug(
+            "os_brick.utils.get_passphrase_from_secret: the secret is of type "
+            "passphrase and will be used without conversion"
+        )
+        return key.get_encoded().decode('utf-8')
+    else:
+        LOG.debug(
+            "os_brick.utils.get_passphrase_from_secret: the secret is not of "
+            "type passphrase and will be converted using hex representation"
+        )
+        return binascii.hexlify(key.get_encoded()).decode('utf-8')
 
 
 class Anything(object):
