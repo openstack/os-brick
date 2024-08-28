@@ -50,6 +50,7 @@ class ScaleIOConnector(base.BaseLinuxConnector):
     VOLUME_NOT_MAPPED_ERROR = 84
     VOLUME_NOT_MAPPED_ERROR_v4 = 4039
     VOLUME_ALREADY_MAPPED_ERROR = 81
+    VOLUME_ALREADY_MAPPED_ERROR_v4 = 4037
     GET_GUID_OP_CODE = io('a', 14)
     RESCAN_VOLS_OP_CODE = io('a', 10)
 
@@ -403,7 +404,8 @@ class ScaleIOConnector(base.BaseLinuxConnector):
         if r.status_code != self.OK_STATUS_CODE:
             response = r.json()
             error_code = response['errorCode']
-            if error_code == self.VOLUME_ALREADY_MAPPED_ERROR:
+            if error_code == self.VOLUME_ALREADY_MAPPED_ERROR or \
+               error_code == self.VOLUME_ALREADY_MAPPED_ERROR_v4:
                 LOG.warning(
                     "Ignoring error mapping volume %(volume_name)s: "
                     "volume already mapped.",
