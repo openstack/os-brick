@@ -97,4 +97,4 @@ latex_elements = {
     'preamble': r'\setcounter{tocdepth}{3}',
 }
 
-latex_additional_files = ['os_brick.sty']
+latex_additional_files = []
