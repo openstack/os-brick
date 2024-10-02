@@ -19,54 +19,27 @@ from unittest import mock
 
 from os_brick import exception
 from os_brick.initiator.connectors import storpool as connector
+from os_brick.initiator import storpool_utils
 from os_brick.tests.initiator import test_connector
+from os_brick.tests.initiator import test_storpool_utils
 
 
 def volumeNameExt(vid):
-    return 'os--volume--{id}'.format(id=vid)
+    return 'os--volume-{id}'.format(id=vid)
 
 
 def faulty_api(req):
     faulty_api.real_fn(req)
     if faulty_api.fail_count > 0:
         faulty_api.fail_count -= 1
-        raise MockApiError("busy",
-                           "'os--volume--sp-vol-1' is open at client 19")
-
-
-class MockApiError(Exception):
-    def __init__(self, name, desc):
-        super(MockApiError, self).__init__()
-        self.name = name
-        self.desc = desc
-
-
-class MockVolumeInfo(object):
-    def __init__(self, global_id):
-        self.globalId = global_id
-
-
-class MockStorPoolADB(object):
-    def __init__(self, log):
-        pass
-
-    def api(self):
-        pass
-
-    def config(self):
-        return {"SP_OURID": 1}
-
-    def volumeName(self, vid):
-        return volumeNameExt(vid)
-
-
-spopenstack = mock.Mock()
-spopenstack.AttachDB = MockStorPoolADB
-connector.spopenstack = spopenstack
-
-spapi = mock.Mock()
-spapi.ApiError = MockApiError
-connector.spapi = spapi
+        raise storpool_utils.StorPoolAPIError(
+            500,
+            {
+                'error': {
+                    'name': 'busy',
+                    'descr': "'os--volume--sp-vol-1' is open at client 19"
+                }
+            })
 
 
 class StorPoolConnectorTestCase(test_connector.ConnectorTestCase):
@@ -96,7 +69,7 @@ class StorPoolConnectorTestCase(test_connector.ConnectorTestCase):
             'access_mode': 'rw'
         }
         self.fakeDeviceInfo = {
-            'path': '/dev/storpool/' + 'os--volume--' + 'sp-vol-1'
+            'path': '/dev/storpool/' + 'os--volume-' + 'sp-vol-1'
         }
         self.fakeGlobalId = 'OneNiceGlobalId'
         self.api_calls_retry_max = 10
@@ -104,44 +77,52 @@ class StorPoolConnectorTestCase(test_connector.ConnectorTestCase):
         self.fakeSize = 1024 * 1024 * 1024
         self.reassign_wait_data = {'reassign': [
             {'volume': volumeNameExt(self.fakeProp['volume']),
-             'detach': [1], 'force': False}]}
+             'detach': ['1'], 'force': False}]}
 
-        self.connector = connector.StorPoolConnector(
-            None, execute=self.execute)
-        self.adb = self.connector._attach
-
-    def test_raise_if_spopenstack_missing(self):
-        with mock.patch.object(connector, 'spopenstack', None):
-            self.assertRaises(exception.BrickException,
-                              connector.StorPoolConnector, "")
+        with mock.patch(
+                'os_brick.initiator.storpool_utils.get_conf'
+        ) as get_conf:
+            get_conf.return_value = test_storpool_utils.SP_CONF
+            self.connector = connector.StorPoolConnector(
+                None, execute=self.execute)
 
     def test_raise_if_sp_ourid_missing(self):
-        with mock.patch.object(spopenstack.AttachDB, 'config', lambda x: {}):
+        conf_no_sp_ourid = copy.deepcopy(test_storpool_utils.SP_CONF)
+        del conf_no_sp_ourid['SP_OURID']
+
+        with mock.patch(
+                'os_brick.initiator.storpool_utils.get_conf'
+        ) as get_conf:
+            get_conf.return_value = conf_no_sp_ourid
             self.assertRaises(exception.BrickException,
                               connector.StorPoolConnector, "")
 
     def test_connect_volume(self):
         volume_name = volumeNameExt(self.fakeProp['volume'])
-        api = mock.MagicMock(spec=['volumesReassignWait', 'volumeInfo'])
-        api.volumesReassignWait = mock.MagicMock(spec=['__call__'])
-        volume_info = MockVolumeInfo(self.fakeGlobalId)
-        api.volumeInfo = mock.Mock(return_value=volume_info)
+        api = mock.MagicMock(spec=['volumes_reassign_wait', 'volume_get_info'])
+        api.volumes_reassign_wait = mock.MagicMock(spec=['__call__'])
+        api.volume_get_info = mock.Mock(
+            return_value={"globalId": self.fakeGlobalId})
+        reassign_wait_expected = {
+            'reassign': [
+                {
+                    'volume': 'os--volume-sp-vol-1',
+                    'rw': ['1']
+                }
+            ]
+        }
 
-        with mock.patch.object(
-                self.adb, attribute='api', spec=['__call__']
-        ) as fake_api:
-            fake_api.return_value = api
-
+        with mock.patch.object(self.connector, attribute='_sp_api', new=api):
             conn = self.connector.connect_volume(self.fakeProp)
             self.assertIn('type', conn)
             self.assertIn('path', conn)
             self.assertEqual(conn['path'],
                              '/dev/storpool-byid/' + self.fakeGlobalId)
-            self.assertEqual(len(api.volumesReassignWait.mock_calls), 1)
-            self.assertEqual(api.volumesReassignWait.mock_calls[0], mock.call(
-                {'reassign': [{'volume': 'os--volume--sp-vol-1', 'rw': [1]}]}))
-            self.assertEqual(len(api.volumeInfo.mock_calls), 1)
-            self.assertEqual(api.volumeInfo.mock_calls[0],
+            self.assertEqual(len(api.volumes_reassign_wait.mock_calls), 1)
+            self.assertEqual(api.volumes_reassign_wait.mock_calls[0],
+                             mock.call(reassign_wait_expected))
+            self.assertEqual(len(api.volume_get_info.mock_calls), 1)
+            self.assertEqual(api.volume_get_info.mock_calls[0],
                              mock.call(volume_name))
 
             self.assertEqual(self.connector.get_search_path(), '/dev/storpool')
@@ -157,20 +138,16 @@ class StorPoolConnectorTestCase(test_connector.ConnectorTestCase):
         if self.fakeConnection is None:
             self.test_connect_volume()
 
-        api = mock.MagicMock(spec=['volumesReassignWait'])
+        api = mock.MagicMock(spec=['volumes_reassign_wait'])
         api.volumesReassignWait = mock.MagicMock(spec=['__call__'])
 
-        with mock.patch.object(
-                self.adb, attribute='api', spec=['__call__']
-        ) as fake_api:
-            fake_api.return_value = api
-
+        with mock.patch.object(self.connector, attribute='_sp_api', new=api):
             self.connector.disconnect_volume(self.fakeProp,
                                              self.fakeDeviceInfo)
-            self.assertEqual(api.volumesReassignWait.mock_calls[0],
+            self.assertEqual(api.volumes_reassign_wait.mock_calls[0],
                              (mock.call(self.reassign_wait_data)))
 
-            api.volumesReassignWait = mock.MagicMock(spec=['__call__'])
+            api.volumes_reassign_wait = mock.MagicMock(spec=['__call__'])
             fake_device_info = copy.deepcopy(self.fakeDeviceInfo)
             fake_device_info["path"] = \
                 "/dev/storpool-byid/" \
@@ -180,7 +157,7 @@ class StorPoolConnectorTestCase(test_connector.ConnectorTestCase):
                 "~byid-paths-map-to-"\
                 "volumes-with-a-tilde-prefix"
             self.connector.disconnect_volume(self.fakeProp, fake_device_info)
-            self.assertEqual(api.volumesReassignWait.mock_calls[0],
+            self.assertEqual(api.volumes_reassign_wait.mock_calls[0],
                              (mock.call(rwd)))
 
             fake_device_info = copy.deepcopy(self.fakeDeviceInfo)
@@ -194,7 +171,7 @@ class StorPoolConnectorTestCase(test_connector.ConnectorTestCase):
                 "~byid-paths-map-to-"\
                 "volumes-with-a-tilde-prefix"
             self.connector.disconnect_volume(fake_prop, fake_device_info)
-            self.assertEqual(api.volumesReassignWait.mock_calls[0],
+            self.assertEqual(api.volumes_reassign_wait.mock_calls[0],
                              (mock.call(rwd)))
 
             fake_device_info = copy.deepcopy(self.fakeDeviceInfo)
@@ -215,15 +192,11 @@ class StorPoolConnectorTestCase(test_connector.ConnectorTestCase):
 
     def test_connect_exceptions(self):
         """Raise exceptions on missing connection information"""
-        api = mock.MagicMock(spec=['volumesReassignWait', 'volumeInfo'])
-        api.volumesReassignWait = mock.MagicMock(spec=['__call__'])
-        api.volumeInfo = mock.MagicMock(spec=['__call__'])
+        api = mock.MagicMock(spec=['volumes_reassign_wait', 'volume_get_info'])
+        api.volumes_reassign_wait = mock.MagicMock(spec=['__call__'])
+        api.volume_get_info = mock.MagicMock(spec=['__call__'])
 
-        with mock.patch.object(
-                self.adb, attribute='api', spec=['__call__']
-        ) as fake_api:
-            fake_api.return_value = api
-
+        with mock.patch.object(self.connector, attribute='_sp_api', new=api):
             for key in ['volume', 'client_id', 'access_mode']:
                 fake_prop = copy.deepcopy(self.fakeProp)
                 del fake_prop[key]
@@ -244,9 +217,15 @@ class StorPoolConnectorTestCase(test_connector.ConnectorTestCase):
 
     def test_sp_ourid_exceptions(self):
         """Raise exceptions on missing SP_OURID"""
-        with mock.patch.object(self.connector._attach, 'config')\
-                as fake_config:
-            fake_config.return_value = {}
+        conf_no_sp_ourid = copy.deepcopy(test_storpool_utils.SP_CONF)
+        del conf_no_sp_ourid['SP_OURID']
+
+        with mock.patch(
+            'os_brick.initiator.storpool_utils.get_conf'
+        ) as get_conf:
+            conf_no_sp_ourid = copy.deepcopy(test_storpool_utils.SP_CONF)
+            del conf_no_sp_ourid['SP_OURID']
+            get_conf.return_value = conf_no_sp_ourid
 
             self.assertRaises(exception.BrickException,
                               self.connector.connect_volume, self.fakeProp)
@@ -257,17 +236,13 @@ class StorPoolConnectorTestCase(test_connector.ConnectorTestCase):
 
     def test_sp_api_exceptions(self):
         """Handle SP API exceptions"""
-        api = mock.MagicMock(spec=['volumesReassignWait', 'volumeInfo'])
-        api.volumesReassignWait = mock.MagicMock(spec=['__call__'])
+        api = mock.MagicMock(spec=['volumes_reassign_wait', 'volume_get_info'])
+        api.volumes_reassign_wait = mock.MagicMock(spec=['__call__'])
         # The generic exception should bypass the SP API exception handling
-        api.volumesReassignWait.side_effect = Exception()
-        api.volumeInfo = mock.MagicMock(spec=['__call__'])
+        api.volumes_reassign_wait.side_effect = Exception()
+        api.volume_get_info = mock.MagicMock(spec=['__call__'])
 
-        with mock.patch.object(
-                self.adb, attribute='api', spec=['__call__']
-        ) as fake_api:
-            fake_api.return_value = api
-
+        with mock.patch.object(self.connector, attribute='_sp_api', new=api):
             self.assertRaises(exception.BrickException,
                               self.connector.connect_volume, self.fakeProp)
 
@@ -275,14 +250,10 @@ class StorPoolConnectorTestCase(test_connector.ConnectorTestCase):
                               self.connector.disconnect_volume, self.fakeProp,
                               self.fakeDeviceInfo)
 
-        api.volumesReassignWait.side_effect = ""
-        api.volumeInfo = Exception()
+        api.volumes_reassign_wait.side_effect = ""
+        api.volume_get_info = Exception()
 
-        with mock.patch.object(
-                self.adb, attribute='api', spec=['__call__']
-        ) as fake_api:
-            fake_api.return_value = api
-
+        with mock.patch.object(self.connector, attribute='_sp_api', new=api):
             self.assertRaises(exception.BrickException,
                               self.connector.connect_volume, self.fakeProp)
 
@@ -294,15 +265,11 @@ class StorPoolConnectorTestCase(test_connector.ConnectorTestCase):
         def init_mock_api(retries):
             faulty_api.fail_count = retries
             faulty_api.real_fn = mock.MagicMock(spec=['__call__'])
-            api.volumesReassignWait = faulty_api
-            api.volumeInfo = mock.MagicMock(spec=['__call__'])
+            api.volumes_reassign_wait = faulty_api
+            api.volume_get_info = mock.MagicMock(spec=['__call__'])
 
         init_mock_api(self.api_calls_retry_max - 1)
-        with mock.patch.object(
-                self.adb, attribute='api', spec=['__call__']
-        ) as fake_api:
-            fake_api.return_value = api
-
+        with mock.patch.object(self.connector, attribute='_sp_api', new=api):
             self.connector.disconnect_volume(self.fakeProp,
                                              self.fakeDeviceInfo)
             self.assertEqual(self.api_calls_retry_max,
@@ -311,10 +278,7 @@ class StorPoolConnectorTestCase(test_connector.ConnectorTestCase):
                 self.assertEqual(mock_call, mock.call(self.reassign_wait_data))
 
         init_mock_api(self.api_calls_retry_max)
-        with mock.patch.object(
-                self.adb, attribute='api', spec=['__call__']
-        ) as fake_api:
-            fake_api.return_value = api
+        with mock.patch.object(self.connector, attribute='_sp_api', new=api):
             rwd = copy.deepcopy(self.reassign_wait_data)
 
             self.connector.disconnect_volume(self.fakeProp,
@@ -327,10 +291,7 @@ class StorPoolConnectorTestCase(test_connector.ConnectorTestCase):
             self.assertEqual(faulty_api.real_fn.mock_calls[-1], mock.call(rwd))
 
         init_mock_api(self.api_calls_retry_max + 1)
-        with mock.patch.object(
-                self.adb, attribute='api', spec=['__call__']
-        ) as fake_api:
-            fake_api.return_value = api
+        with mock.patch.object(self.connector, attribute='_sp_api', new=api):
             rwd = copy.deepcopy(self.reassign_wait_data)
 
             self.assertRaises(exception.BrickException,
@@ -351,34 +312,26 @@ class StorPoolConnectorTestCase(test_connector.ConnectorTestCase):
 
         size_list = [self.fakeSize, self.fakeSize - 1, self.fakeSize - 2]
 
-        vdata = mock.MagicMock(spec=['size'])
-        vdata.size = self.fakeSize
-        vdata_list = [[vdata]]
+        vdata_list = [[{'size': self.fakeSize}]]
 
         def fake_volume_list(name):
-            self.assertEqual(
-                name,
-                self.adb.volumeName(self.fakeProp['volume'])
-            )
+            self.assertEqual(name, volumeNameExt(self.fakeProp['volume']))
             return vdata_list.pop()
 
-        api = mock.MagicMock(spec=['volumeList'])
-        api.volumeList = mock.MagicMock(spec=['__call__'])
+        api = mock.MagicMock(spec=['volume'])
+        api.volume = mock.MagicMock(spec=['__call__'])
+        api.volume.side_effect = fake_volume_list
 
         with mock.patch.object(
-            self.adb, attribute='api', spec=['__call__']
-        ) as fake_api, mock.patch.object(
+            self.connector, attribute='_sp_api', new=api
+        ), mock.patch.object(
             self, attribute='get_fake_size', spec=['__call__']
         ) as fake_size, mock.patch('time.sleep') as fake_sleep:
-            fake_api.return_value = api
-            api.volumeList.side_effect = fake_volume_list
-
             fake_size.side_effect = size_list.pop
 
             newSize = self.connector.extend_volume(self.fakeProp)
 
-            self.assertEqual(fake_api.call_count, 1)
-            self.assertEqual(api.volumeList.call_count, 1)
+            self.assertEqual(api.volume.call_count, 1)
             self.assertListEqual(vdata_list, [])
 
             self.assertEqual(fake_size.call_count, 3)
