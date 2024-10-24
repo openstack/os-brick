@@ -2215,3 +2215,8 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         self.connector._try_disconnect(portal)
         mock_can_disconnect.assert_called_once_with()
         mock_execute.assert_not_called()
+
+    @ddt.data(False, True)
+    def test_supports_multipath(self, ana_support):
+        self.connector.native_multipath_supported = ana_support
+        self.assertEqual(ana_support, self.connector.supports_multipath())

@@ -16,6 +16,7 @@ import platform
 import sys
 from unittest import mock
 
+import ddt
 from oslo_concurrency import processutils as putils
 from oslo_service import loopingcall
 
@@ -82,6 +83,7 @@ class ConnectorUtilsTestCase(test_base.TestCase):
                  'host': host,
                  'ip': MY_IP,
                  'multipath': multipath_result,
+                 'enforce_multipath': enforce_multipath,
                  'nvme_native_multipath': False,
                  'os_type': os_type,
                  'platform': platform,
@@ -116,33 +118,17 @@ class ConnectorUtilsTestCase(test_base.TestCase):
 
     @mock.patch.object(priv_rootwrap, 'custom_execute',
                        side_effect=OSError(2))
-    @mock.patch.object(priv_rootwrap, 'execute', return_value=('', ''))
-    def test_brick_get_connector_properties_multipath(self, mock_execute,
+    def test_brick_get_connector_properties_multipath(self,
                                                       mock_custom_execute):
         self._test_brick_get_connector_properties(True, True, True)
-        mock_execute.assert_called_once_with('multipathd', 'show', 'status',
-                                             run_as_root=True,
-                                             root_helper='sudo')
         mock_custom_execute.assert_called_once_with('nvme', 'version')
 
     @mock.patch.object(priv_rootwrap, 'custom_execute',
                        side_effect=OSError(2))
-    @mock.patch.object(priv_rootwrap, 'execute',
-                       side_effect=putils.ProcessExecutionError)
-    def test_brick_get_connector_properties_fallback(self, mock_execute,
+    def test_brick_get_connector_properties_fallback(self,
                                                      mock_custom_execute):
-        self._test_brick_get_connector_properties(True, False, False)
-        mock_execute.assert_called_once_with('multipathd', 'show', 'status',
-                                             run_as_root=True,
-                                             root_helper='sudo')
+        self._test_brick_get_connector_properties(True, False, True)
         mock_custom_execute.assert_called_once_with('nvme', 'version')
-
-    @mock.patch.object(priv_rootwrap, 'execute',
-                       side_effect=putils.ProcessExecutionError)
-    def test_brick_get_connector_properties_raise(self, mock_execute):
-        self.assertRaises(putils.ProcessExecutionError,
-                          self._test_brick_get_connector_properties,
-                          True, True, None)
 
     def test_brick_connector_properties_override_hostname(self):
         override_host = 'myhostname'
@@ -150,6 +136,7 @@ class ConnectorUtilsTestCase(test_base.TestCase):
                                                   host=override_host)
 
 
+@ddt.ddt
 class ConnectorTestCase(test_base.TestCase):
 
     def setUp(self):
@@ -191,7 +178,11 @@ class ConnectorTestCase(test_base.TestCase):
                 'sudo', multipath=multipath,
                 enforce_multipath=enforce_multipath)
 
-            expected_props = {'multipath': True}
+            expected_props = {
+                'multipath': multipath,
+                'enforce_multipath': enforce_multipath,
+            }
+
             self.assertEqual(expected_props, props)
 
             multipath = False
@@ -200,18 +191,12 @@ class ConnectorTestCase(test_base.TestCase):
                 'sudo', multipath=multipath,
                 enforce_multipath=enforce_multipath)
 
-            expected_props = {'multipath': False}
-            self.assertEqual(expected_props, props)
+            expected_props = {
+                'multipath': multipath,
+                'enforce_multipath': enforce_multipath,
+            }
 
-        with mock.patch.object(priv_rootwrap, 'execute',
-                               side_effect=putils.ProcessExecutionError):
-            multipath = True
-            enforce_multipath = True
-            self.assertRaises(
-                putils.ProcessExecutionError,
-                base.BaseLinuxConnector.get_connector_properties,
-                'sudo', multipath=multipath,
-                enforce_multipath=enforce_multipath)
+            self.assertEqual(expected_props, props)
 
     @mock.patch('sys.platform', 'win32')
     def test_get_connector_mapping_win32(self):
@@ -304,3 +289,39 @@ class ConnectorTestCase(test_base.TestCase):
         with mock.patch.object(self.connector, '_execute',
                                side_effect=putils.ProcessExecutionError):
             self.assertFalse(self.connector.check_valid_device('/dev'))
+
+    @ddt.data(
+        (False, False, False),
+        (False, False, True),
+        (False, True, False),
+        (False, True, True),
+        (True, False, False),
+        (True, False, True),
+        (True, True, False),
+        (True, True, True),
+    )
+    @ddt.unpack
+    @mock.patch.object(base, 'LOG')
+    @mock.patch.object(base.BaseLinuxConnector, 'supports_multipath')
+    def test_check_multipath(
+            self, mpath, enforce_mpath, supports_mpath, mock_supports_mpath,
+            mock_log):
+        self.connector = fake.FakeConnector(None)
+        fake_conn_props = self.fake_connection()
+        self.connector.use_multipath = mpath
+        mock_supports_mpath.return_value = supports_mpath
+        fake_conn_props['data']['enforce_multipath'] = enforce_mpath
+        if mpath and enforce_mpath and not supports_mpath:
+            self.assertRaises(
+                exception.BrickException,
+                self.connector.check_multipath,
+                fake_conn_props['data']
+            )
+        else:
+            self.connector.check_multipath(fake_conn_props['data'])
+            if mpath and not enforce_mpath and not supports_mpath:
+                mock_log.warning.assert_called_once_with(
+                    "Multipathing is requested but the host "
+                    "doesn't support multipathing."
+                )
+        mock_supports_mpath.assert_called_once_with()

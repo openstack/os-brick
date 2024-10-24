@@ -644,6 +644,7 @@ class NVMeOFConnProps(object):
         self.encrypted = conn_props.get('encrypted', False)
         self.cacheable = conn_props.get('cacheable', False)
         self.discard = conn_props.get('discard', False)
+        self.enforce_multipath = conn_props.get('enforce_multipath', False)
 
         # old connection properties format
         if REPLICAS not in conn_props and NQN not in conn_props:
@@ -852,6 +853,9 @@ class NVMeOFConnector(base.BaseLinuxConnector):
 
     # #######  Connect Volume methods ########
 
+    def supports_multipath(self):
+        return self.native_multipath_supported
+
     @utils.trace
     @utils.connect_volume_prepare_result
     @base.synchronized('connect_volume', external=True)
@@ -859,6 +863,9 @@ class NVMeOFConnector(base.BaseLinuxConnector):
     def connect_volume(
             self, connection_properties: NVMeOFConnProps) -> dict[str, str]:
         """Attach and discover the volume."""
+        self.check_multipath(
+            {'enforce_multipath': getattr(
+                connection_properties, 'enforce_multipath', False)})
         try:
             if connection_properties.is_replicated is False:
                 LOG.debug('Starting non replicated connection')

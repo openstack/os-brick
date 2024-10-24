@@ -277,8 +277,7 @@ class LinuxSCSI(executor.Executor):
         return out.strip()
 
     @staticmethod
-    def is_multipath_running(enforce_multipath,
-                             root_helper,
+    def is_multipath_running(root_helper,
                              execute=None) -> bool:
         try:
             if execute is None:
@@ -289,13 +288,9 @@ class LinuxSCSI(executor.Executor):
             # There was a bug in multipathd where it didn't return an error
             # code and just printed the error message in stdout.
             if out and out.startswith('error receiving packet'):
-                raise putils.ProcessExecutionError('', out, 1, cmd, None)
+                return False
 
-        except putils.ProcessExecutionError as err:
-            if enforce_multipath:
-                LOG.error('multipathd is not running: exit code %(err)s',
-                          {'err': err.exit_code})
-                raise
+        except putils.ProcessExecutionError:
             return False
         return True
 
@@ -384,7 +379,7 @@ class LinuxSCSI(executor.Executor):
             multipath_running = True
         else:
             multipath_running = self.is_multipath_running(
-                enforce_multipath=False, root_helper=self._root_helper)
+                root_helper=self._root_helper)
 
         for device_name in devices_names:
             dev_path = '/dev/' + device_name

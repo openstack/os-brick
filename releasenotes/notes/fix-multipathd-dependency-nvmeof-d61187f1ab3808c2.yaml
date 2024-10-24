@@ -1,0 +1,9 @@
+---
+fixes:
+  - |
+    NVMe-oF connector `bug #2085013
+    <https://bugs.launchpad.net/os-brick/+bug/2085013>`_ : Removed
+    ``multipathd`` dependency for NVMe-oF connections.
+    Previously, multipathd had to be installed to leverage native
+    NVMe multipathing (ANA) but now that dependency is removed.
+

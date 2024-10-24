@@ -219,6 +219,8 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
                     '-fc-0x1234567890123456-lun-1']
         self.assertEqual(expected, volume_paths)
 
+    @mock.patch.object(
+        base.BaseLinuxConnector, 'check_multipath', mock.MagicMock())
     @mock.patch.object(linuxscsi.LinuxSCSI, 'wait_for_rw')
     @mock.patch.object(os.path, 'exists', return_value=True)
     @mock.patch.object(os.path, 'realpath', return_value='/dev/sdb')
@@ -290,6 +292,8 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
                           self.connector.connect_volume,
                           connection_info['data'])
 
+    @mock.patch.object(
+        base.BaseLinuxConnector, 'check_multipath', mock.MagicMock())
     @mock.patch.object(linuxscsi.LinuxSCSI, 'find_multipath_device_path')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'wait_for_mpath_device')
     def _test_connect_volume_multipath(self, get_device_info_mock,
@@ -994,3 +998,9 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
              mock.sentinel.lun2B),
         ]
         self.assertEqual(expected, res)
+
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'is_multipath_running')
+    def test_supports_multipath(self, mock_mpath_running):
+        self.connector.supports_multipath()
+        mock_mpath_running.assert_called_once_with(
+            root_helper=self.connector._root_helper)
