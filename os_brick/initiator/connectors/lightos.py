@@ -87,10 +87,7 @@ class LightOSConnector(base.BaseLinuxConnector):
             if ip == "":
                 continue
             if is_ipv6_enabled and netutils.is_valid_ipv6(ip):
-                parts = ip.split("%")
-                ip = parts[0]
-                ips.append(ip)
-
+                ips.append(netutils.get_noscope_ipv6(ip))
             elif netutils.is_valid_ipv4(ip):
                 ips.append(ip)
         return ips
