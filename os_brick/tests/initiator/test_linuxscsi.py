@@ -1020,21 +1020,10 @@ loop0                                     0"""
 
     @mock.patch('os_brick.privileged.rootwrap.execute', return_value=('', ''))
     def test_is_multipath_running(self, mock_exec):
-        res = linuxscsi.LinuxSCSI.is_multipath_running(False, None, mock_exec)
+        res = linuxscsi.LinuxSCSI.is_multipath_running(None, mock_exec)
         self.assertTrue(res)
         mock_exec.assert_called_once_with(
             'multipathd', 'show', 'status', run_as_root=True, root_helper=None)
-
-    @mock.patch.object(linuxscsi, 'LOG')
-    @mock.patch('os_brick.privileged.rootwrap.execute')
-    def test_is_multipath_running_failure(
-        self, mock_exec, mock_log
-    ):
-        mock_exec.side_effect = putils.ProcessExecutionError()
-        self.assertRaises(putils.ProcessExecutionError,
-                          linuxscsi.LinuxSCSI.is_multipath_running,
-                          True, None, mock_exec)
-        mock_log.error.assert_called_once()
 
     @mock.patch.object(linuxscsi, 'LOG')
     @mock.patch('os_brick.privileged.rootwrap.execute')
@@ -1042,12 +1031,10 @@ loop0                                     0"""
         self, mock_exec, mock_log
     ):
         mock_exec.return_value = ('error receiving packet', '')
-        self.assertRaises(putils.ProcessExecutionError,
-                          linuxscsi.LinuxSCSI.is_multipath_running,
-                          True, None, mock_exec)
+        res = linuxscsi.LinuxSCSI.is_multipath_running(None, mock_exec)
         mock_exec.assert_called_once_with(
             'multipathd', 'show', 'status', run_as_root=True, root_helper=None)
-        mock_log.error.assert_called_once()
+        self.assertFalse(res)
 
     @mock.patch.object(linuxscsi, 'LOG')
     @mock.patch('os_brick.privileged.rootwrap.execute')
@@ -1055,7 +1042,7 @@ loop0                                     0"""
         self, mock_exec, mock_log
     ):
         mock_exec.side_effect = putils.ProcessExecutionError()
-        res = linuxscsi.LinuxSCSI.is_multipath_running(False, None, mock_exec)
+        res = linuxscsi.LinuxSCSI.is_multipath_running(None, mock_exec)
         mock_exec.assert_called_once_with(
             'multipathd', 'show', 'status', run_as_root=True, root_helper=None)
         self.assertFalse(res)
@@ -1067,7 +1054,7 @@ loop0                                     0"""
         self, mock_exec, mock_log
     ):
         mock_exec.return_value = ('error receiving packet', '')
-        res = linuxscsi.LinuxSCSI.is_multipath_running(False, None, mock_exec)
+        res = linuxscsi.LinuxSCSI.is_multipath_running(None, mock_exec)
         mock_exec.assert_called_once_with(
             'multipathd', 'show', 'status', run_as_root=True, root_helper=None)
         self.assertFalse(res)

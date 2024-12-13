@@ -19,6 +19,7 @@ import ddt
 from oslo_concurrency import processutils as putils
 
 from os_brick import exception
+from os_brick.initiator.connectors import base
 from os_brick.initiator.connectors import iscsi
 from os_brick.initiator import linuxscsi
 from os_brick.initiator import utils
@@ -396,6 +397,8 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
                            'multipath_id': FAKE_SCSI_WWN}
         self.assertEqual(expected_result, result)
 
+    @mock.patch.object(
+        base.BaseLinuxConnector, 'check_multipath', mock.MagicMock())
     @mock.patch.object(iscsi.ISCSIConnector, '_cleanup_connection')
     @mock.patch.object(iscsi.ISCSIConnector, '_connect_multipath_volume')
     @mock.patch.object(iscsi.ISCSIConnector, '_connect_single_volume')
@@ -407,6 +410,8 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
         con_mp_mock.assert_called_once_with(self.CON_PROPS)
         clean_mock.assert_not_called()
 
+    @mock.patch.object(
+        base.BaseLinuxConnector, 'check_multipath', mock.MagicMock())
     @mock.patch.object(iscsi.ISCSIConnector, '_cleanup_connection')
     @mock.patch.object(iscsi.ISCSIConnector, '_connect_multipath_volume')
     @mock.patch.object(iscsi.ISCSIConnector, '_connect_single_volume')
@@ -420,6 +425,8 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
         con_mp_mock.assert_called_once_with(self.CON_PROPS)
         clean_mock.assert_called_once_with(self.CON_PROPS, force=True)
 
+    @mock.patch.object(
+        base.BaseLinuxConnector, 'check_multipath', mock.MagicMock())
     @mock.patch.object(iscsi.ISCSIConnector, '_cleanup_connection')
     @mock.patch.object(iscsi.ISCSIConnector, '_connect_multipath_volume')
     @mock.patch.object(iscsi.ISCSIConnector, '_connect_single_volume')
@@ -431,6 +438,8 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
         con_single_mock.assert_called_once_with(self.CON_PROPS)
         clean_mock.assert_not_called()
 
+    @mock.patch.object(
+        base.BaseLinuxConnector, 'check_multipath', mock.MagicMock())
     @mock.patch.object(iscsi.ISCSIConnector, '_cleanup_connection')
     @mock.patch.object(iscsi.ISCSIConnector, '_connect_multipath_volume')
     @mock.patch.object(iscsi.ISCSIConnector, '_connect_single_volume')
@@ -489,11 +498,12 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
             # Reset to run with a different transport type
             self.cmds = list()
 
+    @mock.patch.object(priv_rootwrap, 'execute', return_value=('', ''))
     @mock.patch.object(iscsi.ISCSIConnector,
                        '_run_iscsiadm_update_discoverydb')
     @mock.patch.object(os.path, 'exists', return_value=True)
     def test_iscsi_portals_with_chap_discovery(
-            self, exists, update_discoverydb):
+            self, exists, update_discoverydb, mock_exec):
         location = '10.0.2.15:3260'
         name = 'volume-00000001'
         iqn = 'iqn.2010-10.org.openstack:%s' % name
@@ -1777,3 +1787,9 @@ Setting up iSCSI targets: unused
             (mock.sentinel.portal2, mock.sentinel.iqn2, mock.sentinel.lun2B)
         ]
         self.assertListEqual(expected, res)
+
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'is_multipath_running')
+    def test_supports_multipath(self, mock_mpath_running):
+        self.connector.supports_multipath()
+        mock_mpath_running.assert_called_once_with(
+            root_helper=self.connector._root_helper)

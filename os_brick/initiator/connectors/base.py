@@ -112,16 +112,43 @@ class BaseLinuxConnector(initiator_connector.InitiatorConnector):
     @staticmethod
     def get_connector_properties(root_helper: str, *args, **kwargs) -> dict:
         """The generic connector properties."""
-        multipath = kwargs['multipath']
-        enforce_multipath = kwargs['enforce_multipath']
-        props = {}
+        # The 'multipath' and 'enforce_multipath' values will be used by
+        # the caller to verify multipathing in connect_volume.
+        return {
+            'multipath': kwargs['multipath'],
+            'enforce_multipath': kwargs['enforce_multipath'],
+        }
 
-        props['multipath'] = (multipath and
-                              linuxscsi.LinuxSCSI.is_multipath_running(
-                                  enforce_multipath, root_helper,
-                                  execute=kwargs.get('execute')))
+    def supports_multipath(self):
+        """Generic method to report multipath support.
 
-        return props
+        Each connector, which supports multipath, should override this
+        method and provide its own implementation of checking the
+        multipath support. See implementation in iSCSI, FC or NVMe
+        connectors for reference.
+        """
+        return False
+
+    def check_multipath(self, connection_properties):
+        LOG.debug("Connection properties %s", connection_properties)
+        multipath = self.use_multipath
+        # If we are using an old cinder, it will not contain the
+        # 'enforce_multipath' key and we will default the value to False.
+        # Unfortunately, there is is no way to know which Cinder
+        # version we are using when calling get_connector_properties to
+        # keep backward compatibility.
+        enforce_multipath = connection_properties.get(
+            'enforce_multipath', False)
+
+        if not self.supports_multipath():
+            if multipath and enforce_multipath:
+                raise exception.BrickException(
+                    "Multipathing is enforced but the host doesn't "
+                    "support multipathing.")
+            if multipath and not enforce_multipath:
+                LOG.warning(
+                    "Multipathing is requested but the host "
+                    "doesn't support multipathing.")
 
     def check_valid_device(self, path: str, run_as_root: bool = True) -> bool:
         return utils.check_valid_device(self, path)

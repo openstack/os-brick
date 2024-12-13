@@ -510,6 +510,10 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
                             connection_properties)})
             raise exception.VolumePathsNotFound()
 
+    def supports_multipath(self):
+        return self._linuxscsi.is_multipath_running(
+            root_helper=self._root_helper)
+
     @utils.trace
     @utils.connect_volume_prepare_result
     @base.synchronized('connect_volume', external=True)
@@ -529,6 +533,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         target_lun(s) - LUN id of the volume
         Note that plural keys may be used when use_multipath=True
         """
+        self.check_multipath(connection_properties)
         try:
             if self.use_multipath:
                 return self._connect_multipath_volume(connection_properties)

@@ -203,6 +203,10 @@ class FibreChannelConnector(base.BaseLinuxConnector):
                         {'props': connection_properties})
             raise exception.VolumePathsNotFound()
 
+    def supports_multipath(self):
+        return self._linuxscsi.is_multipath_running(
+            root_helper=self._root_helper)
+
     @utils.trace
     @utils.connect_volume_prepare_result
     @base.synchronized('connect_volume', external=True)
@@ -218,6 +222,7 @@ class FibreChannelConnector(base.BaseLinuxConnector):
         target_wwn - World Wide Name
         target_lun - LUN id of the volume
         """
+        self.check_multipath(connection_properties)
         device_info = {'type': 'block'}
 
         connection_properties = self._add_targets_to_connection_properties(
