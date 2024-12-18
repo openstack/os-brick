@@ -1,0 +1,8 @@
+---
+fixes:
+  - |
+    PowerFlex driver `bug #2004630
+    <https://bugs.launchpad.net/cinder/+bug/2004630>`_:
+    Fixed regression which caused the PowerFlex (ScaleIO) connector to
+    login multiple times, even with an existing valid token. The ScaleIO
+    connector now caches and reuses the token.
