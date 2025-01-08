@@ -18,17 +18,13 @@ import pathlib
 import time
 
 from oslo_log import log as logging
-from oslo_utils import importutils
 
 from os_brick import exception
 from os_brick.initiator.connectors import base
+from os_brick.initiator import storpool_utils
 from os_brick import utils
 
 LOG = logging.getLogger(__name__)
-
-spopenstack = importutils.try_import('storpool.spopenstack')
-spapi = importutils.try_import('storpool.spapi')
-
 
 DEV_STORPOOL = pathlib.Path('/dev/storpool')
 DEV_STORPOOL_BYID = pathlib.Path('/dev/storpool-byid')
@@ -55,21 +51,19 @@ class StorPoolConnector(base.BaseLinuxConnector):
         super(StorPoolConnector, self).__init__(root_helper, driver=driver,
                                                 *args, **kwargs)
 
-        if spapi is None:
-            raise exception.BrickException(
-                'Could not import the StorPool API bindings')
-
-        if spopenstack is None:
-            raise exception.BrickException(
-                'Could not import the required module "storpool.spopenstack"')
-
         try:
-            self._attach = spopenstack.AttachDB(log=LOG)
+            self._config = storpool_utils.get_conf()
+            self._sp_api = storpool_utils.StorPoolAPI(
+                self._config["SP_API_HTTP_HOST"],
+                self._config["SP_API_HTTP_PORT"],
+                self._config["SP_AUTH_TOKEN"])
+            self._volume_prefix = self._config.get(
+                "SP_OPENSTACK_VOLUME_PREFIX", "os")
         except Exception as e:
             raise exception.BrickException(
-                'Could not initialize the StorPool API bindings: %s' % (e))
+                'Could not initialize the StorPool API: %s' % (e))
 
-        if "SP_OURID" not in self._attach.config():
+        if "SP_OURID" not in self._config:
             raise exception.BrickException(
                 'Could not read "SP_OURID" from the StorPool configuration"')
 
@@ -84,7 +78,7 @@ class StorPoolConnector(base.BaseLinuxConnector):
         while True:
             try:
                 force = count == 0
-                self._attach.api().volumesReassignWait(
+                self._sp_api.volumes_reassign_wait(
                     {
                         "reassign": [{
                             "volume": volume,
@@ -94,7 +88,7 @@ class StorPoolConnector(base.BaseLinuxConnector):
                     }
                 )
                 break
-            except spapi.ApiError as exc:
+            except storpool_utils.StorPoolAPIError as exc:
                 if (
                     exc.name in ("busy", "invalidParam")
                     and "is open at" in exc.desc
@@ -130,19 +124,20 @@ class StorPoolConnector(base.BaseLinuxConnector):
         if volume_id is None:
             raise exception.BrickException(
                 'Invalid StorPool connection data, no volume ID specified.')
-        volume = self._attach.volumeName(volume_id)
+        volume = storpool_utils.os_to_sp_volume_name(
+            self._volume_prefix, volume_id)
         mode = connection_properties.get('access_mode', None)
         if mode is None or mode not in ('rw', 'ro'):
             raise exception.BrickException(
                 'Invalid access_mode specified in the connection data.')
         try:
-            sp_ourid = self._attach.config()["SP_OURID"]
+            sp_ourid = self._config["SP_OURID"]
         except KeyError:
             raise exception.BrickException(
                 'SP_OURID missing, cannot connect volume %s' % volume_id)
 
         try:
-            self._attach.api().volumesReassignWait(
+            self._sp_api.volumes_reassign_wait(
                 {"reassign": [{"volume": volume, mode: [sp_ourid]}]})
         except Exception as exc:
             raise exception.BrickException(
@@ -150,13 +145,13 @@ class StorPoolConnector(base.BaseLinuxConnector):
                 'failed: %s' % (exc)) from exc
 
         try:
-            volume_info = self._attach.api().volumeInfo(volume)
+            volume_info = self._sp_api.volume_get_info(volume)
+            sp_global_id = volume_info['globalId']
         except Exception as exc:
             raise exception.BrickException(
                 'Communication with the StorPool API '
                 'failed: %s' % (exc)) from exc
 
-        sp_global_id = volume_info.globalId
         return {'type': 'block',
                 'path': str(DEV_STORPOOL_BYID) + '/' + sp_global_id}
 
@@ -203,7 +198,7 @@ class StorPoolConnector(base.BaseLinuxConnector):
                 'Invalid StorPool connection data, no device_path specified.')
         volume_name = path_to_volname(pathlib.Path(device_path))
         try:
-            sp_ourid = self._attach.config()["SP_OURID"]
+            sp_ourid = self._config["SP_OURID"]
         except KeyError:
             raise exception.BrickException(
                 'SP_OURID missing, cannot disconnect volume %s' % volume_name)
@@ -234,7 +229,8 @@ class StorPoolConnector(base.BaseLinuxConnector):
         if volume_id is None:
             raise exception.BrickException(
                 'Invalid StorPool connection data, no volume ID specified.')
-        volume = self._attach.volumeName(volume_id)
+        volume = storpool_utils.os_to_sp_volume_name(
+            self._volume_prefix, volume_id)
         path = '/dev/storpool/' + volume
         dpath = connection_properties.get('device_path', None)
         if dpath is not None and dpath != path:
@@ -262,7 +258,7 @@ class StorPoolConnector(base.BaseLinuxConnector):
         :type connection_properties: dict
         """
         names = []
-        prefix = self._attach.volumeName('')
+        prefix = storpool_utils.os_to_sp_volume_name(self._volume_prefix, '')
         prefixlen = len(prefix)
         if os.path.isdir('/dev/storpool'):
             files = os.listdir('/dev/storpool')
@@ -306,18 +302,19 @@ class StorPoolConnector(base.BaseLinuxConnector):
                 'Invalid StorPool connection data, no volume ID specified.')
 
         # Get the expected (new) size from the StorPool API
-        volume = self._attach.volumeName(volume_id)
+        volume = storpool_utils.os_to_sp_volume_name(
+            self._volume_prefix, volume_id)
         LOG.debug('Querying the StorPool API for the size of %(vol)s',
                   {'vol': volume})
-        vdata = self._attach.api().volumeList(volume)[0]
-        LOG.debug('Got size %(size)d', {'size': vdata.size})
+        vdata = self._sp_api.volume(volume)[0]
+        LOG.debug('Got size %(size)d', {'size': vdata['size']})
 
         # Wait for the StorPool client to update the size of the local device
         path = '/dev/storpool/' + volume
-        for _ in range(10):
+        for _num in range(10):
             size = utils.get_device_size(self, path)
             LOG.debug('Got local size %(size)d', {'size': size})
-            if size == vdata.size:
+            if size == vdata['size']:
                 return size
             time.sleep(0.1)
         else:
