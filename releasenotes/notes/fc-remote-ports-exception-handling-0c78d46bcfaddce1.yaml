@@ -1,0 +1,8 @@
+---
+fixes:
+  - |
+    `Bug #2098954 <https://bugs.launchpad.net/os-brick/+bug/2098954>`_:
+    Fibre Channel: Fixed issue with partial scanning in case of FC connection.
+    This is addressed by exception handling when we don't get a valid
+    path in ``fc_transport`` for a target WWPN leading to no search
+    being performed in ``fc_remote_ports`` path.

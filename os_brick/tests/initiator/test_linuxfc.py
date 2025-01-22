@@ -227,7 +227,7 @@ class LinuxFCTestCase(base.TestCase):
                                return_value=('', '')) as execute_mock:
             res = self.lfc._get_hba_channel_scsi_target_lun(hbas[0], con_props)
             execute_mock.assert_has_calls(expected_cmds)
-        self.assertEqual(([], set()), res)
+        self.assertEqual(([], {1}), res)
 
     def test__get_hba_channel_scsi_target_lun_exception(self):
         _, expected_cmds = self._get_expected_info()
@@ -287,7 +287,7 @@ class LinuxFCTestCase(base.TestCase):
                                side_effect=execute_effects) as execute_mock:
             res = self.lfc._get_hba_channel_scsi_target_lun(hbas[0], con_props)
             execute_mock.assert_has_calls(expected_cmds)
-        expected = ([['0', '1', 1]], set())
+        expected = ([['0', '1', 1]], {1})
         self.assertEqual(expected, res)
 
     def test__get_target_fc_transport_path(self):

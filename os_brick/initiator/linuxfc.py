@@ -42,16 +42,21 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
         :returns: List with [c, t, l] if the target path exists else
         empty list
         """
-        cmd = 'grep -Gil "%(wwpns)s" %(path)s*/port_name' % {'wwpns': wwpn,
-                                                             'path': path}
-        # We need to run command in shell to expand the * glob
-        out, _err = self._execute(cmd, shell=True)  # nosec: B604
-        # The grep command will only return 1 path (if found)
-        # associated with the target wwpn used for the search
-        # in the current HBA host
-        out_path = out.split('\n')[0]
-        if out_path.startswith(path):
-            return out_path.split('/')[4].split(':')[1:] + [lun]
+        try:
+            cmd = 'grep -Gil "%(wwpns)s" %(path)s*/port_name' % {'wwpns': wwpn,
+                                                                 'path': path}
+            # We need to run command in shell to expand the * glob
+            out, _err = self._execute(cmd, shell=True)  # nosec: B604
+            # The grep command will only return 1 path (if found)
+            # associated with the target wwpn used for the search
+            # in the current HBA host
+            out_path = out.split('\n')[0]
+            if out_path.startswith(path):
+                return out_path.split('/')[4].split(':')[1:] + [lun]
+        except Exception as exc:
+            LOG.debug('Could not get HBA channel and SCSI target ID, path:'
+                      ' %(path)s*, reason: %(reason)s', {'path': path,
+                                                         'reason': exc})
 
         return []
 
@@ -68,33 +73,38 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
         :returns: List with [c, t, l] if the target path exists else
         empty list
         """
-        cmd = 'grep -Gil "%(wwpns)s" %(path)s*/port_name' % {'wwpns': wwpn,
-                                                             'path': path}
-        # We need to run command in shell to expand the * glob
-        out, _err = self._execute(cmd, shell=True)  # nosec: B604
-        # The scsi_target_id file contains the target ID.
-        # Example path:
-        # /sys/class/fc_remote_ports/rport-2:0-0/scsi_target_id
-        target_path = os.path.dirname(out) + '/scsi_target_id'
-        # There could be a case where the out variable has empty string
-        # and we end up with a path '/scsi_target_id' so check if it
-        # starts with the correct path
-        if target_path.startswith(path):
-            try:
-                scsi_target = '-1'
-                with open(target_path) as scsi_target_file:
-                    lines = scsi_target_file.read()
-                    scsi_target = lines.split('\n')[0]
-            except OSError:
-                # We were not able to read from the scsi_target_id
-                # file but we can still discover other targets so
-                # continue
-                pass
-            # If the target value is -1, it is not a real target so
-            # skip it
-            if scsi_target != '-1':
-                channel = target_path.split(':')[1].split('-')[0]
-                return [channel, scsi_target, lun]
+        try:
+            cmd = 'grep -Gil "%(wwpns)s" %(path)s*/port_name' % {'wwpns': wwpn,
+                                                                 'path': path}
+            # We need to run command in shell to expand the * glob
+            out, _err = self._execute(cmd, shell=True)  # nosec: B604
+            # The scsi_target_id file contains the target ID.
+            # Example path:
+            # /sys/class/fc_remote_ports/rport-2:0-0/scsi_target_id
+            target_path = os.path.dirname(out) + '/scsi_target_id'
+            # There could be a case where the out variable has empty string
+            # and we end up with a path '/scsi_target_id' so check if it
+            # starts with the correct path
+            if target_path.startswith(path):
+                try:
+                    scsi_target = '-1'
+                    with open(target_path) as scsi_target_file:
+                        lines = scsi_target_file.read()
+                        scsi_target = lines.split('\n')[0]
+                except OSError:
+                    # We were not able to read from the scsi_target_id
+                    # file but we can still discover other targets so
+                    # continue
+                    pass
+                # If the target value is -1, it is not a real target so
+                # skip it
+                if scsi_target != '-1':
+                    channel = target_path.split(':')[1].split('-')[0]
+                    return [channel, scsi_target, lun]
+        except Exception as exc:
+            LOG.debug('Could not get HBA channel and SCSI target ID, path:'
+                      ' %(path)s*, reason: %(reason)s', {'path': path,
+                                                         'reason': exc})
 
         return []
 
@@ -145,19 +155,14 @@ class LinuxFibreChannel(linuxscsi.LinuxSCSI):
         ctls = []
         luns_not_found = set()
         for wwpn, lun in targets:
-            try:
-                # Search for target in the fc_transport path first and if we
-                # don't find ctl, search for target in the fc_remote_ports path
-                ctl = (self._get_target_fc_transport_path(path, wwpn, lun) or
-                       self._get_target_fc_remote_ports_path(rpath, wwpn, lun))
+            # Search for target in the fc_transport path first and if we
+            # don't find ctl, search for target in the fc_remote_ports path
+            ctl = (self._get_target_fc_transport_path(path, wwpn, lun) or
+                   self._get_target_fc_remote_ports_path(rpath, wwpn, lun))
 
-                if ctl:
-                    ctls.append(ctl)
-
-            except Exception as exc:
-                LOG.debug('Could not get HBA channel and SCSI target ID, path:'
-                          ' %(path)s*, reason: %(reason)s', {'path': path,
-                                                             'reason': exc})
+            if ctl:
+                ctls.append(ctl)
+            else:
                 # If we didn't find any paths add it to the not found list
                 luns_not_found.add(lun)
 
