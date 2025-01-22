@@ -211,3 +211,9 @@ class StorPoolAPI:
     def snapshot_delete(self, snapshot):
         self._api_call(
             'POST', f'/ctrl/1.0/MultiCluster/SnapshotDelete/{snapshot}')
+
+    def get_iscsi_config(self):
+        return self._api_call('GET', '/ctrl/1.0/iSCSIConfig')
+
+    def post_iscsi_config(self, data):
+        return self._api_call('POST', '/ctrl/1.0/iSCSIConfig', data)

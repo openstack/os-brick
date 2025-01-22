@@ -1,0 +1,9 @@
+---
+features:
+  - |
+    Extend the StorPool API client to support the StorPool iSCSI
+    configuration API functionality.
+upgrade:
+  - |
+    Upgrading to this release is not required; it is an interim version
+    affecting only the StorPool connector.
