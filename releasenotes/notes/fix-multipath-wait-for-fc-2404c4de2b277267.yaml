@@ -1,0 +1,6 @@
+---
+fixes:
+  - |
+    `Bug #2097388 <https://bugs.launchpad.net/os-brick/+bug/2097388>`_:
+    Fibre Channel: Fixed issue while waiting for multipath device when
+    it is not populated in sysfs.
