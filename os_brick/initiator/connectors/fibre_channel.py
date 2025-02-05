@@ -167,7 +167,7 @@ class FibreChannelConnector(base.BaseLinuxConnector):
         host_paths = self._get_host_devices(possible_devs)
         return host_paths
 
-    def get_volume_paths(self, connection_properties: dict) -> list:
+    def get_volume_paths(self, connection_properties: dict) -> list[str]:
         volume_paths = []
         # first fetch all of the potential paths that might exist
         # how the FC fabric is zoned may alter the actual list
@@ -308,7 +308,7 @@ class FibreChannelConnector(base.BaseLinuxConnector):
         device_info['path'] = device_path
         return device_info
 
-    def _get_host_devices(self, possible_devs: list) -> list:
+    def _get_host_devices(self, possible_devs: list) -> list[str]:
         """Compute the device paths on the system with an id, wwn, and lun
 
         :param possible_devs: list of (platform, pci_id, wwn, lun) tuples
@@ -325,7 +325,8 @@ class FibreChannelConnector(base.BaseLinuxConnector):
         return host_devices
 
     def _get_possible_devices(self, hbas: list, targets: list,
-                              addressing_mode: Optional[str] = None) -> list:
+                              addressing_mode: Optional[str] = None) -> \
+            list[tuple[str, Any, str, int]]:
         """Compute the possible fibre channel device options.
 
         :param hbas: available hba devices.

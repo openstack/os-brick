@@ -40,6 +40,7 @@ import os
 import signal
 import threading
 import time
+from typing import Any, Iterable
 
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
@@ -198,7 +199,7 @@ def execute_root(*cmd, **kwargs):
 
 
 @privileged.default.entrypoint
-def unlink_root(*links, **kwargs):
+def unlink_root(*links: Iterable[str], **kwargs: dict[str, Any]) -> None:
     """Unlink system links with sys admin privileges.
 
     By default it will raise an exception if a link does not exist and stop

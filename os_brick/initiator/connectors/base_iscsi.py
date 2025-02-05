@@ -42,7 +42,8 @@ class BaseISCSIConnector(initiator_connector.InitiatorConnector):
 
     def _get_all_targets(
             self,
-            connection_properties: dict) -> list[tuple[str, str, list]]:
+            connection_properties: dict) -> \
+            list[tuple[str, str, list | str | int]]:
         if all(key in connection_properties for key in ('target_portals',
                                                         'target_iqns')):
             return list(zip(connection_properties['target_portals'],

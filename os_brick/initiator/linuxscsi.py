@@ -23,7 +23,8 @@ import glob
 import os
 import re
 import time
-from typing import Optional
+import typing
+from typing import Any, Iterable, Optional, Sequence
 
 from oslo_concurrency import processutils as putils
 from oslo_config import cfg
@@ -52,7 +53,7 @@ class LinuxSCSI(executor.Executor):
     WWN_TYPES = {'t10.': '1', 'eui.': '2', 'naa.': '3'}
 
     @staticmethod
-    def lun_for_addressing(lun, addressing_mode=None):
+    def lun_for_addressing(lun, addressing_mode=None) -> int:
         """Convert luns to values used by the system.
 
         How a LUN is codified depends on the standard being used by the storage
@@ -152,7 +153,7 @@ class LinuxSCSI(executor.Executor):
             with exc.context(force, 'Removing %s failed', device):
                 self.echo_scsi_command(path, "1")
 
-    def wait_for_volumes_removal(self, volumes_names: list[str]) -> None:
+    def wait_for_volumes_removal(self, volumes_names: Iterable[str]) -> None:
         """Wait for device paths to be removed from the system."""
         str_names = ', '.join(volumes_names)
         LOG.debug('Checking to see if SCSI volumes %s have been removed.',
@@ -202,7 +203,9 @@ class LinuxSCSI(executor.Executor):
         LOG.debug('dev_info=%s', str(dev_info))
         return dev_info
 
-    def get_sysfs_wwn(self, device_names: list[str], mpath=None) -> str:
+    def get_sysfs_wwn(self,
+                      device_names: list[str],
+                      mpath: Optional[str] = None) -> str:
         """Return the wwid from sysfs in any of devices in udev format."""
         # If we have a multipath DM we know that it has found the WWN
         if mpath:
@@ -252,7 +255,7 @@ class LinuxSCSI(executor.Executor):
             return ''
         return wwn_path[len(glob_str):]
 
-    def get_sysfs_wwid(self, device_names):
+    def get_sysfs_wwid(self, device_names: list[str]) -> str:
         """Return the wwid from sysfs in any of devices in udev format."""
         for device_name in device_names:
             try:
@@ -294,7 +297,7 @@ class LinuxSCSI(executor.Executor):
             return False
         return True
 
-    def get_dm_name(self, dm):
+    def get_dm_name(self, dm: str) -> str:
         """Get the Device map name given the device name of the dm on sysfs.
 
         :param dm: Device map name as seen in sysfs. ie: 'dm-0'
@@ -307,7 +310,8 @@ class LinuxSCSI(executor.Executor):
         except IOError:
             return ''
 
-    def find_sysfs_multipath_dm(self, device_names):
+    def find_sysfs_multipath_dm(self,
+                                device_names: Iterable[str]) -> Optional[str]:
         """Find the dm device name given a list of device names
 
         :param device_names: Iterable with device names, not paths. ie: ['sda']
@@ -322,7 +326,9 @@ class LinuxSCSI(executor.Executor):
         return None
 
     @staticmethod
-    def requires_flush(path, path_used, was_multipath):
+    def requires_flush(path: str,
+                       path_used: Optional[str],
+                       was_multipath: bool) -> bool:
         """Check if a device needs to be flushed when detaching.
 
         A device representing a single path connection to a volume must only be
@@ -352,8 +358,12 @@ class LinuxSCSI(executor.Executor):
         # instead it maps to /dev/mapped/crypt-XYZ
         return not was_multipath and '/dev' != os.path.split(path_used)[0]
 
-    def remove_connection(self, devices_names, force=False, exc=None,
-                          path_used=None, was_multipath=False):
+    def remove_connection(self,
+                          devices_names: Iterable[str],
+                          force: bool = False,
+                          exc=None,
+                          path_used: Optional[str] = None,
+                          was_multipath: bool = False) -> Optional[str]:
         """Remove LUNs and multipath associated with devices names.
 
         :param devices_names: Iterable with real device names ('sda', 'sdb')
@@ -364,7 +374,7 @@ class LinuxSCSI(executor.Executor):
         :returns: Multipath device map name if found and not flushed
         """
         if not devices_names:
-            return
+            return None
         exc = exception.ExceptionChainer() if exc is None else exc
 
         multipath_dm = self.find_sysfs_multipath_dm(devices_names)
@@ -404,7 +414,7 @@ class LinuxSCSI(executor.Executor):
                 self._remove_scsi_symlinks(devices_names)
         return multipath_name
 
-    def _remove_scsi_symlinks(self, devices_names):
+    def _remove_scsi_symlinks(self, devices_names: Iterable[str]) -> None:
         devices = ['/dev/' + dev for dev in devices_names]
         links = glob.glob('/dev/disk/by-id/scsi-*')
         unlink = []
@@ -421,7 +431,7 @@ class LinuxSCSI(executor.Executor):
         if unlink:
             priv_rootwrap.unlink_root(no_errors=True, *unlink)
 
-    def flush_device_io(self, device):
+    def flush_device_io(self, device: str) -> None:
         """This is used to flush any remaining IO in the buffers."""
         if os.path.exists(device):
             try:
@@ -437,7 +447,7 @@ class LinuxSCSI(executor.Executor):
                             "device: %(code)s", {'code': exc.exit_code})
                 raise
 
-    def flush_multipath_device(self, device_map_name):
+    def flush_multipath_device(self, device_map_name: str) -> None:
         LOG.debug("Flush multipath device %s", device_map_name)
         # NOTE(geguileo): With 30% connection error rates flush can get stuck,
         # set timeout to prevent it from hanging here forever.  Retry twice
@@ -447,7 +457,7 @@ class LinuxSCSI(executor.Executor):
                       root_helper=self._root_helper)
 
     @utils.retry(exception.VolumeDeviceNotFound)
-    def wait_for_path(self, volume_path):
+    def wait_for_path(self, volume_path: str) -> None:
         """Wait for a path to show up."""
         LOG.debug("Checking to see if %s exists yet.",
                   volume_path)
@@ -459,7 +469,7 @@ class LinuxSCSI(executor.Executor):
             LOG.debug("%s has shown up.", volume_path)
 
     @utils.retry(exception.BlockDeviceReadOnly, retries=5)
-    def wait_for_rw(self, wwn, device_path):
+    def wait_for_rw(self, wwn: str, device_path: str) -> None:
         """Wait for block device to be Read-Write."""
         LOG.debug("Checking to see if %s is read-only.",
                   device_path)
@@ -492,7 +502,7 @@ class LinuxSCSI(executor.Executor):
         else:
             LOG.debug("Block device %s is not read-only.", device_path)
 
-    def find_multipath_device_path(self, wwn):
+    def find_multipath_device_path(self, wwn: str) -> Optional[str]:
         """Look for the multipath device file for a volume WWN.
 
         Multipath devices can show up in several places on
@@ -536,7 +546,7 @@ class LinuxSCSI(executor.Executor):
                     "%(wwn)s", wwn_dict)
         return None
 
-    def find_multipath_device(self, device):
+    def find_multipath_device(self, device: str) -> Optional[dict[str, Any]]:
         """Discover multipath devices for a mpath device.
 
            This uses the slow multipath -l command to find a
@@ -614,7 +624,7 @@ class LinuxSCSI(executor.Executor):
             return info
         return None
 
-    def multipath_reconfigure(self):
+    def multipath_reconfigure(self) -> str:
         """Issue a multipathd reconfigure.
 
         When attachments come and go, the multipathd seems
@@ -627,7 +637,7 @@ class LinuxSCSI(executor.Executor):
                                     root_helper=self._root_helper)
         return out
 
-    def _multipath_resize_map(self, dm_path):
+    def _multipath_resize_map(self, dm_path: str) -> str:
         cmd = ('multipathd', 'resize', 'map', dm_path)
         (out, _err) = self._execute(*cmd,
                                     run_as_root=True,
@@ -639,7 +649,7 @@ class LinuxSCSI(executor.Executor):
 
         return out
 
-    def multipath_resize_map(self, dm_path):
+    def multipath_resize_map(self, dm_path: str) -> None:
         """Issue a multipath resize map on device.
 
         This forces the multipath daemon to update it's
@@ -727,7 +737,17 @@ class LinuxSCSI(executor.Executor):
 
         return new_size
 
-    def process_lun_id(self, lun_ids):
+    @typing.overload
+    def process_lun_id(self, lun_ids: str | int) -> str | int:
+        ...
+
+    @typing.overload
+    def process_lun_id(self, lun_ids: list[str | int]) -> list[str | int]:
+        ...
+
+    def process_lun_id(self, lun_ids: list[str | int] | str | int) -> \
+            list[str | int] | int | str:
+        processed: list[str | int] | int | str
         if isinstance(lun_ids, list):
             processed = []
             for x in lun_ids:
@@ -737,7 +757,7 @@ class LinuxSCSI(executor.Executor):
             processed = self._format_lun_id(lun_ids)
         return processed
 
-    def _format_lun_id(self, lun_id):
+    def _format_lun_id(self, lun_id: int | str) -> int | str:
         # make sure lun_id is an int
         lun_id = int(lun_id)
         if lun_id < 256:
@@ -746,7 +766,8 @@ class LinuxSCSI(executor.Executor):
             return ("0x%04x%04x00000000" %
                     (lun_id & 0xffff, lun_id >> 16 & 0xffff))
 
-    def get_hctl(self, session, lun):
+    def get_hctl(self, session: str, lun: str) -> \
+            Optional[tuple[str, str, str, str]]:
         """Given an iSCSI session return the host, channel, target, and lun."""
         glob_str = '/sys/class/iscsi_host/host*/device/session' + session
         paths = glob.glob(glob_str + '/target*')
@@ -767,7 +788,8 @@ class LinuxSCSI(executor.Executor):
         LOG.debug('HCTL %s found on session %s with lun %s', res, session, lun)
         return res
 
-    def device_name_by_hctl(self, session, hctl):
+    def device_name_by_hctl(self, session: str, hctl: Sequence) -> \
+            Optional[str]:
         """Find the device name given a session and the hctl.
 
         :param session: A string with the session number
@@ -787,7 +809,7 @@ class LinuxSCSI(executor.Executor):
                   session, hctl, device)
         return device
 
-    def scan_iscsi(self, host, channel='-', target='-', lun='-'):
+    def scan_iscsi(self, host, channel='-', target='-', lun='-') -> None:
         """Send an iSCSI scan request given the host and optionally the ctl."""
         LOG.debug('Scanning host %(host)s c: %(channel)s, '
                   't: %(target)s, l: %(lun)s)',
@@ -798,7 +820,7 @@ class LinuxSCSI(executor.Executor):
                                                       't': target,
                                                       'l': lun})
 
-    def multipath_add_wwid(self, wwid):
+    def multipath_add_wwid(self, wwid: str) -> bool:
         """Add a wwid to the list of know multipath wwids.
 
         This has the effect of multipathd being willing to create a dm for a
@@ -810,7 +832,7 @@ class LinuxSCSI(executor.Executor):
                                  root_helper=self._root_helper)
         return out.strip() == "wwid '" + wwid + "' added"
 
-    def multipath_add_path(self, realpath):
+    def multipath_add_path(self, realpath: str) -> bool:
         """Add a path to multipathd for monitoring.
 
         This has the effect of multipathd checking an already checked device
@@ -825,7 +847,7 @@ class LinuxSCSI(executor.Executor):
                                        root_helper=self._root_helper)
         return stdout.strip() == 'ok'
 
-    def multipath_del_path(self, realpath):
+    def multipath_del_path(self, realpath: str) -> bool:
         """Remove a path from multipathd for monitoring."""
         stdout, stderr = self._execute('multipathd', 'del', 'path', realpath,
                                        run_as_root=True, timeout=5,
@@ -835,7 +857,7 @@ class LinuxSCSI(executor.Executor):
 
     @utils.retry((putils.ProcessExecutionError, exception.BrickException),
                  retries=3)
-    def multipath_del_map(self, mpath):
+    def multipath_del_map(self, mpath: str) -> None:
         """Stop monitoring a multipath given its device name (eg: dm-7).
 
         Method ensures that the multipath device mapper actually dissapears
@@ -851,7 +873,7 @@ class LinuxSCSI(executor.Executor):
             raise exception.BrickException("Multipath doesn't go away")
         LOG.debug('Multipath %s no longer present', mpath)
 
-    def wait_for_mpath_device(self, mpath):
+    def wait_for_mpath_device(self, mpath: str) -> None:
         """Wait for multipath device to become ready for I/O.
 
         mpath is the kernel name of the device (dm-*) which is the

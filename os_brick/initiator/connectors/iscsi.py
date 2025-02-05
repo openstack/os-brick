@@ -179,7 +179,8 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
 
     def _get_all_targets(
             self,
-            connection_properties: dict) -> list[tuple[str, str, list]]:
+            connection_properties: dict) -> \
+            list[tuple[str, str, list | int | str]]:
         addressing_mode = connection_properties.get('addressing_mode')
         res = super()._get_all_targets(connection_properties)
 
@@ -996,7 +997,8 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
 
     def _munge_portal(
             self,
-            target: tuple[str, str, Union[list, str]]) -> tuple[str, str, str]:
+            target: tuple[str, str, Union[list, str, int]]) -> \
+            tuple[str, str, list | str | int]:
         """Remove brackets from portal.
 
         In case IPv6 address was used the udev path should not contain any
