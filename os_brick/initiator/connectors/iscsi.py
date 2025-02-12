@@ -20,7 +20,7 @@ import glob
 import os
 import re
 import time
-from typing import Any, Iterable, Optional, Union
+from typing import Any, Iterable, Optional, TypedDict, Union
 
 from oslo_concurrency import processutils as putils
 from oslo_log import log as logging
@@ -37,6 +37,15 @@ from os_brick.initiator import utils as initiator_utils
 from os_brick import utils
 
 LOG = logging.getLogger(__name__)
+
+
+class ConnData(TypedDict):
+    stop_connecting: bool
+    num_logins: int
+    failed_logins: int
+    stopped_threads: int
+    found_devices: list[str]
+    just_added_devices: list[str]
 
 
 class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
@@ -714,10 +723,15 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         last_try_on = 0.0
         found: list = []
         just_added_devices: list = []
+
         # Dict used to communicate with threads as detailed in _connect_vol
-        data = {'stop_connecting': False, 'num_logins': 0, 'failed_logins': 0,
-                'stopped_threads': 0, 'found_devices': found,
-                'just_added_devices': just_added_devices}
+
+        data: ConnData = {'stop_connecting': False,
+                          'num_logins': 0,
+                          'failed_logins': 0,
+                          'stopped_threads': 0,
+                          'found_devices': found,
+                          'just_added_devices': just_added_devices}
 
         ips_iqns_luns = self._get_ips_iqns_luns(connection_properties)
         # Launch individual threads for each session with the own properties
