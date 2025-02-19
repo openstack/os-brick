@@ -295,6 +295,8 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(
         base.BaseLinuxConnector, 'check_multipath', mock.MagicMock())
     @mock.patch.object(linuxscsi.LinuxSCSI, 'find_multipath_device_path')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'wait_for_mpath_device')
+    @mock.patch.object(linuxscsi.LinuxSCSI, 'find_sysfs_multipath_dm')
     def _test_connect_volume_multipath(self, get_device_info_mock,
                                        get_scsi_wwn_mock,
                                        get_fc_hbas_info_mock,
@@ -305,10 +307,14 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
                                        find_mp_dev_mock,
                                        access_mode,
                                        should_wait_for_rw,
-                                       find_mp_device_path_mock):
+                                       sysfs_multipath_dm_mock,
+                                       wait_mpath_device_mock,
+                                       find_mp_device_path_mock,
+                                       sysfs_dm_name=None):
         self.connector.use_multipath = True
         get_fc_hbas_mock.side_effect = self.fake_get_fc_hbas
         get_fc_hbas_info_mock.side_effect = self.fake_get_fc_hbas_info
+        sysfs_multipath_dm_mock.return_value = sysfs_dm_name
 
         wwn = '1234567890'
         multipath_devname = '/dev/md-1'
@@ -351,11 +357,15 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
             'tee -a /sys/block/sdc/device/delete',
         ]
         self.assertEqual(expected_commands, self.cmds)
+
+        sysfs_multipath_dm_mock.assert_called_once()
+        if sysfs_dm_name:
+            wait_mpath_device_mock.assert_called_once_with(sysfs_dm_name)
+        else:
+            wait_mpath_device_mock.assert_not_called()
+
         return connection_info
 
-    @ddt.data(None, 'dm-18')
-    @mock.patch.object(linuxscsi.LinuxSCSI, 'wait_for_mpath_device')
-    @mock.patch.object(linuxscsi.LinuxSCSI, 'find_sysfs_multipath_dm')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'find_multipath_device')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'wait_for_rw')
     @mock.patch.object(os.path, 'exists', return_value=True)
@@ -365,8 +375,7 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_scsi_wwn')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'get_device_info')
     @mock.patch.object(base.BaseLinuxConnector, 'check_valid_device')
-    def test_connect_volume_multipath_found_dm(self, sysfs_dm_name,
-                                               check_valid_device_mock,
+    def test_connect_volume_multipath_found_dm(self, check_valid_device_mock,
                                                get_device_info_mock,
                                                get_scsi_wwn_mock,
                                                get_fc_hbas_info_mock,
@@ -374,12 +383,9 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
                                                realpath_mock,
                                                exists_mock,
                                                wait_for_rw_mock,
-                                               find_mp_dev_mock,
-                                               sysfs_multipath_dm_mock,
-                                               wait_mpath_device_mock):
+                                               find_mp_dev_mock):
 
         check_valid_device_mock.return_value = True
-        sysfs_multipath_dm_mock.return_value = sysfs_dm_name
         self._test_connect_volume_multipath(get_device_info_mock,
                                             get_scsi_wwn_mock,
                                             get_fc_hbas_info_mock,
@@ -389,12 +395,8 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
                                             wait_for_rw_mock,
                                             find_mp_dev_mock,
                                             'rw',
-                                            True)
-        sysfs_multipath_dm_mock.assert_called_once()
-        if sysfs_dm_name:
-            wait_mpath_device_mock.assert_called_once_with(sysfs_dm_name)
-        else:
-            wait_mpath_device_mock.assert_not_called()
+                                            True,
+                                            sysfs_dm_name='dm-18')
 
     @mock.patch.object(linuxscsi.LinuxSCSI, 'find_multipath_device')
     @mock.patch.object(linuxscsi.LinuxSCSI, 'wait_for_rw')
