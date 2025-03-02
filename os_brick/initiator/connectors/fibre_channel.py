@@ -390,7 +390,12 @@ class FibreChannelConnector(base.BaseLinuxConnector):
                     with exc.context(force, 'Flushing %s failed', mpath_path):
                         self._linuxscsi.flush_multipath_device(mpath_path)
             real_path = typing.cast(str, real_path)
-            dev_info = self._linuxscsi.get_device_info(real_path)
+            # real_path is a /dev/sdX path (translated from the
+            # /dev/disk/by-path symlink) which is sufficient to
+            # remove the device.
+            # NOTE: We don't require the HCTL values of the device
+            # which was fetched in traditional workflow.
+            dev_info = {'device': real_path}
             devices.append(dev_info)
 
         # If flush failed, then remove it forcefully since force=True

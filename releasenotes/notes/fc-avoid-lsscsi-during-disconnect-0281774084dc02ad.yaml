@@ -1,0 +1,6 @@
+---
+fixes:
+  - |
+    `Bug #2102053 <https://bugs.launchpad.net/os-brick/+bug/2102053>`_:
+    Fibre Channel: Improved performance during disconnect by avoiding
+    execution of ``lsscsi`` command.
