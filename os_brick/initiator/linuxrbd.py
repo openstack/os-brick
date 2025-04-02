@@ -250,12 +250,16 @@ class RBDVolumeIOWrapper(io.RawIOBase):
             LOG.warning("flush() not supported in this version of librbd")
 
     def fileno(self) -> NoReturn:
-        """RBD does not have support for fileno() so we raise IOError.
+        """RBD does not have support for fileno().
 
-        Raising IOError is recommended way to notify caller that interface is
-        not supported - see http://docs.python.org/2/library/io.html#io.IOBase
+        Raises an OSError subclass as recommended by
+        http://docs.python.org/3/library/io.html#io.IOBase .
         """
-        raise IOError(_("fileno() not supported by RBD()"))
+
+        # (JSc) We actually use io.UnsupportedOperation here, because that is
+        # what requests explicitly checks against. Raising anything else
+        # would make it impossible to use Rbd objects with requests.
+        raise io.UnsupportedOperation(_("fileno() not supported by RBD()"))
 
     def close(self) -> None:
         if not self.closed:
