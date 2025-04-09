@@ -1,0 +1,8 @@
+---
+fixes:
+  - |
+    Dell PowerFlex driver `Bug #2034685
+    <https://bugs.launchpad.net/os-brick/+bug/2034685>`_: Added
+    a retry mechanism to check if the disconnected device is
+    actually removed from the host ensuring that subsequent
+    connections succeed.
