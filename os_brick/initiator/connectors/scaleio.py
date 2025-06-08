@@ -120,9 +120,19 @@ class ScaleIOConnector(base.BaseLinuxConnector):
             raise exception.BrickException(message=msg)
 
     @staticmethod
-    def get_connector_properties(root_helper, *args, **kwargs):
+    def get_connector_properties(root_helper: str, *args, **kwargs) -> dict:
         """The ScaleIO connector properties."""
-        return {}
+        props = {}
+        scaleio = ScaleIOConnector(root_helper=root_helper,
+                                   execute=kwargs.get('execute'))
+        try:
+            guid = scaleio._get_guid()
+            if guid:
+                props['sdc_guid'] = guid
+        except Exception as e:
+            msg = _("Unable to find SDC guid: %s") % e
+            LOG.info(msg)
+        return props
 
     def get_search_path(self):
         return "/dev/disk/by-id"
@@ -326,25 +336,32 @@ class ScaleIOConnector(base.BaseLinuxConnector):
         return verify_cert
 
     def get_config(self, connection_properties):
-        self.local_sdc_ip = connection_properties['hostIP']
         self.volume_name = connection_properties['scaleIO_volname']
         # instances which were created before Newton release don't have
         # 'scaleIO_volume_id' property, in such cases connector will resolve
         # volume_id from volname
         self.volume_id = connection_properties.get('scaleIO_volume_id')
-        self.server_ip = connection_properties['serverIP']
-        self.server_port = connection_properties['serverPort']
-        self.server_username = connection_properties['serverUsername']
-        self.server_password, server_token = self._get_password_token(
-            connection_properties)
-        if server_token:
-            self.server_token = server_token
-        self.iops_limit = connection_properties['iopsLimit']
-        self.bandwidth_limit = connection_properties['bandwidthLimit']
-        self.verify_certificate = (
-            connection_properties.get('verify_certificate')
-        )
-        self.certificate_path = connection_properties.get('certificate_path')
+
+        # Since there is no connector configuration,
+        # connection_properties doesn't have the following properties:
+        key_list = ['hostIP', 'serverIP', 'serverPort', 'serverUsername',
+                    'iopsLimit', 'bandwidthLimit']
+        if all(key in connection_properties for key in key_list):
+            self.local_sdc_ip = connection_properties['hostIP']
+            self.server_ip = connection_properties['serverIP']
+            self.server_port = connection_properties['serverPort']
+            self.server_username = connection_properties['serverUsername']
+            self.server_password, server_token = self._get_password_token(
+                connection_properties)
+            if server_token:
+                self.server_token = server_token
+            self.iops_limit = connection_properties['iopsLimit']
+            self.bandwidth_limit = connection_properties['bandwidthLimit']
+            self.verify_certificate = (
+                connection_properties.get('verify_certificate')
+            )
+            self.certificate_path = connection_properties.get(
+                'certificate_path')
         device_info = {'type': 'block',
                        'path': self.volume_path}
         return device_info
@@ -379,6 +396,14 @@ class ScaleIOConnector(base.BaseLinuxConnector):
             }
         )
 
+        if self.no_secret:
+            # Since there is no connector configuration,
+            # the driver has done mapping and set QoS.
+            self.volume_path = self._find_volume_path()
+            device_info['path'] = self.volume_path
+            return device_info
+
+        # The old routine with connector configuration
         guid = self._get_guid()
         params = {'guid': guid, 'allowMultipleMappings': 'TRUE'}
         self.volume_id = self.volume_id or self._get_volume_id()
@@ -405,7 +430,7 @@ class ScaleIOConnector(base.BaseLinuxConnector):
             response = r.json()
             error_code = response['errorCode']
             if error_code == self.VOLUME_ALREADY_MAPPED_ERROR or \
-               error_code == self.VOLUME_ALREADY_MAPPED_ERROR_v4:
+                    error_code == self.VOLUME_ALREADY_MAPPED_ERROR_v4:
                 LOG.warning(
                     "Ignoring error mapping volume %(volume_name)s: "
                     "volume already mapped.",
@@ -483,7 +508,6 @@ class ScaleIOConnector(base.BaseLinuxConnector):
                               the operation.  Default is False.
         """
         self.get_config(connection_properties)
-        self.volume_id = self.volume_id or self._get_volume_id()
         LOG.info(
             "ScaleIO disconnect volume in ScaleIO brick volume driver."
         )
@@ -494,6 +518,14 @@ class ScaleIOConnector(base.BaseLinuxConnector):
             {'volume_name': self.volume_name, 'sdc_ip': self.local_sdc_ip,
              'server_ip': self.server_ip}
         )
+
+        # Since there is no connector configuration,
+        # the driver will unmap the volume.
+        if self.no_secret:
+            return
+
+        # The old routine with connector configuration
+        self.volume_id = self.volume_id or self._get_volume_id()
 
         guid = self._get_guid()
         params = {'guid': guid}
@@ -520,7 +552,7 @@ class ScaleIOConnector(base.BaseLinuxConnector):
             response = r.json()
             error_code = response['errorCode']
             if error_code == self.VOLUME_NOT_MAPPED_ERROR or \
-               error_code == self.VOLUME_NOT_MAPPED_ERROR_v4:
+                    error_code == self.VOLUME_NOT_MAPPED_ERROR_v4:
                 LOG.warning(
                     "Ignoring error unmapping volume %(volume_id)s: "
                     "volume not mapped.", {'volume_id': self.volume_name}
@@ -571,3 +603,7 @@ class ScaleIOConnector(base.BaseLinuxConnector):
             LOG.info("ScaleIO disconnect volume %(volume_id)s "
                      "removed at path %(path)s.",
                      {'volume_id': self.volume_id, 'path': path})
+
+    @property
+    def no_secret(self):
+        return not self.server_password and not self.server_token

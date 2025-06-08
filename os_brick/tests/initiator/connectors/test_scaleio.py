@@ -163,6 +163,16 @@ class ScaleIOConnectorTestCase(test_connector.ConnectorTestCase):
         props = scaleio.ScaleIOConnector.get_connector_properties(
             'sudo', multipath=True, enforce_multipath=True)
 
+        expected_props = {'sdc_guid': self.fake_guid}
+        self.assertEqual(expected_props, props)
+
+    @mock.patch.object(scaleio.ScaleIOConnector,
+                       '_get_guid',
+                       side_effect=exception.BrickException)
+    def test_get_connector_properties_fail(self, mock_sdc_guid):
+        props = scaleio.ScaleIOConnector.get_connector_properties(
+            'sudo', multipath=True, enforce_multipath=True)
+
         expected_props = {}
         self.assertEqual(expected_props, props)
 
@@ -191,6 +201,17 @@ class ScaleIOConnectorTestCase(test_connector.ConnectorTestCase):
         self.connector.connect_volume(connection_properties)
         self.get_guid_mock.assert_called_once_with(
             self.connector.GET_GUID_OP_CODE)
+        self.get_password_mock.assert_not_called()
+
+    def test_connect_volume_with_no_secret(self):
+        """Successful connect to volume with no secret"""
+        connection_properties = {
+            'scaleIO_volname': self.vol['name'],
+            'scaleIO_volume_id': self.vol['provider_id'],
+        }
+
+        self.connector.connect_volume(connection_properties)
+        self.get_guid_mock.assert_not_called()
         self.get_password_mock.assert_not_called()
 
     def test_connect_volume_without_volume_id(self):
@@ -223,6 +244,15 @@ class ScaleIOConnectorTestCase(test_connector.ConnectorTestCase):
         self.connector.disconnect_volume(self.fake_connection_properties, None)
         self.get_guid_mock.assert_called_once_with(
             self.connector.GET_GUID_OP_CODE)
+
+    def test_disconnect_volume_with_no_secret(self):
+        """Successful disconnect from volume with no secret"""
+        connection_properties = {
+            'scaleIO_volname': self.vol['name'],
+            'scaleIO_volume_id': self.vol['provider_id'],
+        }
+        self.connector.disconnect_volume(connection_properties, None)
+        self.get_guid_mock.assert_not_called()
 
     def test_disconnect_volume_without_volume_id(self):
         """Successful disconnect from volume without a Volume Id"""
