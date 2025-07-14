@@ -812,6 +812,8 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
             self._linuxscsi.wait_for_mpath_device(mpath)
             if not wwn:
                 wwn = self._linuxscsi.get_sysfs_wwn(found, mpath)
+            LOG.debug('Found WWN %(wwn)s for multipath device %(mpath)s',
+                      {'wwn': wwn, 'mpath': mpath})
 
         assert wwn is not None
         return self._get_connect_result(connection_properties, wwn, found,
