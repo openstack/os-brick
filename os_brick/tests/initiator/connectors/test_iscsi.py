@@ -204,6 +204,112 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
         self.assertDictEqual(expected, res)
         get_targets_mock.assert_not_called()
 
+    @mock.patch('glob.glob')
+    @mock.patch.object(iscsi.ISCSIConnector, '_get_iscsi_sessions_full')
+    @mock.patch.object(iscsi.ISCSIConnector, '_get_iscsi_nodes')
+    def test_get_connection_devices_multiple_sessions_same_portal_iqn(
+            self, nodes_mock, sessions_mock, glob_mock):
+        """Test multiple sessions for same (portal, iqn) pair.
+
+        This test covers the scenario where multiple iSCSI sessions exist
+        for the same (portal, iqn) combination simulating a case where the
+        same portal+iqn has multiple session IDs due to multipath or
+        multiple connections.
+        """
+        # _get_ips_iqns_luns will return the LUNs we want to remove and what
+        # portals+iqns they are associated with
+        ips_iqns_luns = [
+            ('ip1:port1', 'tgt1', 4),
+            ('ip2:port1', 'tgt1', 4),
+            ('ip3:port1', 'tgt1', 4),
+            ('ip4:port1', 'tgt1', 4),
+        ]
+
+        # Multiple sessions for each target - this is the key scenario
+        sessions_mock.return_value = [
+            # Multiple sessions for ip1:port1 + tgt1
+            ('tcp:', '1', 'ip1:port1', '1', 'tgt1'),
+            ('tcp:', '2', 'ip1:port1', '1', 'tgt1'),
+            # Multiple sessions for ip2:port1 + tgt1
+            ('tcp:', '3', 'ip2:port1', '1', 'tgt1'),
+            ('tcp:', '4', 'ip2:port1', '1', 'tgt1'),
+            # Multiple sessions for ip3:port1 + tgt1
+            ('tcp:', '5', 'ip3:port1', '1', 'tgt1'),
+            ('tcp:', '6', 'ip3:port1', '1', 'tgt1'),
+            # Multiple sessions for ip4:port1 + tgt1
+            ('tcp:', '7', 'ip4:port1', '1', 'tgt1'),
+            ('tcp:', '8', 'ip4:port1', '1', 'tgt1'),
+        ]
+
+        # Include all nodes for our custom targets
+        nodes_mock.return_value = [
+            ('ip1:port1', 'tgt1'),
+            ('ip2:port1', 'tgt1'),
+            ('ip3:port1', 'tgt1'),
+            ('ip4:port1', 'tgt1'),
+        ]
+
+        sys_cls = '/sys/class/scsi_host/host'
+        # Each session should be queried for devices
+        # Sessions 1,2: ip1:port1 + tgt1 - LUN 4 + other LUNs
+        # Sessions 3,4: ip2:port1 + tgt1 - LUN 4 + other LUNs
+        # Sessions 5,6: ip3:port1 + tgt1 - LUN 4 + other LUNs
+        # Sessions 7,8: ip4:port1 + tgt1 - LUN 4 + other LUNs
+        # This simulates multiple sessions per target
+        glob_mock.side_effect = [
+            # Session 1 and 2 devices - LUN 4 + other LUN
+            [sys_cls + '1/device/session1/target1/1:0:0:4/block/sda',
+             sys_cls + '1/device/session1/target1/1:0:0:5/block/sdb'],
+            [sys_cls + '2/device/session2/target2/2:0:0:6/block/sdc'],
+            # Session 3 and 4 devices - ip2:port1 + tgt1, LUN 5 + other LUN
+            [sys_cls + '3/device/session3/target3/3:0:0:4/block/sdd',
+             sys_cls + '3/device/session3/target3/3:0:0:5/block/sde'],
+            [sys_cls + '4/device/session4/target4/4:0:0:8/block/sdf'],
+            # Session 5 and 6 devices - ip3:port1 + tgt1, LUN 6 + other LUN
+            [sys_cls + '5/device/session5/target5/5:0:0:4/block/sdg',
+             sys_cls + '5/device/session5/target5/5:0:0:6/block/sdh'],
+            [sys_cls + '6/device/session6/target6/6:0:0:5/block/sdi'],
+            # Session 7 and 7 devices - ip4:port1 + tgt1, LUN 7 + other LUN
+            [sys_cls + '7/device/session7/target7/7:0:0:4/block/sdj',
+             sys_cls + '7/device/session7/target7/7:0:0:5/block/sdk'],
+            [sys_cls + '8/device/session8/target8/8:0:0:6/block/sdl'],
+        ]
+
+        res = self.connector._get_connection_devices(mock.sentinel.props,
+                                                     ips_iqns_luns)
+
+        # Expected: devices from target LUNs should be in 'belong' set,
+        # devices from other LUNs should be in 'others' set
+        expected = {
+            ('ip1:port1', 'tgt1'): ({'sda'}, {'sdb', 'sdc'}),  # LUN 4
+            ('ip2:port1', 'tgt1'): ({'sdd'}, {'sde', 'sdf'}),  # LUN 5
+            ('ip3:port1', 'tgt1'): ({'sdg'}, {'sdh', 'sdi'}),  # LUN 6
+            ('ip4:port1', 'tgt1'): ({'sdj'}, {'sdk', 'sdl'}),  # LUN 7
+        }
+
+        self.assertDictEqual(expected, res)
+
+        # Verify that glob was called for each matching session
+        expected_glob_calls = [
+            mock.call('/sys/class/scsi_host/host*/device/session1/target*'
+                      '/*:*:*:*/block/*'),
+            mock.call('/sys/class/scsi_host/host*/device/session2/target*'
+                      '/*:*:*:*/block/*'),
+            mock.call('/sys/class/scsi_host/host*/device/session3/target*'
+                      '/*:*:*:*/block/*'),
+            mock.call('/sys/class/scsi_host/host*/device/session4/target*'
+                      '/*:*:*:*/block/*'),
+            mock.call('/sys/class/scsi_host/host*/device/session5/target*'
+                      '/*:*:*:*/block/*'),
+            mock.call('/sys/class/scsi_host/host*/device/session6/target*'
+                      '/*:*:*:*/block/*'),
+            mock.call('/sys/class/scsi_host/host*/device/session7/target*'
+                      '/*:*:*:*/block/*'),
+            mock.call('/sys/class/scsi_host/host*/device/session8/target*'
+                      '/*:*:*:*/block/*'),
+        ]
+        glob_mock.assert_has_calls(expected_glob_calls)
+
     def generate_device(self, location, iqn, transport=None, lun=1):
         dev_format = "ip-%s-iscsi-%s-lun-%s" % (location, iqn, lun)
         if transport:
