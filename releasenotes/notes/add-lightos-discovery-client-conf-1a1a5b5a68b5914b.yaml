@@ -1,0 +1,28 @@
+---
+features:
+  - |
+    **LightOS connector**: Introduce new configuration options to customize
+    the LightOS discovery client’s behavior.
+
+    Operators can now override the default values for:
+
+    - ``discovery_client_address``
+    - ``discovery_client_port``
+    - ``discovery_client_dir_path``
+
+    These settings allow fine-tuning of the discovery client’s network
+    endpoint and configuration directory.
+
+upgrade:
+  - |
+    **LightOS connector**: Introduce new configuration options to customize
+    the LightOS discovery client’s behavior.
+
+    Operators can now override the default values for:
+
+    - ``discovery_client_address``
+    - ``discovery_client_port``
+    - ``discovery_client_dir_path``
+
+    No changes required. Default values are retained for backward compatibility;
+    no action is needed during upgrade.

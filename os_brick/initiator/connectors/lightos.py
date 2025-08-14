@@ -23,6 +23,7 @@ import time
 import traceback
 
 from oslo_concurrency import processutils as putils
+from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_utils import netutils
 import psutil
@@ -35,11 +36,29 @@ from os_brick import utils
 
 
 DEVICE_SCAN_ATTEMPTS_DEFAULT = 5
-DISCOVERY_CLIENT_PORT = 6060
 LOG = logging.getLogger(__name__)
 
 nvmec_pattern = ".*nvme[0-9]+[cp][0-9]+.*"
 nvmec_match = re.compile(nvmec_pattern)
+
+_opts = [
+    cfg.HostAddressOpt('lightos_discovery_client_address',
+                       default="localhost",
+                       help="Address of the LightOS discovery client"),
+    cfg.PortOpt('lightos_discovery_client_port',
+                default=6060,
+                help="Port of the LightOS discovery client"),
+    cfg.StrOpt('lightos_discovery_client_dir_path',
+               default='/etc/discovery-client/discovery.d/',
+               help="Directory path for the LightOS discovery client files.")
+]
+
+cfg.CONF.register_opts(_opts, group='os_brick')
+
+
+def list_opts():
+    """oslo.config.opts entrypoint for sample config generation."""
+    return [('os_brick', _opts)]
 
 
 class LightOSConnector(base.BaseLinuxConnector):
@@ -62,7 +81,15 @@ class LightOSConnector(base.BaseLinuxConnector):
             device_scan_attempts=device_scan_attempts,
             *args, **kwargs)
         self.message_queue = message_queue
-        self.DISCOVERY_DIR_PATH = '/etc/discovery-client/discovery.d/'
+        self.discovery_dir_path = (
+            cfg.CONF.os_brick.lightos_discovery_client_dir_path
+        )
+        self.discovery_address = (
+            cfg.CONF.os_brick.lightos_discovery_client_address
+        )
+        self.discovery_port = (
+            cfg.CONF.os_brick.lightos_discovery_client_port
+        )
 
     @staticmethod
     def get_ip_addresses():
@@ -123,10 +150,12 @@ class LightOSConnector(base.BaseLinuxConnector):
         return props
 
     def dsc_file_name(self, uuid):
-        return os.path.join(self.DISCOVERY_DIR_PATH, "%s.conf" % uuid)
+        return os.path.join(self.discovery_dir_path, "%s.conf" % uuid)
 
     def find_dsc(self):
-        conn = http.client.HTTPConnection("localhost", DISCOVERY_CLIENT_PORT)
+        conn = http.client.HTTPConnection(
+            self.discovery_address,
+            self.discovery_port)
         try:
             conn.request("HEAD", "/metrics")
             resp = conn.getresponse()
