@@ -10,19 +10,11 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import os
-
 from oslo_privsep import capabilities as c
 from oslo_privsep import priv_context
 
 
-capabilities = [c.CAP_SYS_ADMIN]
-
-# On virtual environments libraries are not owned by the Daemon user (root), so
-# the Daemon needs the capability to bypass file read permission checks in
-# order to dynamically load the code to run.
-if os.environ.get('VIRTUAL_ENV'):
-    capabilities.append(c.CAP_DAC_READ_SEARCH)
+capabilities = [c.CAP_SYS_ADMIN, c.CAP_DAC_READ_SEARCH]
 
 # It is expected that most (if not all) os-brick operations can be
 # executed with these privileges.
