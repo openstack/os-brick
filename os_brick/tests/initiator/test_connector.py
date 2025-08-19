@@ -26,6 +26,7 @@ from os_brick.initiator.connectors import base
 from os_brick.initiator.connectors import fake
 from os_brick.initiator.connectors import iscsi
 from os_brick.initiator.connectors import nvmeof
+from os_brick.initiator.connectors import scaleio
 from os_brick.initiator import linuxfc
 from os_brick.privileged import nvmeof as priv_nvmeof
 from os_brick.privileged import rootwrap as priv_rootwrap
@@ -44,6 +45,9 @@ class ZeroIntervalLoopingCall(loopingcall.FixedIntervalLoopingCall):
 
 class ConnectorUtilsTestCase(test_base.TestCase):
 
+    @mock.patch.object(scaleio.ScaleIOConnector,
+                       '_get_guid',
+                       return_value='fake_sdc_guid')
     @mock.patch.object(nvmeof.NVMeOFConnector,
                        '_is_native_multipath_supported',
                        return_value=False)
@@ -71,6 +75,7 @@ class ConnectorUtilsTestCase(test_base.TestCase):
                                              mock_hostuuid,
                                              mock_sysuuid,
                                              mock_native_multipath_supported,
+                                             mock_scaleio_sdc_guid,
                                              host='fakehost'):
         props_actual = connector.get_connector_properties('sudo',
                                                           MY_IP,
@@ -87,7 +92,8 @@ class ConnectorUtilsTestCase(test_base.TestCase):
                  'nvme_native_multipath': False,
                  'os_type': os_type,
                  'platform': platform,
-                 'do_local_attach': False}
+                 'do_local_attach': False,
+                 'sdc_guid': 'fake_sdc_guid'}
         self.assertEqual(props, props_actual)
 
     def test_brick_get_connector_properties_connectors_called(self):
