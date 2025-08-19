@@ -15,13 +15,13 @@
 
 """Remote filesystem client utilities."""
 
+import hashlib
 import os
 import re
 import tempfile
 
 from oslo_concurrency import processutils
 from oslo_log import log as logging
-from oslo_utils.secretutils import md5
 
 from os_brick import exception
 from os_brick import executor
@@ -71,8 +71,7 @@ class RemoteFsClient(executor.Executor):
         """Return a string that represents hash of base_str (hex format)."""
         if isinstance(base_str, str):
             base_str = base_str.encode('utf-8')
-        return md5(base_str,
-                   usedforsecurity=False).hexdigest()
+        return hashlib.md5(base_str, usedforsecurity=False).hexdigest()
 
     def get_mount_point(self, device_name: str):
         """Get Mount Point.
