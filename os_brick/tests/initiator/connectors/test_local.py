@@ -11,9 +11,11 @@
 #    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #    License for the specific language governing permissions and limitations
 #    under the License.
+from unittest import mock
 
 from os_brick.initiator.connectors import local
 from os_brick.tests.initiator import test_connector
+from os_brick import utils
 
 
 class LocalConnectorTestCase(test_connector.ConnectorTestCase):
@@ -52,7 +54,8 @@ class LocalConnectorTestCase(test_connector.ConnectorTestCase):
         self.assertRaises(ValueError,
                           self.connector.connect_volume, cprops)
 
-    def test_extend_volume(self):
-        self.assertRaises(NotImplementedError,
-                          self.connector.extend_volume,
-                          self.connection_properties)
+    @mock.patch.object(utils, 'get_device_size', return_value=1024)
+    def test_extend_volume(self, _utils_mock):
+        cprops = self.connection_properties
+        new_size = self.connector.extend_volume(cprops)
+        self.assertEqual(1024, new_size)
