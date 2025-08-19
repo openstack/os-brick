@@ -15,8 +15,6 @@
 
 """LVM class for performing LVM operations."""
 
-from __future__ import annotations
-
 import math
 import os
 import re

@@ -12,8 +12,6 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from __future__ import annotations
-
 from os_brick.i18n import _
 from os_brick.initiator.connectors import base
 from os_brick import utils

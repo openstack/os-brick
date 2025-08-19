@@ -17,8 +17,6 @@
    Note, this is not iSCSI.
 """
 
-from __future__ import annotations
-
 import glob
 import os
 import re

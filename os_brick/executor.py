@@ -18,8 +18,6 @@
    and root_helper settings, so this provides that hook.
 """
 
-from __future__ import annotations
-
 import threading
 from typing import Callable
 

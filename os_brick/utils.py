@@ -12,8 +12,6 @@
 #
 """Utilities and helper functions."""
 
-from __future__ import annotations
-
 import binascii
 import functools
 import inspect

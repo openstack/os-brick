@@ -14,8 +14,6 @@
 
 """Generic linux Fibre Channel utilities."""
 
-from __future__ import annotations
-
 import glob
 import os
 from typing import Iterable
