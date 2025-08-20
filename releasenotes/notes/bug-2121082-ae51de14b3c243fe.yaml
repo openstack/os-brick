@@ -1,0 +1,8 @@
+---
+fixes:
+  - |
+    RBD connector `bug #2121082
+    <https://bugs.launchpad.net/cinder/+bug/2121082>`_: Pass all monitor
+    hosts in a single parameter.  Prior to this fix, only the last monitor
+    was considered which could cause connection failures if that one monitor
+    was inaccessible.
