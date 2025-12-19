@@ -358,6 +358,17 @@ class LinuxSCSI(executor.Executor):
         # instead it maps to /dev/mapped/crypt-XYZ
         return not was_multipath and '/dev' != os.path.split(path_used)[0]
 
+    @utils.retry(exception.MultipathdPathsNotRemoved)
+    def wait_multipathd_remove_paths(self, existing_devices: set[str]):
+        """Wait for device paths to be removed from multipathd monitoring"""
+        LOG.debug("Checking to see if device paths %s are still under "
+                  "multipathd monitoring", existing_devices)
+        all_devices = set(self.multipath_show_paths("%d").split())
+        if existing_devices.intersection(all_devices):
+            raise exception.MultipathdPathsNotRemoved(devices=existing_devices)
+        LOG.debug("Device paths %s have been removed from multipathd "
+                  "monitoring.", existing_devices)
+
     def remove_connection(self,
                           devices_names: Iterable[str],
                           force: bool = False,
@@ -393,14 +404,6 @@ class LinuxSCSI(executor.Executor):
 
         for device_name in devices_names:
             dev_path = '/dev/' + device_name
-            if multipath_running:
-                # Recent multipathd doesn't remove path devices in time when
-                # it receives mutiple udev events in a short span, so here we
-                # tell multipathd to remove the path device immediately.
-                # Even if this step fails, later removing an iscsi device
-                # triggers a udev event and multipathd can remove the path
-                # device based on the udev event
-                self.multipath_del_path(dev_path)
             flush = self.requires_flush(dev_path, path_used, was_multipath)
             self.remove_scsi_device(dev_path, force, exc, flush)
 
@@ -412,6 +415,25 @@ class LinuxSCSI(executor.Executor):
                 # Since we use /dev/disk/by-id/scsi- links to get the wwn we
                 # must ensure they are always removed.
                 self._remove_scsi_symlinks(devices_names)
+
+        if multipath_running:
+            try:
+                # Removing the device triggers uevents used by
+                # multipathd to cleanup the device paths automatically
+                # Wait for device paths removal from multipathd
+                # monitoring
+                self.wait_multipathd_remove_paths(devices_names)
+            except exception.MultipathdPathsNotRemoved:
+                # This is our last resort at cleaning up devices if
+                # for some reason the multipathd didn't perform the
+                # cleanup as expected
+                LOG.debug("Device paths %s were not removed automatically "
+                          "from multipathd monitoring. Making final attempt "
+                          "to remove them explicitly.", devices_names)
+                for device_name in devices_names:
+                    dev_path = '/dev/' + device_name
+                    self.multipath_del_path(dev_path)
+
         return multipath_name
 
     def _remove_scsi_symlinks(self, devices_names: Iterable[str]) -> None:
@@ -889,3 +911,11 @@ class LinuxSCSI(executor.Executor):
             LOG.error("Failed to get mpath device %(mpath)s ready for "
                       "I/O: %(except)s", {'mpath': mpath, 'except': exc})
             raise
+
+    def multipath_show_paths(self, fmt: str) -> str:
+        """Show paths under multipathd for monitoring."""
+        stdout, stderr = self._execute('multipathd', 'show', 'paths', 'raw',
+                                       'format', fmt, run_as_root=True,
+                                       timeout=5, check_exit_code=False,
+                                       root_helper=self._root_helper)
+        return stdout

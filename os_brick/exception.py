@@ -168,6 +168,11 @@ class InvalidConnectorProtocol(ValueError):
     pass
 
 
+class MultipathdPathsNotRemoved(BrickException):
+    message = _("The following devices %(devices)s are still not removed "
+                "from multipathd monitoring")
+
+
 class ExceptionChainer(BrickException):
     """A Exception that can contain a group of exceptions.
 

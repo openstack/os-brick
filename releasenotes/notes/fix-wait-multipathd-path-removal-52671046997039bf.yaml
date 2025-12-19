@@ -1,0 +1,9 @@
+---
+fixes:
+  - |
+    `Bug #2136842 <https://bugs.launchpad.net/os-brick/+bug/2136842>`_: Fixed
+    issue with server hard reboot instance due to delayed uevent processing.
+    When performing server hard reboot, the uevents for removing multipathd
+    paths could be delayed and cause device removal at a later stage causing
+    the device to be inaccessible. Now we wait for multipathd to remove the
+    paths before marking the disconnect_volume operation complete.
