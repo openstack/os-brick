@@ -611,8 +611,7 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         thread safe.
 
         Since the heaviest operations are run via subprocesses we don't worry
-        too much about the GIL or how the eventlets will handle the context
-        switching.
+        too much about context switching.
 
         The method will only try to log in once, since iscsid's initiator
         already tries 8 times by default to do the login, or whatever value we
