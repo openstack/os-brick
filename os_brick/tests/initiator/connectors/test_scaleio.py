@@ -168,7 +168,7 @@ class ScaleIOConnectorTestCase(test_connector.ConnectorTestCase):
 
     @mock.patch.object(scaleio.ScaleIOConnector,
                        '_get_guid',
-                       side_effect=exception.BrickException)
+                       return_value=None)
     def test_get_connector_properties_fail(self, mock_sdc_guid):
         props = scaleio.ScaleIOConnector.get_connector_properties(
             'sudo', multipath=True, enforce_multipath=True)
