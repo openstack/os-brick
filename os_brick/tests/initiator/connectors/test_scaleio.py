@@ -203,11 +203,12 @@ class ScaleIOConnectorTestCase(test_connector.ConnectorTestCase):
             self.connector.GET_GUID_OP_CODE)
         self.get_password_mock.assert_not_called()
 
-    def test_connect_volume_with_no_secret(self):
-        """Successful connect to volume with no secret"""
+    def test_connect_volume_with_sdc_guid(self):
+        """Successful connect to volume with sdc guid"""
         connection_properties = {
             'scaleIO_volname': self.vol['name'],
             'scaleIO_volume_id': self.vol['provider_id'],
+            'sdc_guid': 'fake_guid',
         }
 
         self.connector.connect_volume(connection_properties)
@@ -245,11 +246,12 @@ class ScaleIOConnectorTestCase(test_connector.ConnectorTestCase):
         self.get_guid_mock.assert_called_once_with(
             self.connector.GET_GUID_OP_CODE)
 
-    def test_disconnect_volume_with_no_secret(self):
-        """Successful disconnect from volume with no secret"""
+    def test_disconnect_volume_with_sdc_guid(self):
+        """Successful disconnect from volume with sdc guid"""
         connection_properties = {
             'scaleIO_volname': self.vol['name'],
             'scaleIO_volume_id': self.vol['provider_id'],
+            'sdc_guid': 'fake_guid',
         }
         self.connector.disconnect_volume(connection_properties, None)
         self.get_guid_mock.assert_not_called()
