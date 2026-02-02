@@ -31,8 +31,8 @@ Features
 Hacking
 -------
 
-Hacking on brick requires Python 3.8+. A recent tox is required, as is a recent
-virtualenv (20.2.2 or newer).
+Hacking on brick requires Python 3.10+. A recent tox is required, as is a
+recent virtualenv (20.17.1 or newer).
 
 For any other information, refer to the developer documents:
   https://docs.openstack.org/os-brick/latest/
