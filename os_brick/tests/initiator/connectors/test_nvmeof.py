@@ -1233,13 +1233,15 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         self.assertIsNone(res_nsze)
         self.assertIsNone(res_size)
 
+    @mock.patch.object(nvmeof.Target, 'set_portals_controllers')
     @mock.patch.object(nvmeof, 'blk_property')
     @mock.patch.object(nvmeof.NVMeOFConnector, '_get_sizes_from_lba')
     @mock.patch.object(nvmeof.NVMeOFConnector, '_execute')
     @mock.patch.object(nvmeof.NVMeOFConnector, 'get_volume_paths')
     @mock.patch('os_brick.utils.get_device_size')
     def test_extend_volume_unreplicated(self, mock_device_size, mock_paths,
-                                        mock_exec, mock_lba, mock_property):
+                                        mock_exec, mock_lba, mock_property,
+                                        mock_set_ctrls):
         """Uses nvme to get expected size and waits until sysfs shows it."""
         new_size = 3221225472
         new_nsze = int(new_size / 512)  # nsze is size / block-size
@@ -1267,7 +1269,11 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         mock_property.assert_has_calls([mock.call('size', 'nvme0n1'),
                                         mock.call('size', 'nvme0n1')])
         mock_device_size.assert_not_called()
+        retries = 3
+        self.assertEqual(retries, mock_set_ctrls.call_count)
+        mock_set_ctrls.assert_has_calls(retries * [mock.call()])
 
+    @mock.patch.object(nvmeof.Target, 'set_portals_controllers')
     @mock.patch.object(nvmeof.NVMeOFConnector, 'rescan')
     @mock.patch.object(nvmeof, 'blk_property')
     @mock.patch.object(nvmeof.NVMeOFConnector, '_get_sizes_from_lba')
@@ -1276,7 +1282,7 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
     @mock.patch('os_brick.utils.get_device_size')
     def test_extend_volume_unreplicated_nvme_fails(
             self, mock_device_size, mock_paths, mock_exec, mock_lba,
-            mock_property, mock_rescan):
+            mock_property, mock_rescan, mock_set_ctrls):
         """nvme command fails, so it rescans, waits, and reads size."""
         dev_path = '/dev/nvme0n1'
         mock_device_size.return_value = 100
@@ -1296,12 +1302,16 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         mock_property.assert_not_called()
         mock_rescan.assert_called_once_with('nvme0')
         mock_device_size.assert_called_with(self.connector, '/dev/nvme0n1')
+        retries = 3
+        self.assertEqual(retries, mock_set_ctrls.call_count)
+        mock_set_ctrls.assert_has_calls(retries * [mock.call()])
 
+    @mock.patch.object(nvmeof.Target, 'set_portals_controllers')
     @mock.patch.object(nvmeof.NVMeOFConnector, 'get_volume_paths')
     @mock.patch.object(nvmeof.NVMeOFConnector, 'run_mdadm')
     @mock.patch('os_brick.utils.get_device_size')
     def test_extend_volume_replicated(
-            self, mock_device_size, mock_mdadm, mock_paths):
+            self, mock_device_size, mock_mdadm, mock_paths, mock_set_ctrls):
         device_path = '/dev/md/' + connection_properties['alias']
         mock_paths.return_value = [device_path]
         mock_device_size.return_value = 100
@@ -1314,6 +1324,9 @@ class NVMeOFConnectorTestCase(test_connector.ConnectorTestCase):
         mock_mdadm.assert_called_with(
             ('mdadm', '--grow', '--size', 'max', device_path))
         mock_device_size.assert_called_with(self.connector, device_path)
+        retries = 3
+        self.assertEqual(retries, mock_set_ctrls.call_count)
+        mock_set_ctrls.assert_has_calls(retries * [mock.call()])
 
     @mock.patch.object(nvmeof.Target, 'find_device')
     @mock.patch.object(nvmeof.Target, 'set_portals_controllers')
