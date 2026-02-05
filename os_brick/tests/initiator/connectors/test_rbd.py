@@ -384,7 +384,8 @@ class RBDConnectorTestCase(test_base_rbd.RBDConnectorTestMixin,
         connector = rbd.RBDConnector(None)
         res = connector.extend_volume(self.connection_properties)
 
-        mock_handle.assert_called_once_with(self.connection_properties)
+        mock_handle.assert_called_once_with(self.connection_properties,
+                                            read_only=True)
         mock_handle.return_value.seek.assert_called_once_with(0, 2)
         mock_handle.return_value.tell.assert_called_once_with()
         self.assertIs(mock_handle().tell(), res)
@@ -400,7 +401,8 @@ class RBDConnectorTestCase(test_base_rbd.RBDConnectorTestMixin,
         self.assertRaises(ValueError, connector.extend_volume,
                           self.connection_properties)
 
-        mock_handle.assert_called_once_with(self.connection_properties)
+        mock_handle.assert_called_once_with(self.connection_properties,
+                                            read_only=True)
         mock_handle.return_value.seek.assert_called_once_with(0, 2)
         mock_handle().tell.assert_not_called()
         mock_delete.assert_called_once_with(mock_handle.return_value.rbd_conf)
