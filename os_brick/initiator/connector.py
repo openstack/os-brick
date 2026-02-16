@@ -34,16 +34,6 @@ from os_brick import utils
 
 LOG = logging.getLogger(__name__)
 
-# List of connectors to call when getting
-# the connector properties for a host
-windows_connector_list = [
-    'os_brick.initiator.windows.base.BaseWindowsConnector',
-    'os_brick.initiator.windows.iscsi.WindowsISCSIConnector',
-    'os_brick.initiator.windows.fibre_channel.WindowsFCConnector',
-    'os_brick.initiator.windows.rbd.WindowsRBDConnector',
-    'os_brick.initiator.windows.smbfs.WindowsSMBFSConnector'
-]
-
 unix_connector_list = [
     'os_brick.initiator.connectors.base.BaseLinuxConnector',
     'os_brick.initiator.connectors.iscsi.ISCSIConnector',
@@ -66,10 +56,7 @@ unix_connector_list = [
 
 
 def _get_connector_list():
-    if sys.platform != 'win32':
-        return unix_connector_list
-    else:
-        return windows_connector_list
+    return unix_connector_list
 
 
 # Mappings used to determine who to construct in the factory
@@ -154,34 +141,12 @@ _connector_mapping_linux_ppc64 = {
         'os_brick.initiator.connectors.iscsi.ISCSIConnector',
 }
 
-# Mapping for the windows connectors
-_connector_mapping_windows = {
-    initiator.ISCSI:
-        'os_brick.initiator.windows.iscsi.WindowsISCSIConnector',
-    initiator.FIBRE_CHANNEL:
-        'os_brick.initiator.windows.fibre_channel.WindowsFCConnector',
-    initiator.RBD:
-        'os_brick.initiator.windows.rbd.WindowsRBDConnector',
-    initiator.SMBFS:
-        'os_brick.initiator.windows.smbfs.WindowsSMBFSConnector',
-}
-
 
 # Create aliases to the old names until 2.0.0
 # TODO(smcginnis) Remove this lookup once unit test code is updated to
 # point to the correct location
 def _set_aliases():
     conn_list = _get_connector_list()
-    # TODO(lpetrut): Cinder is explicitly trying to use those two
-    # connectors. We should drop this once we fix Cinder and
-    # get passed the backwards compatibility period.
-    if sys.platform == 'win32':
-        conn_list += [
-            'os_brick.initiator.connectors.iscsi.ISCSIConnector',
-            ('os_brick.initiator.connectors.fibre_channel.'
-             'FibreChannelConnector'),
-        ]
-
     for item in conn_list:
         _name = item.split('.')[-1]
         globals()[_name] = importutils.import_class(item)
@@ -253,13 +218,10 @@ def get_connector_mapping(arch=None):
         arch = platform.machine()
 
     # Set the correct mapping for imports
-    if sys.platform == 'win32':
-        return _connector_mapping_windows
-    elif arch in (initiator.S390, initiator.S390X):
+    if arch in (initiator.S390, initiator.S390X):
         return _connector_mapping_linux_s390x
     elif arch in (initiator.PPC64, initiator.PPC64LE):
         return _connector_mapping_linux_ppc64
-
     else:
         return _connector_mapping_linux
 
