@@ -120,7 +120,8 @@ class RBDConnector(base_rbd.RBDConnectorMixin, base.BaseLinuxConnector):
             msg = (_("Failed to write data to %s.") % (ceph_conf_path))
             raise exception.BrickException(msg=msg)
 
-    def _get_rbd_handle(self, connection_properties: dict[str, Any]) -> \
+    def _get_rbd_handle(self, connection_properties: dict[str, Any],
+                        read_only: bool = False) -> \
             linuxrbd.RBDVolumeIOWrapper:
         try:
             user = connection_properties['auth_username']
@@ -142,7 +143,9 @@ class RBDConnector(base_rbd.RBDConnectorMixin, base.BaseLinuxConnector):
         try:
             rbd_client = linuxrbd.RBDClient(user, pool, conffile=conf,
                                             rbd_cluster_name=str(cluster_name))
-            rbd_volume = linuxrbd.RBDVolume(rbd_client, volume)
+            rbd_volume = linuxrbd.RBDVolume(rbd_client,
+                                            volume,
+                                            read_only=read_only)
             rbd_handle = linuxrbd.RBDVolumeIOWrapper(
                 linuxrbd.RBDImageMetadata(rbd_volume, pool, user, conf))
         except Exception:
@@ -410,11 +413,12 @@ class RBDConnector(base_rbd.RBDConnectorMixin, base.BaseLinuxConnector):
                                                     self.do_local_attach)
 
         if not do_local_attach:
-            handle = self._get_rbd_handle(connection_properties)
+            handle = self._get_rbd_handle(connection_properties,
+                                          read_only=True)
             try:
                 # Handles should return absolute position on seek, but the RBD
                 # wrapper doesn't, so we need to call tell afterwards
-                handle.seek(0, 2)
+                handle.seek(0, os.SEEK_END)
                 return handle.tell()
             finally:
                 fileutils.delete_if_exists(handle.rbd_conf)
