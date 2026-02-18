@@ -78,15 +78,17 @@ class ScaleIOConnector(base.BaseLinuxConnector):
         self.verify_certificate = None
         self.certificate_path = None
 
-    def _get_guid(self):
+    def _get_guid(self, log_error=True):
         try:
             guid = priv_scaleio.get_guid(self.GET_GUID_OP_CODE)
             LOG.info("Current sdc guid: %s", guid)
             return guid
         except (IOError, OSError, ValueError) as e:
-            msg = _("Error querying sdc guid: %s") % e
-            LOG.error(msg)
-            raise exception.BrickException(message=msg)
+            msg = _("Failed to query sdc guid: %s") % e
+            if log_error:
+                LOG.error(msg)
+                raise exception.BrickException(message=msg)
+            LOG.debug(msg)
 
     @staticmethod
     def _get_password_token(connection_properties):
@@ -125,13 +127,9 @@ class ScaleIOConnector(base.BaseLinuxConnector):
         props = {}
         scaleio = ScaleIOConnector(root_helper=root_helper,
                                    execute=kwargs.get('execute'))
-        try:
-            guid = scaleio._get_guid()
-            if guid:
-                props['sdc_guid'] = guid
-        except Exception as e:
-            msg = _("Unable to find SDC guid: %s") % e
-            LOG.info(msg)
+        guid = scaleio._get_guid(log_error=False)
+        if guid:
+            props['sdc_guid'] = guid
         return props
 
     def get_search_path(self):
