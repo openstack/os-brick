@@ -13,8 +13,6 @@
 # Look in the NVMeOFConnProps class docstring to see the format of the NVMe-oF
 # connection properties
 
-from __future__ import annotations
-
 import errno
 import functools
 import glob

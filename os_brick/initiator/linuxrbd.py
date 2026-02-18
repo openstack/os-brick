@@ -12,8 +12,6 @@
 
 """Generic RBD connection utilities."""
 
-from __future__ import annotations
-
 import io
 from typing import NoReturn, Optional
 
