@@ -52,7 +52,7 @@ class RemoteFsClientTestCase(base.TestCase):
         mount_point = client.get_mount_point(share)
         client.mount(share)
         calls = [mock.call('mkdir', '-p', mount_point, check_exit_code=0),
-                 mock.call('mount', '-t', 'nfs', '-o', 'vers=4,minorversion=1',
+                 mock.call('mount', '-t', 'nfs', '-o', 'vers=4,minorversion=2',
                            share, mount_point, check_exit_code=0,
                            run_as_root=True, root_helper='true')]
         self.mock_execute.assert_has_calls(calls)
@@ -68,6 +68,33 @@ class RemoteFsClientTestCase(base.TestCase):
             mock_open.assert_called_once_with('/proc/mounts', 'r')
         self.assertEqual(ret, {'mnt_point1': 'device1',
                                'mnt_point2': 'device2'})
+
+    @mock.patch.object(remotefs.RemoteFsClient, '_do_mount')
+    def test_nfs_mount_order(self, mock_do_mount):
+        # Ensure _mount_nfs tries mount types in the expected order:
+        # nfs_4.2, nfs_4.1, then nfs (original)
+        client = remotefs.RemoteFsClient("nfs", root_helper='true',
+                                         nfs_mount_point_base='/mnt')
+        share = '10.0.0.1:/qwe'
+        mount_point = client.get_mount_point(share)
+        recorded = []
+
+        def _side_effect(mount_type, share_arg, mount_path_arg,
+                         mount_options=None, flags=None):
+            recorded.append((mount_type, mount_options))
+            # Fail the first two attempts,
+            # succeed on the third to force trying all
+            if len(recorded) < 3:
+                raise Exception("simulated mount failure")
+            return None
+
+        mock_do_mount.side_effect = _side_effect
+        client._mount_nfs(share, mount_point)
+        # Verify order of mount attempts (NFS 4.2 first)
+        self.assertEqual([opts for _, opts in recorded],
+                         ['vers=4,minorversion=2',
+                          'vers=4,minorversion=1',
+                          client._mount_options])
 
     @mock.patch.object(priv_rootwrap, 'execute')
     @mock.patch.object(remotefs.RemoteFsClient, '_do_mount')

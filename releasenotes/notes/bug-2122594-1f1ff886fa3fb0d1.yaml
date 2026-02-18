@@ -1,0 +1,8 @@
+---
+fixes:
+  - |
+    NFS driver `Bug #2122594 <https://bugs.launchpad.net/cinder/+bug/2122594>`_:
+    Previously we mounted NFS shares always with version 4.1 if supported
+    by the client/server. Now we attempt to mount with NFSv4.2 first.
+    If that fails due server/client incompatibility we will fall back
+    to older versions(4.1, 4.0, 3.x).

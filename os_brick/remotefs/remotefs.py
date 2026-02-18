@@ -141,9 +141,9 @@ class RemoteFsClient(executor.Executor):
         """Mount nfs share using present mount types."""
         mnt_errors = {}
 
-        # This loop allows us to first try to mount with NFS 4.1 for pNFS
-        # support but falls back to mount NFS 4 or NFS 3 if either the client
-        # or server do not support it.
+        # This loop attempts to mount using NFS 4.2 or 4.1 for pNFS
+        # support but falls back to mount NFS 4 or NFS 3 if either
+        # the client or server do not support it.
         for mnt_type in sorted(self._nfs_mount_type_opts.keys(), reverse=True):
             options = self._nfs_mount_type_opts[mnt_type]
             try:
@@ -170,9 +170,16 @@ class RemoteFsClient(executor.Executor):
         # pNFS requires NFS 4.1. The mount.nfs4 utility does not automatically
         # negotiate 4.1 support, we have to ask for it by specifying two
         # options: vers=4 and minorversion=1.
-        pnfs_opts = self._update_option(self._mount_options, 'vers', '4')
-        pnfs_opts = self._update_option(pnfs_opts, 'minorversion', '1')
-        self._nfs_mount_type_opts['pnfs'] = pnfs_opts
+        nfs4_1_opts = self._update_option(self._mount_options, 'vers', '4')
+        nfs4_1_opts = self._update_option(nfs4_1_opts, 'minorversion', '1')
+        self._nfs_mount_type_opts['nfs_4.1'] = nfs4_1_opts
+
+        # Add the NFS 4.2 mount type after the NFS 4.1 mount
+        # because of the backward compatibility with NFS 4.1(+pNFS)
+        # and we want to try NFS 4.2 first if it's available.
+        nfs4_2_opts = self._update_option(self._mount_options, 'vers', '4')
+        nfs4_2_opts = self._update_option(nfs4_2_opts, 'minorversion', '2')
+        self._nfs_mount_type_opts['nfs_4.2'] = nfs4_2_opts
 
     def _option_exists(self, options, opt_pattern):
         """Checks if the option exists in nfs options and returns position."""
