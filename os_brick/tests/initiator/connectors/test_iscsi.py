@@ -196,7 +196,7 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
         ]
         with mock.patch.object(iscsi.ISCSIConnector,
                                '_get_all_targets') as get_targets_mock:
-            res = self.connector._get_connection_devices(mock.sentinel.props,
+            res = self.connector._get_connection_devices(self.CON_PROPS,
                                                          ips_iqns_luns)
         expected = {('ip1:port1', 'tgt1'): ({'sda'}, set()),
                     ('ip2:port2', 'tgt2'): ({'sdb'}, {'sdc'}),
@@ -275,7 +275,7 @@ class ISCSIConnectorTestCase(test_connector.ConnectorTestCase):
             [sys_cls + '8/device/session8/target8/8:0:0:6/block/sdl'],
         ]
 
-        res = self.connector._get_connection_devices(mock.sentinel.props,
+        res = self.connector._get_connection_devices(self.CON_PROPS,
                                                      ips_iqns_luns)
 
         # Expected: devices from target LUNs should be in 'belong' set,

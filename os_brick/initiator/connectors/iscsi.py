@@ -849,7 +849,8 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         """
         LOG.debug("_get_connection_devices called with parameters: "
                   "connection_properties=%s, ips_iqns_luns=%s, "
-                  "is_disconnect_call=%s", connection_properties,
+                  "is_disconnect_call=%s",
+                  strutils.mask_dict_password(connection_properties),
                   ips_iqns_luns, is_disconnect_call)
 
         if not ips_iqns_luns:

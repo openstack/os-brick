@@ -25,6 +25,7 @@ from oslo_concurrency import lockutils
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_utils import reflection
+from oslo_utils import strutils
 from oslo_utils import timeutils
 
 from os_brick import exception
@@ -130,7 +131,8 @@ class BaseLinuxConnector(initiator_connector.InitiatorConnector):
         return False
 
     def check_multipath(self, connection_properties):
-        LOG.debug("Connection properties %s", connection_properties)
+        LOG.debug("Connection properties %s",
+                  strutils.mask_dict_password(connection_properties))
         multipath = self.use_multipath
         # If we are using an old cinder, it will not contain the
         # 'enforce_multipath' key and we will default the value to False.
