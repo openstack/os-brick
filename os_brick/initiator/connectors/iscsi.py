@@ -845,43 +845,69 @@ class ISCSIConnector(base.BaseLinuxConnector, base_iscsi.BaseISCSIConnector):
         This method currently assumes that it's only called by the
         _cleanup_conection method.
         """
+        LOG.debug("_get_connection_devices called with parameters: "
+                  "connection_properties=%s, ips_iqns_luns=%s, "
+                  "is_disconnect_call=%s", connection_properties,
+                  ips_iqns_luns, is_disconnect_call)
+
         if not ips_iqns_luns:
             # This is a cleanup, don't do discovery
             ips_iqns_luns = self._get_ips_iqns_luns(
                 connection_properties, discover=False,
                 is_disconnect_call=is_disconnect_call)
-        LOG.debug('Getting connected devices for (ips,iqns,luns)=%s',
+        LOG.debug('Got connected devices for (ips,iqns,luns)=%s',
                   ips_iqns_luns)
         nodes = self._get_iscsi_nodes()
         sessions = self._get_iscsi_sessions_full()
-        # Use (portal, iqn) to map the session value
-        sessions_map = {(s[2], s[4]): s[1] for s in sessions
-                        if s[0] in self.VALID_SESSIONS_PREFIX}
+
+        # Create a list of (portal, iqn, session_id) tuples for valid sessions
+        sessions_list = [(s[2], s[4], s[1]) for s in sessions
+                         if s[0] in self.VALID_SESSIONS_PREFIX]
+        LOG.debug('Sessions list: %s', sessions_list)
+
         # device_map will keep a tuple with devices from the connection and
         # others that don't belong to this connection" (belong, others)
         device_map: defaultdict = defaultdict(lambda: (set(), set()))
 
         for ip, iqn, lun in ips_iqns_luns:
-            session = sessions_map.get((ip, iqn))
+            # Find all sessions matching this (ip, iqn) or just the iqn
+            matching_sessions = []
+            for sess_ip, sess_iqn, session_id in sessions_list:
+                if sess_ip == ip and sess_iqn == iqn:
+                    matching_sessions.append((sess_ip, sess_iqn, session_id))
+
+            LOG.debug('Matching sessions for (ip, iqn, lun)=(%s, %s, %s): %s',
+                      ip, iqn, lun, matching_sessions)
+
             # Our nodes that don't have a session will be returned as empty
-            if not session:
+            if not matching_sessions:
                 if (ip, iqn) in nodes:
                     device_map[(ip, iqn)] = (set(), set())
+                LOG.debug('No session or node found for '
+                          '(ip, iqn)=%s', (ip, iqn))
                 continue
 
-            # Get all devices for the session
-            paths = glob.glob('/sys/class/scsi_host/host*/device/session' +
-                              session + '/target*/*:*:*:*/block/*')
-            belong, others = device_map[(ip, iqn)]
-            for path in paths:
-                __, hctl, __, device = path.rsplit('/', 3)
-                lun_path = int(hctl.rsplit(':', 1)[-1])
-                # For partitions turn them into the whole device: sde1 -> sde
-                device = device.strip('0123456789')
-                if lun_path == lun:
-                    belong.add(device)
-                else:
-                    others.add(device)
+            # Initialize the device_map entry if it doesn't exist
+            if (ip, iqn) not in device_map:
+                device_map[(ip, iqn)] = (set(), set())
+
+            # Process all matching sessions
+            for sess_ip, sess_iqn, session_id in matching_sessions:
+                # Get all devices for the session
+                paths = glob.glob('/sys/class/scsi_host/host*/device/session' +
+                                  session_id + '/target*/*:*:*:*/block/*')
+
+                belong, others = device_map[(ip, iqn)]
+                for path in paths:
+                    __, hctl, __, device = path.rsplit('/', 3)
+                    lun_path = int(hctl.rsplit(':', 1)[-1])
+                    # For partitions turn them into the whole device:
+                    # sde1 -> sde
+                    device = device.strip('0123456789')
+                    if lun_path == lun:
+                        belong.add(device)
+                    else:
+                        others.add(device)
 
         LOG.debug('Resulting device map %s', device_map)
         return device_map

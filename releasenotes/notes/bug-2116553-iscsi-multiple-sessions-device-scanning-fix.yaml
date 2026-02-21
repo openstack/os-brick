@@ -1,0 +1,6 @@
+---
+fixes:
+  - |
+    `Bug #2116553 <https://bugs.launchpad.net/os-brick/+bug/2116553>`_: Fixed
+    iSCSI device scanning to handle multiple sessions per (portal, iqn) pair.
+    This prevents orphaned multipath devices during volume detach operations.
