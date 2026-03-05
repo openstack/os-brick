@@ -1428,7 +1428,8 @@ Setting up iSCSI targets: unused
         result.sort()
         self.assertEqual(['sda', 'sdb', 'sdc', 'sdd'], result)
         # Initially mpath we pass is None, but on last call is the mpath
-        mpath_values = [c[1][1] for c in get_wwn_mock._mock_mock_calls]
+        # Use call_args_list which only contains actual function calls
+        mpath_values = [call.args[1] for call in get_wwn_mock.call_args_list]
         self.assertEqual([None, None, 'dm-0'], mpath_values)
         add_wwid_mock.assert_not_called()
         add_path_mock.assert_not_called()
