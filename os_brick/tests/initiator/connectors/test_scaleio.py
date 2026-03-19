@@ -83,9 +83,10 @@ class ScaleIOConnectorTestCase(test_connector.ConnectorTestCase):
                          return_value=["emc-vol-{}".format(self.vol['id'])])
 
         # Patch scaleio privileged calls
-        self.get_password_mock = self.mock_object(scaleio.priv_scaleio,
-                                                  'get_connector_password',
-                                                  return_value='fake_password')
+        self.get_password_mock = (
+            self.mock_object(scaleio.priv_scaleio,
+                             'get_connector_username_password',
+                             return_value=(None, 'fake_password')))
         self.get_guid_mock = self.mock_object(scaleio.priv_scaleio, 'get_guid',
                                               return_value=self.fake_guid)
         self.rescan_vols_mock = self.mock_object(scaleio.priv_scaleio,
@@ -182,6 +183,14 @@ class ScaleIOConnectorTestCase(test_connector.ConnectorTestCase):
         self.get_guid_mock.assert_called_once_with(
             self.connector.GET_GUID_OP_CODE)
         self.get_password_mock.assert_called_once()
+
+    def test_connect_volume_with_connector_user(self):
+        self.get_password_mock.return_value = ('fake_user', 'fake_password')
+        self.connector.connect_volume(self.fake_connection_properties)
+        self.get_guid_mock.assert_called_once_with(
+            self.connector.GET_GUID_OP_CODE)
+        self.get_password_mock.assert_called_once()
+        self.assertEqual('fake_user', self.connector.server_username)
 
     def test_connect_volume_old_connection_properties(self):
         """Successful connect to volume"""

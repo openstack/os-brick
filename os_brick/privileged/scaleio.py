@@ -75,8 +75,8 @@ def rescan_vols(op_code):
 
 
 @privileged.brick_privsep_hide_output.entrypoint
-def get_connector_password(filename, config_group, failed_over):
-    """Read ScaleIO connector configuration file and get appropriate password.
+def get_connector_username_password(filename, config_group, failed_over):
+    """Read ScaleIO connector configuration file.
 
     :param filename: path to connector configuration file
     :type filename: str
@@ -84,7 +84,7 @@ def get_connector_password(filename, config_group, failed_over):
     :type config_group: str
     :param failed_over: flag representing if storage is in failed over state
     :type failed_over: bool
-    :return: connector password
+    :return: connector username,password
     :rtype: str
     """
 
@@ -97,7 +97,10 @@ def get_connector_password(filename, config_group, failed_over):
 
     conf = configparser.ConfigParser()
     conf.read(filename)
+    username_key = (
+        "replicating_san_username" if failed_over else "san_username"
+    )
     password_key = (
         "replicating_san_password" if failed_over else "san_password"
     )
-    return conf[config_group][password_key]
+    return conf[config_group][username_key], conf[config_group][password_key]

@@ -91,20 +91,20 @@ class ScaleIOConnector(base.BaseLinuxConnector):
             LOG.debug(msg)
 
     @staticmethod
-    def _get_password_token(connection_properties):
+    def _get_username_and_password_token(connection_properties):
         # In old connection format we had the password and token in properties
         if 'serverPassword' in connection_properties:
-            return (connection_properties['serverPassword'],
+            return (None, connection_properties['serverPassword'],
                     connection_properties['serverToken'])
 
         # The new format reads password from file and doesn't have the token
         LOG.info("Get ScaleIO connector password from configuration file")
         try:
-            password = priv_scaleio.get_connector_password(
+            username, password = priv_scaleio.get_connector_username_password(
                 CONNECTOR_CONF_PATH,
                 connection_properties['config_group'],
                 connection_properties.get('failed_over', False))
-            return password, None
+            return username, password, None
         except Exception as e:
             msg = _("Error getting ScaleIO connector password from "
                     "configuration file: %s") % e
@@ -349,8 +349,10 @@ class ScaleIOConnector(base.BaseLinuxConnector):
             self.server_ip = connection_properties['serverIP']
             self.server_port = connection_properties['serverPort']
             self.server_username = connection_properties['serverUsername']
-            self.server_password, server_token = self._get_password_token(
-                connection_properties)
+            user, self.server_password, server_token = (
+                self._get_username_and_password_token(connection_properties))
+            if user:
+                self.server_username = user
             if server_token:
                 self.server_token = server_token
             self.iops_limit = connection_properties['iopsLimit']
