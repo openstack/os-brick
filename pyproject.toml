@@ -1,0 +1,63 @@
+[build-system]
+requires = ["pbr>=7.0.0"]
+build-backend = "pbr.build"
+
+[project]
+name = "os-brick"
+description = "OpenStack Cinder brick library for managing local volume attaches"
+authors = [
+    {name = "OpenStack", email = "openstack-discuss@lists.openstack.org"},
+    ]
+readme = {file = "README.rst", content-type = "text/x-rst"}
+license = {text = "Apache-2.0"}
+dynamic = ["version", "dependencies"]
+requires-python = ">=3.10"
+classifiers = [
+    "Environment :: OpenStack",
+    "Intended Audience :: Information Technology",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    ]
+
+[project.urls]
+Homepage = "https://docs.openstack.org/os-brick/"
+Repository = "https://opendev.org/openstack/os-brick"
+Bugs = "https://launchpad.net/os-brick"
+
+[tool.setuptools]
+packages = [
+    "os_brick"
+    ]
+
+[tool.setuptools.data-files]
+"etc/os-brick/rootwrap.d" = [
+    "etc/os-brick/rootwrap.d/*",
+    ]
+
+[project.entry-points."oslo.config.opts"]
+os_brick = "os_brick.opts:list_opts"
+"os_brick.lightos" = "os_brick.initiator.connectors.lightos:list_opts"
+
+[project.entry-points."oslo.config.opts.defaults"]
+os_brick = "os_brick.opts:set_defaults"
+
+[tool.mypy]
+show_column_numbers = true
+show_error_context = true
+ignore_missing_imports = true
+follow_imports = "skip"
+incremental = true
+check_untyped_defs = true
+warn_unused_ignores = true
+show_error_codes = true
+pretty = true
+html_report = "mypy-report"
+no_implicit_optional = true
