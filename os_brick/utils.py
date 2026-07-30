@@ -18,7 +18,7 @@ import inspect
 import logging as py_logging
 import os
 import time
-from typing import Any, Callable, Optional, Type, Union
+from typing import Any, Callable, Optional, SupportsIndex, Type, Union
 import uuid as uuid_lib
 
 from oslo_concurrency import processutils
@@ -36,7 +36,7 @@ CUSTOM_LINK_PREFIX = '/dev/disk/by-id/os-brick'
 _time_sleep = time.sleep
 
 
-def _sleep(secs: float) -> None:
+def _sleep(secs: float | SupportsIndex) -> None:
     """Helper class to make it easier to work around tenacity's sleep calls.
 
     Apparently we are all idiots for wanting to test our code here [0], so this
