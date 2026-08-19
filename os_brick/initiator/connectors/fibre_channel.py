@@ -14,7 +14,7 @@
 
 import os
 import typing
-from typing import Any, Optional
+from typing import Any, Callable, Optional  # noqa: H301
 
 from oslo_log import log as logging
 from oslo_service import loopingcall
@@ -36,7 +36,7 @@ class FibreChannelConnector(base.BaseLinuxConnector):
             self,
             root_helper: str,
             driver=None,
-            execute: Optional[str] = None,
+            execute: Optional[Callable] = None,
             use_multipath: bool = False,
             device_scan_attempts: int = initiator.DEVICE_SCAN_ATTEMPTS_DEFAULT,
             *args, **kwargs):
