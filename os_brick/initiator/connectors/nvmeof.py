@@ -1223,7 +1223,8 @@ class NVMeOFConnector(base.BaseLinuxConnector):
         # NOTE: Cannot use NVMeOFConnProps's decorator to create instance from
         # conn props because "connect_volume_undo_prepare_result" must be the
         # first decorator and it expects a dictionary.
-        conn_props = NVMeOFConnProps(connection_properties)
+        conn_props = NVMeOFConnProps(connection_properties,
+                                     find_controllers=True)
         try:
             device_path = self.get_volume_paths(conn_props)[0]
         except IndexError:

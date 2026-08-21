@@ -1,0 +1,5 @@
+---
+fixes:
+  - |
+    `Bug #2140543 <https://bugs.launchpad.net/os-brick/+bug/2140543>`_: Fix
+    nvmeof fails to get device path in extend_volume.
