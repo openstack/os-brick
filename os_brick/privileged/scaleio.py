@@ -103,4 +103,7 @@ def get_connector_username_password(filename, config_group, failed_over):
     password_key = (
         "replicating_san_password" if failed_over else "san_password"
     )
-    return conf[config_group][username_key], conf[config_group][password_key]
+    # During upgrade scenarios, allow missing username in the connector
+    # configuration to prevent attach/detach operation failures.
+    username = conf.get(config_group, username_key, fallback=None)
+    return username, conf[config_group][password_key]
