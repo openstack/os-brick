@@ -361,7 +361,7 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
         self.connector.disconnect_volume(connection_info['data'],
                                          devices['devices'][0])
         expected_commands = [
-            'multipath -f ' + find_mp_device_path_mock.return_value,
+            'multipath -f ' + realpath_mock.return_value,
             'tee -a /sys/block/sdb/device/delete',
             'tee -a /sys/block/sdc/device/delete',
         ]
@@ -910,7 +910,7 @@ class FibreChannelConnectorTestCase(test_connector.ConnectorTestCase):
         self.connector.disconnect_volume(connection_info['data'],
                                          devices['devices'][0])
         expected_commands = [
-            'multipath -f ' + find_mp_device_path_mock.return_value,
+            'multipath -f ' + realpath_mock.return_value,
             'tee -a /sys/block/sdb/device/delete',
             'tee -a /sys/block/sdc/device/delete',
         ]

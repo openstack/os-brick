@@ -467,14 +467,25 @@ class LinuxSCSI(executor.Executor):
                             "device: %(code)s", {'code': exc.exit_code})
                 raise
 
+    # NOTE(geguileo): With 30% connection error rates flush can get stuck,
+    # set timeout to prevent it from hanging here forever.  Retry twice
+    # after 20 and 40 seconds.
+    @utils.retry(putils.ProcessExecutionError, interval=20, retries=3)
     def flush_multipath_device(self, device_map_name: str) -> None:
+        # NOTE: The Fibre Channel connector passes a symlink such as
+        # /dev/disk/by-id/dm-uuid-mpath-<WWID>.  That worked before
+        # multipath-tools 0.9.8, but multipathd now needs the actual block
+        # device (the /dev/dm-N handle) to be able to remove the map.
+        #
+        # NOTE: we intentionally do retries at the function level so that we
+        # get a fresh path before trying the flush (device-mapper is
+        # aggressive about reusing freed minor numbers, and so dm-N could
+        # name a different map when the retry runs).
+        if os.path.isabs(device_map_name):
+            device_map_name = os.path.realpath(device_map_name)
         LOG.debug("Flush multipath device %s", device_map_name)
-        # NOTE(geguileo): With 30% connection error rates flush can get stuck,
-        # set timeout to prevent it from hanging here forever.  Retry twice
-        # after 20 and 40 seconds.
         self._execute('multipath', '-f', device_map_name, run_as_root=True,
-                      attempts=3, timeout=300, interval=10,
-                      root_helper=self._root_helper)
+                      timeout=300, root_helper=self._root_helper)
 
     @utils.retry(exception.VolumeDeviceNotFound)
     def wait_for_path(self, volume_path: str) -> None:

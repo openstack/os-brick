@@ -122,14 +122,62 @@ class LinuxSCSITestCase(base.TestCase):
                                       for name in names] * 2)
         self.assertEqual(1, sleep_mock.call_count)
 
-    def test_flush_multipath_device(self):
+    @mock.patch.object(os.path, 'realpath')
+    def test_flush_multipath_device(self, realpath_mock):
+        """A map name, as the iSCSI path passes, is used as is."""
         dm_map_name = '3600d0230000000000e13955cc3757800'
         with mock.patch.object(self.linuxscsi, '_execute') as exec_mock:
             self.linuxscsi.flush_multipath_device(dm_map_name)
 
+        realpath_mock.assert_not_called()
         exec_mock.assert_called_once_with(
-            'multipath', '-f', dm_map_name, run_as_root=True, attempts=3,
-            timeout=300, interval=10, root_helper=self.linuxscsi._root_helper)
+            'multipath', '-f', dm_map_name, run_as_root=True, timeout=300,
+            root_helper=self.linuxscsi._root_helper)
+
+    @mock.patch.object(os.path, 'realpath', return_value='/dev/dm-3')
+    def test_flush_multipath_device_by_path(self, realpath_mock):
+        """A path is resolved to its dm-N node, which multipathd accepts."""
+        wwid = '3600d0230000000000e13955cc3757800'
+        path = '/dev/disk/by-id/dm-uuid-mpath-' + wwid
+        with mock.patch.object(self.linuxscsi, '_execute') as exec_mock:
+            self.linuxscsi.flush_multipath_device(path)
+
+        realpath_mock.assert_called_once_with(path)
+        exec_mock.assert_called_once_with(
+            'multipath', '-f', '/dev/dm-3', run_as_root=True, timeout=300,
+            root_helper=self.linuxscsi._root_helper)
+
+    @mock.patch.object(os.path, 'realpath',
+                       side_effect=['/dev/dm-3', '/dev/dm-7'])
+    def test_flush_multipath_device_retry_resolves_path_again(
+            self, realpath_mock):
+        """Each attempt resolves the path, so a reused minor is not hit."""
+        wwid = '3600d0230000000000e13955cc3757800'
+        path = '/dev/disk/by-id/dm-uuid-mpath-' + wwid
+        exec_mock = mock.Mock(side_effect=[putils.ProcessExecutionError(),
+                                           ('', None)])
+        with mock.patch.object(self.linuxscsi, '_execute', exec_mock):
+            self.linuxscsi.flush_multipath_device(path)
+
+        self.assertEqual([mock.call(path)] * 2, realpath_mock.call_args_list)
+        kwargs = dict(run_as_root=True, timeout=300,
+                      root_helper=self.linuxscsi._root_helper)
+        self.assertEqual(
+            [mock.call('multipath', '-f', '/dev/dm-3', **kwargs),
+             mock.call('multipath', '-f', '/dev/dm-7', **kwargs)],
+            exec_mock.call_args_list)
+
+    @mock.patch.object(os.path, 'realpath', return_value='/dev/dm-3')
+    def test_flush_multipath_device_fails_after_retries(self, realpath_mock):
+        """Three failed attempts raise the last error to the caller."""
+        exec_mock = mock.Mock(side_effect=putils.ProcessExecutionError())
+        with mock.patch.object(self.linuxscsi, '_execute', exec_mock):
+            self.assertRaises(putils.ProcessExecutionError,
+                              self.linuxscsi.flush_multipath_device,
+                              '/dev/mapper/mpatha')
+
+        self.assertEqual(3, exec_mock.call_count)
+        self.assertEqual(3, realpath_mock.call_count)
 
     def test_get_scsi_wwn(self):
         fake_path = '/dev/disk/by-id/somepath'

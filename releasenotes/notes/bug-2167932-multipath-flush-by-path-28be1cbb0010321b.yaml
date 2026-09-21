@@ -1,0 +1,10 @@
+---
+fixes:
+  - |
+    `Bug #2167932 <https://bugs.launchpad.net/os-brick/+bug/2167932>`_:
+    Fixed Fibre Channel volume detach failing with ``multipath -f``
+    reporting ``device not found`` on hosts running multipath-tools
+    0.9.8 or later, for example Ubuntu 26.04.  The Fibre Channel
+    connector flushed the multipath map by its ``/dev/disk/by-id``
+    symlink, which multipathd no longer resolves.  os-brick now resolves
+    any path to its ``/dev/dm-N`` node before flushing.
