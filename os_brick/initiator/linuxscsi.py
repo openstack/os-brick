@@ -472,10 +472,13 @@ class LinuxSCSI(executor.Executor):
     # after 20 and 40 seconds.
     @utils.retry(putils.ProcessExecutionError, interval=20, retries=3)
     def flush_multipath_device(self, device_map_name: str) -> None:
-        # NOTE: The Fibre Channel connector passes a symlink such as
-        # /dev/disk/by-id/dm-uuid-mpath-<WWID>.  That worked before
-        # multipath-tools 0.9.8, but multipathd now needs the actual block
-        # device (the /dev/dm-N handle) to be able to remove the map.
+        # NOTE: FC can pass /dev/disk/by-id/dm-uuid-mpath-<WWID> or
+        # /dev/mapper/<WWID>; both are symlinks to /dev/dm-N. The
+        # ``multipath -f`` command delegates removal as ``del map`` to
+        # multipathd. With upstream multipath-tools 0.9.8, the daemon accepts
+        # a dm-N kernel name (with or without /dev/) or the current map alias.
+        # Upstream 0.9.9 also accepts a bare WWID, but neither version accepts
+        # the FC symlink paths. Resolve absolute paths to /dev/dm-N.
         #
         # NOTE: we intentionally do retries at the function level so that we
         # get a fresh path before trying the flush (device-mapper is
